@@ -624,7 +624,6 @@ Schedules live in the same SQLite file as the job queue and copy ledger.
 | `AEGIS_APERTURE_URL` | `-aperture-url` | Optional public URL of the Aperture gateway (admin live links) |
 | `AEGIS_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
 | `AEGIS_DATA_DIR` | `-data-dir` | Data directory for local state (see [Data directory](configuration.md)) |
-| `AEGIS_MAINTENANCE_REPO` | `-maintenance-repo` | GitHub repo (`owner/name`) for sync-maintenance tickets |
 | `AEGIS_DEMO` | `-demo` | `1` enables demo mode |
 | `AEGIS_USER_KINDS_DIR` | | User-defined kind schema-pack directory (default `<data-dir>/user-kinds`) |
 
@@ -735,7 +734,6 @@ directory or keep passing the explicit path flags.
 | `-import-signal` | | Import a Signal export (JSONL/JSON or plaintext SQLite), then exit |
 | `-audit-log` | `<data-dir>/audit_log.db` | Access audit log path; empty disables |
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
-| `-maintenance-repo` | | GitHub repo (`owner/name`) where sync-maintenance tickets are opened as issues (via the `gh` CLI); empty disables ticketing |
 | `-fake-upstream` | | **Dev/test only** — serve an injectable fake provider at `/demo/fake-upstream` and seed placeholder tokens for services pointed at it. Never enable on a real instance |
 | `-seed-sample` | `false` | Write synthetic sample mail + library fixtures under the data directory, then exit |
 | `-seed-sample-count` | `24` | Mail messages to generate with `-seed-sample` |

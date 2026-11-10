@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -12,12 +11,13 @@ import (
 	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
-// TestMaintenanceLoop_FakeDriftToTicket drives the sync-maintenance loop
-// end to end with injected drift (issue #86): a canary job against the fake
-// upstream fails under a contract drift, the failure lands in a signal
-// bundle, and the scanner opens a ticket with the recurrence gate applied —
-// no real provider drift required.
-func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
+// TestMaintenanceLoop_FakeDriftToSignals drives the loop's capture half end
+// to end with injected drift (issue #86): a canary job against the fake
+// upstream fails under a contract drift and the failure lands — scrubbed —
+// in a signal bundle. The scanner that clusters and tickets this evidence
+// lives with the maintenance tool outside the application (issue #344) and
+// reads the bundles as files.
+func TestMaintenanceLoop_FakeDriftToSignals(t *testing.T) {
 	fu := connectors.NewFakeUpstream()
 	up := httptest.NewServer(fu)
 	t.Cleanup(up.Close)
@@ -76,35 +76,15 @@ func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
 		t.Fatalf("failure must name the silent-drift symptom: %q", f.Error)
 	}
 
-	// Two captures of the same evidence satisfy the scanner's recurrence
-	// gate; a single observation would stay a metric.
+	// The capture writes the evidence as a self-contained bundle file for
+	// the out-of-process scanner and dashboard tool to read.
 	dir := t.TempDir()
 	sig.CapturedAt = time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC)
-	if _, err := WriteMaintenanceSignals(dir, sig); err != nil {
-		t.Fatal(err)
-	}
-	sig.CapturedAt = time.Date(2026, 2, 10, 11, 0, 0, 0, time.UTC)
-	if _, err := WriteMaintenanceSignals(dir, sig); err != nil {
-		t.Fatal(err)
-	}
-
-	tracker := &fakeIssueTracker{}
-	report, err := ScanMaintenanceDir(context.Background(), dir, tracker)
+	path, err := WriteMaintenanceSignals(dir, sig)
 	if err != nil {
-		t.Fatalf("ScanMaintenanceDir: %v", err)
+		t.Fatal(err)
 	}
-	if len(report.Tickets) != 1 || report.Tickets[0].Action != "opened" {
-		t.Fatalf("scan tickets = %+v", report.Tickets)
-	}
-	if len(tracker.calls) != 1 {
-		t.Fatalf("tracker calls = %+v", tracker.calls)
-	}
-	ticket := tracker.calls[0]
-	if !strings.HasPrefix(ticket.Signature, "spotify|canary|terminal|") {
-		t.Fatalf("signature = %q", ticket.Signature)
-	}
-	if ticket.Service != "spotify" || ticket.JobType != syncjobs.SyncJobTypeCanary ||
-		ticket.ReproState != ReproStateNeedsFixture || ticket.Count != 2 {
-		t.Fatalf("ticket = %+v", ticket)
+	if !strings.HasPrefix(path, dir) {
+		t.Fatalf("bundle path = %q, want under %q", path, dir)
 	}
 }

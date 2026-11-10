@@ -22,9 +22,9 @@ import (
 //
 // Privacy posture matches the audit log and metrics: redacted metadata,
 // never payloads. Failure text is scrubbed before it lands in a bundle, and
-// bundles are written 0600 under <data-dir>/maintenance/ so the local
-// scanner, the dashboard tool, and any later cloud compute can read them
-// as plain files.
+// bundles are written 0600 under <data-dir>/maintenance/ so the maintenance
+// tool (scanner and dashboard) and any later cloud compute can read them as
+// plain files.
 
 const (
 	// dataDirMaintenanceSubdir is the bundle directory under the data dir.

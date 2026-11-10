@@ -489,12 +489,15 @@ func TestLoadSignalBundles(t *testing.T) {
 	if len(b.Freshness) != 1 || b.Freshness[0].Stale != 1 {
 		t.Fatalf("freshness = %+v", b.Freshness)
 	}
-	if _, err := loadSignalBundles(filepath.Join(t.TempDir(), "missing")); err == nil {
-		t.Fatal("want error for a directory with no bundles")
+	if _, err := loadSignalBundles(""); err == nil {
+		t.Fatal("want error for an empty bundle path")
 	}
-	empty := t.TempDir()
-	if _, err := loadSignalBundles(empty); err == nil {
-		t.Fatal("want error for an empty bundle directory")
+	// An empty directory is empty, not an error: the scan runs over fresh
+	// instances with no captures, and the build's -bundles guard lives in
+	// the command, not the loader.
+	empty, err := loadSignalBundles(t.TempDir())
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty dir = %+v, %v; want empty slice", empty, err)
 	}
 }
 

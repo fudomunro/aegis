@@ -1,4 +1,4 @@
-package core
+package main
 
 import (
 	"context"
@@ -7,29 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
-
-// recordingRun is the gh exec seam: it records invocations and plays back
-// scripted responses.
-type recordingRun struct {
-	calls   [][]string
-	respond func(args []string) (string, error)
-}
-
-func (r *recordingRun) run(_ context.Context, args ...string) (string, error) {
-	r.calls = append(r.calls, args)
-	return r.respond(args)
-}
-
-func (r *recordingRun) joined() []string {
-	out := make([]string, 0, len(r.calls))
-	for _, c := range r.calls {
-		out = append(out, strings.Join(c, " "))
-	}
-	return out
-}
 
 func sampleTicket() MaintenanceTicket {
 	return MaintenanceTicket{
@@ -37,8 +15,8 @@ func sampleTicket() MaintenanceTicket {
 		Title:      "spotify ingest failed: spotify saved tracks returned 502",
 		Service:    "spotify",
 		JobType:    "ingest",
-		ErrorClass: syncjobs.SyncErrorClassTerminal,
-		ReproState: ReproStateNeedsFixture,
+		ErrorClass: "terminal",
+		ReproState: reproStateNeedsFixture,
 		Tier:       scanDefaultTier,
 		FirstSeen:  time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC),
 		LastSeen:   time.Date(2026, 2, 10, 11, 0, 0, 0, time.UTC),
@@ -119,16 +97,16 @@ func replaceTicketBlock(body string, t *MaintenanceTicket) string {
 }
 
 func TestReproStateFromLabels(t *testing.T) {
-	if got := reproStateFromLabels([]string{"sync-failure", readyLabel}, ReproStateNeedsFixture); got != ReproStateReady {
+	if got := reproStateFromLabels([]string{"sync-failure", readyLabel}, reproStateNeedsFixture); got != reproStateReady {
 		t.Fatalf("ready label = %q", got)
 	}
-	if got := reproStateFromLabels([]string{needsFixtureLabel}, ReproStateReady); got != ReproStateNeedsFixture {
+	if got := reproStateFromLabels([]string{needsFixtureLabel}, reproStateReady); got != reproStateNeedsFixture {
 		t.Fatalf("needs-fixture label = %q", got)
 	}
-	if got := reproStateFromLabels(nil, ReproStateReady); got != ReproStateReady {
+	if got := reproStateFromLabels(nil, reproStateReady); got != reproStateReady {
 		t.Fatalf("fallback = %q", got)
 	}
-	if got := reproStateFromLabels(nil, ""); got != ReproStateNeedsFixture {
+	if got := reproStateFromLabels(nil, ""); got != reproStateNeedsFixture {
 		t.Fatalf("default = %q", got)
 	}
 }
@@ -139,7 +117,7 @@ func TestIssueNumberFromURL(t *testing.T) {
 	}
 }
 
-func TestGhIssueTracker_Open(t *testing.T) {
+func TestGHClient_Open(t *testing.T) {
 	rec := &recordingRun{respond: func(args []string) (string, error) {
 		switch args[1] {
 		case "list":
@@ -149,7 +127,7 @@ func TestGhIssueTracker_Open(t *testing.T) {
 		}
 		return "", errors.New("unexpected: " + strings.Join(args, " "))
 	}}
-	g := &ghIssueTracker{repo: "example/repo", run: rec.run}
+	g := &ghClient{repo: "example/repo", run: rec.run}
 
 	ref, action, err := g.UpsertTicket(context.Background(), sampleTicket())
 	if err != nil {
@@ -172,7 +150,7 @@ func TestGhIssueTracker_Open(t *testing.T) {
 	}
 }
 
-func TestGhIssueTracker_UpdatePreservesTriage(t *testing.T) {
+func TestGHClient_UpdatePreservesTriage(t *testing.T) {
 	existing := sampleTicket()
 	existing.Count = 2
 	existing.Fixture = "internal/connectors/testdata/repro/spotify/track-object-null-items/fixture.json"
@@ -195,7 +173,7 @@ func TestGhIssueTracker_UpdatePreservesTriage(t *testing.T) {
 		}
 		return "", errors.New("unexpected: " + strings.Join(args, " "))
 	}}
-	g := &ghIssueTracker{repo: "example/repo", run: rec.run}
+	g := &ghClient{repo: "example/repo", run: rec.run}
 
 	tk := sampleTicket()
 	tk.Count = 3
@@ -244,12 +222,12 @@ func TestGhIssueTracker_UpdatePreservesTriage(t *testing.T) {
 		out.Tier != existing.Tier || out.Title != existing.Title {
 		t.Fatalf("triage clobbered: %+v", out)
 	}
-	if out.ReproState != ReproStateReady {
+	if out.ReproState != reproStateReady {
 		t.Fatalf("repro_state must follow the ready label: %q", out.ReproState)
 	}
 }
 
-func TestGhIssueTracker_ReopenAndLabelSync(t *testing.T) {
+func TestGHClient_ReopenAndLabelSync(t *testing.T) {
 	// gh emits state uppercase ("CLOSED"); the reopen check must accept
 	// either casing.
 	for _, state := range []string{"closed", "CLOSED"} {
@@ -266,7 +244,7 @@ func TestGhIssueTracker_ReopenAndLabelSync(t *testing.T) {
 					return "", nil
 				}
 			}}
-			g := &ghIssueTracker{repo: "example/repo", run: rec.run}
+			g := &ghClient{repo: "example/repo", run: rec.run}
 
 			_, action, err := g.UpsertTicket(context.Background(), sampleTicket())
 			if err != nil {
@@ -296,18 +274,12 @@ func TestGhIssueTracker_ReopenAndLabelSync(t *testing.T) {
 	}
 }
 
-func TestGhIssueTracker_Errors(t *testing.T) {
+func TestGHClient_Errors(t *testing.T) {
 	rec := &recordingRun{respond: func(args []string) (string, error) {
 		return "", errors.New("gh: not authed")
 	}}
-	g := &ghIssueTracker{repo: "example/repo", run: rec.run}
+	g := &ghClient{repo: "example/repo", run: rec.run}
 	if _, _, err := g.UpsertTicket(context.Background(), sampleTicket()); err == nil {
 		t.Fatal("tracker errors must surface")
 	}
-}
-
-// jsonString JSON-encodes a string for embedding in a canned gh response.
-func jsonString(s string) string {
-	b, _ := json.Marshal(s)
-	return string(b)
 }

@@ -68,18 +68,22 @@ type BundleSync struct {
 
 // SignalBundle is one captured observation read from a signals-*.json file.
 type SignalBundle struct {
-	CapturedAt time.Time     `json:"captured_at"`
-	Hostname   string        `json:"hostname,omitempty"`
-	Version    string        `json:"version"`
-	Commit     string        `json:"commit"`
-	Sync       *BundleSync   `json:"sync,omitempty"`
-	Freshness  []Freshness   `json:"freshness,omitempty"`
+	CapturedAt time.Time   `json:"captured_at"`
+	Hostname   string      `json:"hostname,omitempty"`
+	Version    string      `json:"version"`
+	Commit     string      `json:"commit"`
+	Sync       *BundleSync `json:"sync,omitempty"`
+	Freshness  []Freshness `json:"freshness,omitempty"`
+	// sourceName is the file the bundle was read from; ticket observations
+	// cite it.
+	sourceName string
 }
 
 // loadSignalBundles reads every signals-*.json under dir, oldest first. An
-// explicit bundle directory with no bundles is an error (a wrong path must
-// not silently produce a record-only build). Unknown fields are ignored so
-// the instance may add bundle detail without breaking the tool.
+// empty directory yields an empty slice — callers decide whether "no
+// bundles" is an error (the build's explicit -bundles flag) or a no-op (a
+// scan pass). Unknown fields are ignored so the instance may add bundle
+// detail without breaking the tool.
 func loadSignalBundles(dir string) ([]SignalBundle, error) {
 	if dir == "" {
 		return nil, fmt.Errorf("empty signal bundle directory")
@@ -87,9 +91,6 @@ func loadSignalBundles(dir string) ([]SignalBundle, error) {
 	paths, err := filepath.Glob(filepath.Join(dir, "signals-*.json"))
 	if err != nil {
 		return nil, err
-	}
-	if len(paths) == 0 {
-		return nil, fmt.Errorf("no signal bundles in %s", dir)
 	}
 	sort.Strings(paths)
 	out := make([]SignalBundle, 0, len(paths))
@@ -102,6 +103,7 @@ func loadSignalBundles(dir string) ([]SignalBundle, error) {
 		if err := json.Unmarshal(raw, &sig); err != nil {
 			return nil, fmt.Errorf("parse signal bundle %s: %w", p, err)
 		}
+		sig.sourceName = filepath.Base(p)
 		out = append(out, sig)
 	}
 	sort.Slice(out, func(i, j int) bool {

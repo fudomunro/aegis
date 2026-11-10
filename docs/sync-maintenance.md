@@ -115,8 +115,10 @@ phase 2 cannot tell which code a failure refers to.
   yields many lines; the signature is `(service, path class, error class,
   normalized error shape)`. This signature is the agreed first cut — add
   response-shape hashing only if clustering proves noisy.
-- **Scanner placement (decided).** A local scheduled job reads signal bundles
-  from the data dir for now; long-term expect it to move to paid cloud
+- **Scanner placement (decided).** The scanner is part of the maintenance
+  tool, not application code (issue #344): a local scheduled job runs
+  `aegis-dashboard scan` over the signal bundles in the data dir — the same
+  bundle files the capture writes. Long-term expect it to move to paid cloud
   compute. Bundles are therefore self-contained files — the scanner reads
   paths, not local IPC.
 - **Ticket only what is reproducible.** Two gates. At scan time, failure

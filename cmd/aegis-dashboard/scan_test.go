@@ -1,17 +1,13 @@
-package core
+package main
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/fudomunro/aegis/internal/core/copies"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 // fakeIssueTracker records upserts for scanner tests.
@@ -50,43 +46,48 @@ func TestNormalizeErrorShape(t *testing.T) {
 	}
 }
 
-func scanBundle(captured time.Time, failures ...MaintenanceFailure) MaintenanceSignals {
-	return MaintenanceSignals{
+func scanBundle(captured time.Time, failures ...BundleFailure) SignalBundle {
+	return SignalBundle{
 		CapturedAt: captured,
 		Version:    "dev",
 		Commit:     "none",
-		Sync:       &MaintenanceSync{Enabled: true, Failures: failures},
+		Sync:       &BundleSync{Enabled: true, Failures: failures},
 	}
 }
 
-func scanFailure(jobType, service, class, errText string) MaintenanceFailure {
-	return MaintenanceFailure{
+func scanFailure(jobType, service, class, errText string) BundleFailure {
+	return BundleFailure{
 		JobType:    jobType,
 		Service:    service,
 		ErrorClass: class,
-		State:      syncjobs.SyncJobFailed,
+		State:      "failed",
 		Error:      errText,
 	}
 }
 
-func mustWriteBundle(t *testing.T, dir string, sig MaintenanceSignals) {
+func mustWriteBundle(t *testing.T, dir string, sig SignalBundle) {
 	t.Helper()
-	if _, err := WriteMaintenanceSignals(dir, sig); err != nil {
-		t.Fatalf("WriteMaintenanceSignals: %v", err)
+	raw, err := json.MarshalIndent(sig, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := "signals-" + sig.CapturedAt.UTC().Format("20060102T150405Z") + ".json"
+	if err := os.WriteFile(filepath.Join(dir, name), append(raw, '\n'), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
+func TestScanBundles_RecurrenceGate(t *testing.T) {
 	dir := t.TempDir()
 	tracker := &fakeIssueTracker{}
 
 	// One bundle only: flake, must stay a metric.
 	mustWriteBundle(t, dir, scanBundle(time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC),
-		scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "spotify saved tracks returned 502")))
+		scanFailure("ingest", "spotify", "terminal", "spotify saved tracks returned 502")))
 
-	report, err := ScanMaintenanceDir(context.Background(), dir, tracker)
+	report, err := scanBundles(context.Background(), dir, tracker)
 	if err != nil {
-		t.Fatalf("ScanMaintenanceDir: %v", err)
+		t.Fatalf("scanBundles: %v", err)
 	}
 	if report.ScannedBundles != 1 || report.Clusters != 1 {
 		t.Fatalf("report = %+v", report)
@@ -100,11 +101,11 @@ func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
 
 	// Same signature in a second bundle: now it is a ticket.
 	mustWriteBundle(t, dir, scanBundle(time.Date(2026, 2, 10, 11, 0, 0, 0, time.UTC),
-		scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "Spotify saved tracks returned 503")))
+		scanFailure("ingest", "spotify", "terminal", "Spotify saved tracks returned 503")))
 
-	report, err = ScanMaintenanceDir(context.Background(), dir, tracker)
+	report, err = scanBundles(context.Background(), dir, tracker)
 	if err != nil {
-		t.Fatalf("ScanMaintenanceDir: %v", err)
+		t.Fatalf("scanBundles: %v", err)
 	}
 	if len(report.Tickets) != 1 || report.Tickets[0].Action != "opened" ||
 		report.Tickets[0].Number != 1 || report.Tickets[0].URL == "" {
@@ -114,10 +115,10 @@ func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
 		t.Fatalf("upserts = %+v", tracker.calls)
 	}
 	tk := tracker.calls[0]
-	if tk.Count != 2 || tk.ReproState != ReproStateNeedsFixture || tk.Tier != scanDefaultTier {
+	if tk.Count != 2 || tk.ReproState != reproStateNeedsFixture || tk.Tier != scanDefaultTier {
 		t.Fatalf("ticket = %+v", tk)
 	}
-	if tk.Service != "spotify" || tk.JobType != "ingest" || tk.ErrorClass != syncjobs.SyncErrorClassTerminal {
+	if tk.Service != "spotify" || tk.JobType != "ingest" || tk.ErrorClass != "terminal" {
 		t.Fatalf("ticket identity = %+v", tk)
 	}
 	if len(tk.Observations) != 2 {
@@ -129,19 +130,19 @@ func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
 	}
 }
 
-func TestScanMaintenanceDir_FreshnessFromLatestBundle(t *testing.T) {
+func TestScanBundles_FreshnessFromLatestBundle(t *testing.T) {
 	dir := t.TempDir()
 	tracker := &fakeIssueTracker{}
 	sig := scanBundle(time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC))
-	sig.Freshness = []copies.Freshness{
+	sig.Freshness = []Freshness{
 		{Kind: "tracks", InSync: 8, Stale: 2, Missing: 1},
 		{Kind: "messages", InSync: 5},
 	}
 	mustWriteBundle(t, dir, sig)
 
-	report, err := ScanMaintenanceDir(context.Background(), dir, tracker)
+	report, err := scanBundles(context.Background(), dir, tracker)
 	if err != nil {
-		t.Fatalf("ScanMaintenanceDir: %v", err)
+		t.Fatalf("scanBundles: %v", err)
 	}
 	// State-like signal: one bundle is enough.
 	if len(tracker.calls) != 1 || tracker.calls[0].Kind != "tracks" {
@@ -154,15 +155,15 @@ func TestScanMaintenanceDir_FreshnessFromLatestBundle(t *testing.T) {
 	}
 }
 
-func TestScanMaintenanceDir_NilTrackerAndTrackerError(t *testing.T) {
+func TestScanBundles_NilTrackerAndTrackerError(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC)
 	for i := 0; i < 2; i++ {
 		mustWriteBundle(t, dir, scanBundle(base.Add(time.Duration(i)*time.Hour),
-			scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "spotify saved tracks returned 502")))
+			scanFailure("ingest", "spotify", "terminal", "spotify saved tracks returned 502")))
 	}
 
-	report, err := ScanMaintenanceDir(context.Background(), dir, nil)
+	report, err := scanBundles(context.Background(), dir, nil)
 	if err != nil {
 		t.Fatalf("nil tracker: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestScanMaintenanceDir_NilTrackerAndTrackerError(t *testing.T) {
 	}
 
 	broken := &fakeIssueTracker{err: errors.New("gh unavailable")}
-	report, err = ScanMaintenanceDir(context.Background(), dir, broken)
+	report, err = scanBundles(context.Background(), dir, broken)
 	if err != nil {
 		t.Fatalf("tracker errors must not sink the scan: %v", err)
 	}
@@ -181,51 +182,12 @@ func TestScanMaintenanceDir_NilTrackerAndTrackerError(t *testing.T) {
 	}
 }
 
-func TestScanMaintenanceDir_NoBundles(t *testing.T) {
-	report, err := ScanMaintenanceDir(context.Background(), t.TempDir(), &fakeIssueTracker{})
+func TestScanBundles_NoBundles(t *testing.T) {
+	report, err := scanBundles(context.Background(), t.TempDir(), &fakeIssueTracker{})
 	if err != nil {
 		t.Fatalf("empty dir must not error: %v", err)
 	}
 	if report.ScannedBundles != 0 || report.Clusters != 0 || len(report.Tickets) != 0 {
 		t.Fatalf("report = %+v", report)
-	}
-}
-
-func TestHandleAdminMaintenanceScan(t *testing.T) {
-	srv := adminSplitServer(t)
-	srv.dataDir = t.TempDir()
-	srv.maintenanceIssues = &fakeIssueTracker{}
-	bundleDir := filepath.Join(srv.dataDir, dataDirMaintenanceSubdir)
-	mustWriteBundle(t, bundleDir, scanBundle(time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC),
-		scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "spotify saved tracks returned 502")))
-	mustWriteBundle(t, bundleDir, scanBundle(time.Date(2026, 2, 10, 11, 0, 0, 0, time.UTC),
-		scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "spotify saved tracks returned 502")))
-
-	req := adminRequest(http.MethodPost, "/v1/admin/maintenance/scan", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceScan)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
-	}
-	var report MaintenanceScanReport
-	if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if report.ScannedBundles != 2 || len(report.Tickets) != 1 || report.Tickets[0].Action != "opened" {
-		t.Fatalf("report = %+v", report)
-	}
-
-	req = adminRequest(http.MethodGet, "/v1/admin/maintenance/scan", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceScan)(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET status = %d, want 405", w.Code)
-	}
-
-	req = adminRequest(http.MethodPost, "/v1/admin/maintenance/scan", "agent-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceScan)(w, req)
-	if w.Code == http.StatusOK {
-		t.Fatal("agent credentials must not run scans")
 	}
 }
