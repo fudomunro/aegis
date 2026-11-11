@@ -41,11 +41,30 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Identity matching** | Folding contacts/people on email → phone → handle → name | Not for playlists/tracks |
 | **Entity link** | User-confirmed cross-service identity (`entity_links.json`) | |
 | **Copy ledger** | Durable record of mirrored/backup copies | |
-| **Mirror** | Explicit copy of a playlist/liked tracks to another service | Not automatic write sync |
+| **Mirror** | Explicit copy of a playlist/liked tracks to another service | Not automatic write sync; eventual successor: **sync relationship** |
+| **Sync relationship** | Per-(connection, Kind) pairing established when data is connected; sync jobs keep that Kind's members consistent with its **canonical home** | Not a **sync job** (queue unit) or **sync maintenance** (connector-reliability loop); see the sync-word table below |
+| **Sync group** | All sync relationships for one library Kind — the connected sources that provide it | One member is the **canonical home**; a local file import is a read-only member |
 | **Content transport** | `/v1/services/{id}/…` for bytes and local import only | Avoid “ingest transport”; error text may say “content/ingest only” once |
 | **User-defined kind (UDK)** | Schema pack under `user-kinds/` | The extension mechanism, in plain English — it publishes a **library kind**, which stays the registry axis. **Schema pack** is the on-disk artifact (file/dir). Retired: “user-defined type”, “UDT”, “type pack” |
 | **Access level** | See **Data grants** | Strength of a data grant |
 | **Free/busy** | The `freebusy` route: busy intervals only (no titles/attendees) | Its own grant key (`freebusy`), not a level on `events`. Sibling routes: `transactions/totals`, `places/city`, `documents/metadata` |
+
+### Which “sync” is which
+
+Five different things wear the word “sync” around here. Keep them apart:
+
+| Word | Means | Notes |
+|------|-------|-------|
+| **Sync relationship** | The durable per-(connection, Kind) pairing | What connecting data establishes; stored with the connection |
+| **Sync job** | One durable queue unit of data-movement work | The executor, not the relationship |
+| **Sync maintenance** | The connector-reliability self-repair loop | Not data-movement policy |
+| **`sync_mode`** | Copy-ledger row marker (`full` / `optimistic`) | A field name, not a concept |
+| **Mirror** | Explicit one-shot copy between two services | Retires into sync relationships; do not extend it |
+
+A sync relationship's members converge on its **canonical home**: edits on
+it (creates, renames, order) fan out to the other members. An edit on a
+non-canonical member is a **conflict** for the user to accept (apply to the
+canonical home, then fan out) or reject (re-converge that member).
 
 ### Why not “data type”
 
