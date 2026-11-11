@@ -113,6 +113,10 @@ type Service struct {
 	// every principal). Non-empty is visible only to scopes with the same
 	// dataset; the default/owner scope sees every service.
 	Dataset string `json:"dataset,omitempty"`
+	// SyncRelationships is the in-memory view of this source's sync rows
+	// (issue #365): kind -> hub flag. Stored on the service-connections
+	// overlay entry; not part of aegis.json.
+	SyncRelationships map[string]bool `json:"-"`
 }
 
 // OAuthConfig holds the OAuth2 credentials and endpoints for a service.
@@ -263,6 +267,12 @@ func (s Service) clone() Service {
 	}
 	if s.OAuthScopes != nil {
 		cp.OAuthScopes = append([]string(nil), s.OAuthScopes...)
+	}
+	if s.SyncRelationships != nil {
+		cp.SyncRelationships = make(map[string]bool, len(s.SyncRelationships))
+		for k, v := range s.SyncRelationships {
+			cp.SyncRelationships[k] = v
+		}
 	}
 	return cp
 }

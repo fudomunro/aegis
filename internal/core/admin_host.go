@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"net/http"
+	"sort"
 	"net/url"
 	"strings"
 
@@ -82,7 +83,16 @@ func (x searchStatus) CountsByKind() (map[string]int, error) {
 
 // serviceFactsOf maps a configured service row to the admin display facts
 // (presence flags and labels only — never header values).
-func serviceFactsOf(svc Service) admin.ServiceFacts {
+func (s *Server) serviceFactsOf(svc Service) admin.ServiceFacts {
+	rows := make([]shared.SyncRelationship, 0, len(svc.SyncRelationships))
+	for kind, canonical := range svc.SyncRelationships {
+		rows = append(rows, shared.SyncRelationship{
+			Kind:      kind,
+			Canonical: canonical,
+			ReadOnly:  !s.syncKindWriteCapable(kind, s.connectors[svc.ID]),
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Kind < rows[j].Kind })
 	return admin.ServiceFacts{
 		ID:                    svc.ID,
 		Name:                  svc.Name,
@@ -91,6 +101,7 @@ func serviceFactsOf(svc Service) admin.ServiceFacts {
 		Endpoint:              svc.Endpoint,
 		Connection:            svc.Connection,
 		Dataset:               svc.Dataset,
+		Sync:                  rows,
 		CanonicalFor:          svc.CanonicalFor,
 		CacheTTL:              svc.CacheTTL.String(),
 		Aliases:               svc.Aliases,
@@ -117,23 +128,44 @@ func staticCredentialLabel(svc Service) string {
 	return ""
 }
 
-// ServiceRows implements admin.Host.
+// ServiceRows implements admin.Host. Sync rows carry the full group
+// membership (every source with a row for that kind, issue #365).
 func (s *Server) ServiceRows() []admin.ServiceFacts {
 	snapshots := s.config.ServiceSnapshots()
 	out := make([]admin.ServiceFacts, 0, len(snapshots))
+	members := map[string][]string{} // kind -> service IDs in the group
 	for _, svc := range snapshots {
-		out = append(out, serviceFactsOf(svc))
+		for kind := range svc.SyncRelationships {
+			members[kind] = append(members[kind], svc.ID)
+		}
+	}
+	for _, svc := range snapshots {
+		facts := s.serviceFactsOf(svc)
+		for i := range facts.Sync {
+			ids := append([]string(nil), members[facts.Sync[i].Kind]...)
+			sort.Strings(ids)
+			facts.Sync[i].Members = ids
+		}
+		out = append(out, facts)
 	}
 	return out
 }
 
 // ServiceRow implements admin.Host.
 func (s *Server) ServiceRow(id string) (admin.ServiceFacts, bool) {
-	svc := s.config.GetService(id)
-	if svc == nil {
-		return admin.ServiceFacts{}, false
+	for _, facts := range s.ServiceRows() {
+		if facts.ID == id {
+			return facts, true
+		}
 	}
-	return serviceFactsOf(*svc), true
+	return admin.ServiceFacts{}, false
+}
+
+// SetSyncRelationship implements admin.Host — the admin edit of one
+// relationship row (issue #365). Canonical=true makes this source the kind's
+// hub (reassigning across the group); false drops the designation.
+func (s *Server) SetSyncRelationship(serviceID string, rel shared.SyncRelationship) error {
+	return s.config.SetSyncRelationship(serviceID, rel)
 }
 
 // DataGrants implements admin.Host.
@@ -196,7 +228,12 @@ func (s *Server) SetConnection(serviceID string, meta shared.ConnectionMetadata,
 	for k, v := range upd.SecretHeaders {
 		entry.Headers[k] = v
 	}
-	return s.config.SetServiceConnection(serviceID, entry)
+	if err := s.config.SetServiceConnection(serviceID, entry); err != nil {
+		return err
+	}
+	// A save can make a source usable for the first time (issue #365).
+	s.EstablishSyncRelationships()
+	return nil
 }
 
 // SetTailscaleAdminSettings implements admin.Host.

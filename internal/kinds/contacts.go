@@ -20,6 +20,7 @@ func newContactsKind(h Host, e *Engine, d Deps) Kind {
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[ContactProvider],
+		writeCapable: providerProvides[ContactWriteProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,

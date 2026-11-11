@@ -21,6 +21,7 @@ func newTracksKind(h Host, e *Engine, d Deps) Kind {
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[LikedTrackProvider],
+		writeCapable: providerProvides[LikedTrackWriteProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,

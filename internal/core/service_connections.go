@@ -27,11 +27,15 @@ type serviceConnectionEntry struct {
 	CanonicalFor []string          `json:"canonical_for,omitempty"`
 	// ClearCanonicalFor forces an empty claim list (override set).
 	ClearCanonicalFor bool     `json:"clear_canonical_for,omitempty"`
-	Action            string   `json:"action,omitempty"`
-	CacheTTL          string   `json:"cache_ttl,omitempty"`
-	Description       string   `json:"description,omitempty"`
-	Name              string   `json:"name,omitempty"`
-	Aliases           []string `json:"aliases,omitempty"`
+	// Sync is the per-kind sync relationship block (issue #365): one row per
+	// sync-participating kind this source provides. Presence is membership in
+	// the kind's sync group; the flag is that group's hub designation.
+	Sync      map[string]syncRelEntry `json:"sync,omitempty"`
+	Action    string                  `json:"action,omitempty"`
+	CacheTTL  string                  `json:"cache_ttl,omitempty"`
+	Description string                `json:"description,omitempty"`
+	Name      string                  `json:"name,omitempty"`
+	Aliases   []string                `json:"aliases,omitempty"`
 }
 
 // serviceConnectionsFile is the admin-edited overlay for static-auth services.
@@ -195,6 +199,9 @@ func (c *Config) applyServiceConnectionsOverlayLocked() error {
 			c.Services[i].CanonicalFor = normalizeCanonicalFor(kept)
 		}
 	}
+	// Sync rows and canonical_for are two views of one designation (issue
+	// #365); reconcile every time the overlay lands.
+	c.syncFlagsFromClaimsLocked()
 	return validateCanonicalFor(c.Services)
 }
 
@@ -482,6 +489,9 @@ func (c *Config) SetServiceConnection(id string, entry serviceConnectionEntry) e
 	if err := validateCanonicalFor(c.Services); err != nil {
 		return err
 	}
+	// Claims designate sync hubs (issue #365): pointing canonical_for at a
+	// source reassigns the hub flag across that kind's group.
+	c.syncFlagsFromClaimsLocked()
 	// Write order is intentional (issue #71): the secret lands in tokens.json
 	// first, then this entry. A crash in between leaves an orphan secret — an
 	// unused key in the token store, harmless and overwritten on retry — and

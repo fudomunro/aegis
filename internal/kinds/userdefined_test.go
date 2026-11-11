@@ -25,6 +25,7 @@ func (s stubKind) Routes() []Route {
 }
 
 func (s stubKind) Provides(any) bool      { return false }
+func (s stubKind) WriteCapable(any) bool  { return false }
 func (s stubKind) HasProviders(Host) bool { return true }
 func (s stubKind) Readable(Host) bool     { return true }
 

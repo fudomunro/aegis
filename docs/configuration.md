@@ -697,7 +697,16 @@ directory or keep passing the explicit path flags.
 **All secrets at rest are encrypted under `-token-pass`.** That includes
 OAuth tokens **and** static service-connection credentials (Immich/YNAB
 headers, Tailscale Admin API key). `service_connections.json` keeps only
-non-secret overlay fields (endpoint, canonical claims, tailnet host metadata).
+non-secret overlay fields (endpoint, canonical claims, tailnet host metadata,
+sync relationships).
+
+**Sync relationships** (`sync` in the overlay): connecting a source — OAuth,
+static credentials, or a local file import — records one row per
+sync-participating library kind it provides. The row's `canonical` flag is
+that kind's hub designation and is kept in step with `canonical_for`: pointing
+`canonical_for` at a source reassigns the hub across the group, and the admin
+services panel edits the same designation. Local file imports join as
+read-only members; sample fixtures stay out of groups.
 
 `tokens.json` is sealed with AES-256-GCM under a PBKDF2-HMAC-SHA256 master
 key. The file records its own KDF parameters so costs can be raised later

@@ -141,6 +141,8 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	// A new token changes which services answer library/proxy calls (issue #104).
 	s.invalidateService(serviceID)
+	// The source is connected now: establish its sync relationships (issue #365).
+	s.EstablishSyncRelationships()
 
 	slog.Info("OAuth authorization complete",
 		"service", serviceID,

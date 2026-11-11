@@ -5,6 +5,22 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Added
+
+- **Sync relationships (issue #365, Phase 1).** Connecting a source — OAuth,
+  static credentials, or a local file import — establishes a sync
+  relationship for each sync-participating library kind it provides
+  (starter set: contacts, events, playlists). Rows live on the source's
+  `service_connections.json` entry (`sync` block) and carry that kind's hub
+  designation, kept in step with `canonical_for`: pointing `canonical_for` at
+  a source reassigns the hub across the group, and the admin services panel
+  edits the same designation. The first write-capable source into a group
+  with no designated member claims the hub by default (admin-editable).
+  Local file imports join as read-only members; sample fixtures stay out.
+  Kinds opt in via `SyncParticipant` on the registry entry once their
+  cross-service identity matching is strong enough to converge. Sync jobs
+  that move the data follow in the next phases.
+
 ### Fixed
 
 - **Sync job timestamps compare in fixed-width format.** The job store

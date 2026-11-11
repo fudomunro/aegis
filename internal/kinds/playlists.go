@@ -21,6 +21,7 @@ func newPlaylistsKind(h Host, e *Engine, d Deps) Kind {
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[PlaylistProvider],
+		writeCapable: providerProvides[PlaylistItemWriteProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,

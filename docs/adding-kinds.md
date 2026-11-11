@@ -193,6 +193,12 @@ If sources can be a home or hold tracked copies: `CanonicalFor` in config
 `CanonicalAllowed` on the kind entry. Mirror writes are a separate,
 admin-side surface (`mirror.go`) — kinds declare reads.
 
+Sync participation (issue #365) is the same kind-level declaration:
+`SyncParticipant` on the kind entry puts every connected source that
+provides it into that kind's sync group. Only declare it once the kind's
+cross-service identity matching is strong enough to converge safely; the
+row's hub designation follows `canonical_for`.
+
 ### 8. Permissions and connector capabilities
 
 The kind key must be known to the permission map, the path classifier
