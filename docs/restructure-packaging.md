@@ -9,9 +9,9 @@
 > mid-campaign; append questions here instead. Precedent for a record like
 > this: [`restructure-core-types-connectors.md`](restructure-core-types-connectors.md).
 
-Status: **in progress** — Phases 0–P4 are landed (rules, seam
-vocabulary, `internal/library`, `internal/admin`, `internal/syncjobs`).
-P5 (hub cleanup) pending.
+Status: **landed** — all phases (0–P5) are in the tree. The map below is
+the historical record of the campaign; `AGENTS.md` "Package boundaries" is
+the live contract and `churn_guardrails_test.go` is the live ratchet.
 
 Related issues: **#358** (this restructure), **#346** (hookhealth/inject
 extraction — their final homes are settled here), **#325** (dissolution of
@@ -244,6 +244,25 @@ file-level rows:
    convention), with fixture hosts replacing `testServerWithBase` — the
    import direction forbids the reverse.
 
+## Implementation amendments (P5)
+
+1. **The operator CLI lands in `internal/cli`, not `cmd/`.** The subcommands
+   (seed / import / rekey) are flags on the `aegis` binary — a `cmd/`
+   home would mean either a separate binary (product change) or an
+   unimportable `main`. `internal/cli` is a self-contained package over
+   explicit paths and exported deps; the hub's flag dispatcher calls it.
+2. **`musicbrainz.go` lands in `internal/kinds`** as `MusicBrainzLookups`
+   over the `Cache` seam (its P5 home, done here). The cache-key helpers
+   are exported — the hub's merge-review tests pre-seed the MBID cache
+   with them.
+3. **`fakeupstream.go` folds into `run.go`** (its only callers are the
+   `-fake-upstream` wiring and the routes) and **`httpclient.go` folds
+   into `host.go`** (it is one `connectors.Host` method). A build-tag home
+   for the fake upstream would change the dev surface.
+4. **`handler.go` splits into `auth.go` (perimeter: Server, middleware,
+   identity) and `hook.go` (hook shapes, `HandlePreRequest`,
+   `recordHook`)** — both stay in the hub; neither joins a surface.
+
 ## Move phases
 
 Each phase is one `refactor/…` branch and PR; tests move with the code; the
@@ -256,7 +275,7 @@ guardrails table updates in the same commit; the 80% floor never bends.
 | **P2** | `internal/library` + `core/search`, `core/links`; splits of `cache.go`, `copy_ledger.go`, `canonical.go` — **landed** (the `handler.go` split is P5; see amendments) | `internal/library` row added |
 | **P3** | `internal/admin` + `core/apps`, `core/scopes`; `searchindex.go` rename — **landed** (`core/udk` stays; see amendments) | `internal/admin` row added |
 | **P4** | `internal/syncjobs` (promoted `core/syncjobs`) + runners, freshness, maintenance — **landed** (`core/copies` stays; see amendments) | `internal/syncjobs` row added; `core/syncjobs` dropped |
-| **P5** | Hub cleanup: `run.go` CLI → `cmd/`, `musicbrainz.go`, `maturity.go`, `fakeupstream.go`, `httpclient.go`, `handler.go` → `auth.go` + `hook.go` | table shrinkage |
+| **P5** | Hub cleanup: `run.go` CLI → `internal/cli`, `musicbrainz.go` → `internal/kinds`, `fakeupstream.go`/`httpclient.go` folded, `handler.go` → `auth.go` + `hook.go` — **landed** (`maturity.go` was P3) | `internal/cli` row added |
 
 ## Out of scope
 

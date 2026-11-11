@@ -118,9 +118,9 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.links = links
 	// Seed negative MusicBrainz cache entries so merge review stays offline.
-	srv.mbCache.Set(artistMBIDCacheKey("The Weeknd"), "-", time.Hour)
-	srv.mbCache.Set(recordingMBIDCacheKey("Blinding Lights", "The Weeknd"), "-", time.Hour)
-	srv.mbCache.Set(releaseGroupMBIDCacheKey("After Hours", "The Weeknd"), "-", time.Hour)
+	srv.mbCache.Set(kinds.ArtistMBIDCacheKey("The Weeknd"), "-", time.Hour)
+	srv.mbCache.Set(kinds.RecordingMBIDCacheKey("Blinding Lights", "The Weeknd"), "-", time.Hour)
+	srv.mbCache.Set(kinds.ReleaseGroupMBIDCacheKey("After Hours", "The Weeknd"), "-", time.Hour)
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakeFullLibraryProvider{
 			playlists: []kinds.Playlist{{
