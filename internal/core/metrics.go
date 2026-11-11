@@ -5,11 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/apps"
+	"github.com/fudomunro/aegis/internal/admin/apps"
+	"github.com/fudomunro/aegis/internal/admin/scopes"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/metrics"
-	"github.com/fudomunro/aegis/internal/core/scopes"
-	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func agentForRequest(r *http.Request) string {
@@ -95,36 +94,4 @@ func (s *Server) recordAccessFrom(r *http.Request, ev metrics.AccessEvent) {
 		ev.ClientIP = s.clientIPFor(r)
 	}
 	s.recordAccess(ev)
-}
-
-// metricsSnapshot returns aggregated stats; empty maps when metrics are off.
-func (s *Server) metricsSnapshot(window time.Duration) metrics.MetricsSnapshot {
-	if s == nil || s.metrics == nil {
-		if window <= 0 {
-			window = time.Hour
-		}
-		return metrics.MetricsSnapshot{
-			Window:    window,
-			Services:  make(map[string]metrics.MetricsEndpointStats),
-			Libraries: make(map[string]metrics.MetricsEndpointStats),
-		}
-	}
-	if window <= 0 {
-		window = time.Hour
-	}
-	return s.metrics.Snapshot(window)
-}
-
-func (s *Server) HandleMetrics(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	body := s.prom.PromText()
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	if r.Method == http.MethodHead {
-		return
-	}
-	_, _ = w.Write([]byte(body))
 }

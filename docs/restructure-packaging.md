@@ -10,8 +10,8 @@
 > this: [`restructure-core-types-connectors.md`](restructure-core-types-connectors.md).
 
 Status: **in progress** — Phase 0 (rules + this record), P1 (seam
-vocabulary into `internal/shared`), and P2 (`internal/library` + engines)
-are landed. P3–P5 pending.
+vocabulary into `internal/shared`), P2 (`internal/library` + engines), and
+P3 (`internal/admin` + apps/scopes stores) are landed. P4–P5 pending.
 
 Related issues: **#358** (this restructure), **#346** (hookhealth/inject
 extraction — their final homes are settled here), **#325** (dissolution of
@@ -74,7 +74,7 @@ The three packages follow **audiences**, matching the listener split and
 
 | Package | Absorbs from the hub root | Engines it owns |
 |---------|---------------------------|-----------------|
-| `internal/admin` — management surface | `admin.go`, `apps_admin.go`, `apps_grant.go`, `datascope_admin.go`, `flow.go`, `import_admin.go`, `mail_archive_http.go` (admin half), `onboarding.go`, `ownership.go` (handlers), `permissions_overview.go`, `quicken_admin.go`, `searchindex.go` (rename → `searchindex_admin.go`; it is admin status only), `signal_admin.go`, `syncjobs_admin.go`, `timeline_admin.go`, `udk_admin.go` | `core/apps`, `core/udk`, `core/scopes` (store half) |
+| `internal/admin` — management surface | `admin.go`, `apps_admin.go`, `apps_grant.go`, `datascope_admin.go`, `flow.go`, `import_admin.go`, `mail_archive_http.go` (admin half), `onboarding.go`, `ownership.go` (whole — see amendments), `permissions_overview.go`, `quicken_admin.go`, `searchindex_admin.go` (renamed), `signal_admin.go`, `syncjobs_admin.go`, `timeline_admin.go`, `udk_admin.go` + `metrics.go` (derivation/handler half) | `core/apps` → `admin/apps`, `core/scopes` → `admin/scopes`; `core/udk` stays (amendment) |
 | `internal/library` — agent data plane | `agentpaths.go`, `pathclass.go`, `librarykind.go`, `udk_handlers.go`, `canonical.go` (notices half), `grants.go` (enforcement + agent copy), `copy_ledger.go` (record half), `copy_ledger_http.go`, `entity_links_handlers.go`, `mirror.go`, `mirror_entity.go`, `photos_share.go`, `proxy.go` (handler half) + kind composition (see amendments) | `core/search` → `library/search`, `core/links` → `library/links` |
 | `internal/syncjobs` — background consistency | `syncfreshness.go`, `syncfreshness_runner.go`, `syncrunner_canary.go`, `syncrunner_mail.go`, `syncrunner_mirror.go`, `maintenance.go` (collector half), `copy_ledger.go` (`recordTakeoutSnapshot`) | `core/syncjobs` (promoted), `core/copies` |
 
@@ -199,6 +199,29 @@ file-level rows:
    own row says — P2 needed no part of it; the hook simply calls the copy
    builders `internal/library` exports.
 
+## Implementation amendments (P3)
+
+1. **`core/udk` stays a `core/` engine** (the settled call said admin). The
+   data plane's kind composition (`internal/library`) consumes the registry,
+   and a move under `internal/admin` would create a surface → surface edge.
+   Dual-use engines stay in `core/` — the same rule as `core/mail`.
+2. **The maintenance split defers to P4 as a unit.** The capture shape
+   (`MaintenanceSignals` et al.) references engine types (`copies.Freshness`,
+   `syncjobs.SyncCounts`), so it cannot reach a stdlib-only leaf, and the
+   P3/P4 split of `maintenance.go` would move it twice. The collector,
+   writer, and admin handler move together in P4 (handler → `internal/admin`,
+   collector → the syncjobs domain).
+3. **`ownership.go` moves whole** (the open question's P2/P3 judgement): the
+   evidence derivation has exactly one consumer — the admin handlers — so it
+   moves with it. Extract a store-side engine if a second consumer appears.
+4. **`maturity.go` completes its P5 home early** (→ `internal/connectors`):
+   the wrappers were trivial and the catalog-honesty tests are connectors
+   domain. No double move — the content merged into the existing
+   `maturity_catalog.go`.
+5. **`kinds.ProvidedTypes`** — the provider-introspection helper used by the
+   permissions view moved to `internal/kinds` (it inspects `kinds.*Provider`
+   interfaces), keeping the surfaces uncoupled.
+
 ## Move phases
 
 Each phase is one `refactor/…` branch and PR; tests move with the code; the
@@ -209,7 +232,7 @@ guardrails table updates in the same commit; the 80% floor never bends.
 | **P0** | This record, `AGENTS.md` package boundaries, [`glossary.md`](glossary.md) | none (docs only) |
 | **P1** | Seam vocabulary → `internal/shared`; `internal/kinds` drops `core/policy`, `core/scopes`, `core/audit`, `core/search` imports; `SearchIndex` interface lands in kinds — **landed** | `internal/kinds` row shrinks to `{shared}`; connectors row drops `core/policy` |
 | **P2** | `internal/library` + `core/search`, `core/links`; splits of `cache.go`, `copy_ledger.go`, `canonical.go` — **landed** (the `handler.go` split is P5; see amendments) | `internal/library` row added |
-| **P3** | `internal/admin` + `core/apps`, `core/udk`, scopes store; `searchindex.go` rename | add `internal/admin` row |
+| **P3** | `internal/admin` + `core/apps`, `core/scopes`; `searchindex.go` rename — **landed** (`core/udk` stays; see amendments) | `internal/admin` row added |
 | **P4** | `internal/syncjobs` (promote `core/syncjobs`) + runners, freshness, maintenance, `core/copies` | add `internal/syncjobs` row; drop `core/syncjobs` |
 | **P5** | Hub cleanup: `run.go` CLI → `cmd/`, `musicbrainz.go`, `maturity.go`, `fakeupstream.go`, `httpclient.go`, `handler.go` → `auth.go` + `hook.go` | table shrinkage |
 

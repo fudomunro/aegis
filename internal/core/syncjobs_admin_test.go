@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
@@ -86,12 +87,12 @@ func TestHandleAdminSync_GetStatus(t *testing.T) {
 
 	req := adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
 	}
-	var got SyncStatus
+	var got admin.SyncStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestHandleAdminSync_EnqueueAndCancel(t *testing.T) {
 	body := `{"kind":"messages","job_type":"ingest","service":"google-gmail","payload":{"max_messages":5}}`
 	req := adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", body)
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("enqueue status = %d, body %s", w.Code, w.Body.String())
@@ -140,7 +141,7 @@ func TestHandleAdminSync_EnqueueAndCancel(t *testing.T) {
 	// Repeat enqueue dedupes on the service entity key.
 	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", body)
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("second enqueue status = %d", w.Code)
 	}
@@ -153,7 +154,7 @@ func TestHandleAdminSync_EnqueueAndCancel(t *testing.T) {
 	// Cancel by id.
 	req = adminRequest(http.MethodPost, "/v1/admin/sync/"+job.ID+"/cancel", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncCancel)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("cancel status = %d, body %s", w.Code, w.Body.String())
 	}
@@ -166,7 +167,7 @@ func TestHandleAdminSync_EnqueueAndCancel(t *testing.T) {
 	// Unknown id is a 404.
 	req = adminRequest(http.MethodPost, "/v1/admin/sync/9999/cancel", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncCancel)(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown cancel status = %d, want 404", w.Code)
 	}
@@ -183,7 +184,7 @@ func TestHandleAdminSync_Validation(t *testing.T) {
 	} {
 		req := adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", body)
 		w := httptest.NewRecorder()
-		srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+		srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("body %s → status = %d, want 400", body, w.Code)
 		}
@@ -191,21 +192,21 @@ func TestHandleAdminSync_Validation(t *testing.T) {
 
 	req := adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", `not-json`)
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("bad json status = %d, want 400", w.Code)
 	}
 
 	req = adminRequest(http.MethodPut, "/v1/admin/sync", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("PUT status = %d, want 405", w.Code)
 	}
 
 	req = adminRequest(http.MethodGet, "/v1/admin/sync/nope/cancel", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncCancel)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET cancel status = %d, want 405", w.Code)
 	}
@@ -216,14 +217,14 @@ func TestHandleAdminSync_DisabledQueue(t *testing.T) {
 	// No syncJobs wired: enqueue must report the queue is off, not panic.
 	req := adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", `{"kind":"messages","job_type":"ingest"}`)
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("disabled enqueue status = %d, want 503", w.Code)
 	}
 
 	req = adminRequest(http.MethodPost, "/v1/admin/sync/1/cancel", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncCancel)(w, req)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("disabled cancel status = %d, want 503", w.Code)
 	}
@@ -231,7 +232,7 @@ func TestHandleAdminSync_DisabledQueue(t *testing.T) {
 	// GET still answers (fail-open read model).
 	req = adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("disabled GET status = %d, want 200", w.Code)
 	}
@@ -247,14 +248,14 @@ func TestHandleAdminSync_RequiresAdminAuth(t *testing.T) {
 	// Agent key must not reach the admin sync surface.
 	req := adminRequest(http.MethodGet, "/v1/admin/sync", "agent-key", "")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
 		t.Fatalf("agent GET status = %d, want 401/403", w.Code)
 	}
 
 	req = adminRequest(http.MethodPost, "/v1/admin/sync", "agent-key", `{"kind":"messages","job_type":"ingest"}`)
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
 		t.Fatalf("agent POST status = %d, want 401/403", w.Code)
 	}
@@ -265,7 +266,7 @@ func TestHandleAdminSync_RequiresAdminAuth(t *testing.T) {
 	// No credentials at all.
 	req = adminRequest(http.MethodGet, "/v1/admin/sync", "", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
 		t.Fatalf("anonymous GET status = %d, want 401/403", w.Code)
 	}
@@ -341,11 +342,11 @@ func TestHandleAdminSync_WorkerDisabledStillValidates(t *testing.T) {
 
 	req := adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET status = %d, want 200", w.Code)
 	}
-	var status SyncStatus
+	var status admin.SyncStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -360,7 +361,7 @@ func TestHandleAdminSync_WorkerDisabledStillValidates(t *testing.T) {
 	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key",
 		`{"kind":"messages","job_type":"freshness_check"}`)
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unknown runner status = %d, want 400", w.Code)
 	}
@@ -368,7 +369,7 @@ func TestHandleAdminSync_WorkerDisabledStillValidates(t *testing.T) {
 	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key",
 		`{"kind":"messages","job_type":"ingest","service":"google-gmail"}`)
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("enqueue status = %d, body %s", w.Code, w.Body.String())
 	}
@@ -381,7 +382,7 @@ func TestHandleAdminSync_WorkerDisabledStillValidates(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &job)
 	req = adminRequest(http.MethodPost, "/v1/admin/sync/"+job.ID+"/cancel", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncCancel)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("cancel status = %d, body %s", w.Code, w.Body.String())
 	}

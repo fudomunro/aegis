@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
@@ -529,7 +530,7 @@ func TestHandleAdminCache_ListsEntries(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/cache", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminCache)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminCache)(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
@@ -555,21 +556,21 @@ func TestHandleAdmin_CaseAndMethod(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/v1/admin", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status = %d", w.Code)
 	}
 
 	req = httptest.NewRequest("GET", "/v1/admin/", nil)
 	w = httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("trailing slash status = %d", w.Code)
 	}
 
 	req = httptest.NewRequest("GET", "/v1/admin/nope", nil)
 	w = httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown path status = %d", w.Code)
 	}
@@ -583,9 +584,9 @@ func TestAdminSummary_ReportsTasteProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminSummary)(w, req)
 
-	var payload AdminSummary
+	var payload admin.AdminSummary
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -706,7 +707,7 @@ func TestHandleAdminCache_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/admin/cache", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminCache)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminCache)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", w.Code)
 	}

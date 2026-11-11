@@ -65,13 +65,6 @@ var allowedImports = map[string][]string{
 		"github.com/fudomunro/aegis/internal/kinds",
 		"github.com/fudomunro/aegis/internal/shared",
 	},
-	// the apps registry mints and verifies third-party app tokens; stored
-	// scope validation comes from policy, owner-view markers from kinds.
-	"internal/core/apps": {
-		"github.com/fudomunro/aegis/internal/core/policy",
-		"github.com/fudomunro/aegis/internal/kinds",
-		"github.com/fudomunro/aegis/internal/shared",
-	},
 	// the hook-health engine records hook traffic and validates pasted
 	// Aperture config; request body-shape tokens come from shared seam
 	// vocabulary (the inject engine produces the same tokens).
@@ -110,11 +103,41 @@ var allowedImports = map[string][]string{
 	"internal/library/search": {
 		"github.com/fudomunro/aegis/internal/shared",
 	},
+	// the management surface: admin API and UI, setup flows, admin-owned
+	// writes. It reads the data plane's kind catalog through a narrow
+	// interface the hub wires — the surfaces never import each other.
+	"internal/admin": {
+		"github.com/fudomunro/aegis/internal/shared",
+		"github.com/fudomunro/aegis/internal/kinds",
+		"github.com/fudomunro/aegis/internal/connectors",
+		"github.com/fudomunro/aegis/internal/core/copies",
+		"github.com/fudomunro/aegis/internal/core/hookhealth",
+		"github.com/fudomunro/aegis/internal/core/mail",
+		"github.com/fudomunro/aegis/internal/core/metrics",
+		"github.com/fudomunro/aegis/internal/core/ownership",
+		"github.com/fudomunro/aegis/internal/core/policy",
+		"github.com/fudomunro/aegis/internal/core/syncjobs",
+		"github.com/fudomunro/aegis/internal/core/tokens",
+		"github.com/fudomunro/aegis/internal/core/udk",
+		"github.com/fudomunro/aegis/internal/admin/apps",
+		"github.com/fudomunro/aegis/internal/admin/scopes",
+	},
+	// the third-party app registry (issue #131): mint/verify/consent.
+	"internal/admin/apps": {
+		"github.com/fudomunro/aegis/internal/shared",
+		"github.com/fudomunro/aegis/internal/kinds",
+		"github.com/fudomunro/aegis/internal/core/policy",
+	},
+	// the data-scope store (invite tokens, dataset partitions).
+	"internal/admin/scopes": {
+		"github.com/fudomunro/aegis/internal/shared",
+		"github.com/fudomunro/aegis/internal/core/policy",
+	},
 }
 
-// coreHubImport is the wiring package (*Server, routes, admin handlers).
-// No extracted store/engine may depend on it; that is the dependency
-// direction of AGENTS.md "Package boundaries".
+// coreHubImport is the wiring package (*Server, routes, Host
+// implementations). No extracted store/engine or surface package may depend
+// on it; that is the dependency direction of AGENTS.md "Package boundaries".
 const coreHubImport = "github.com/fudomunro/aegis/internal/core"
 
 func packageImportDecls(t *testing.T, dir string) map[string][]string {

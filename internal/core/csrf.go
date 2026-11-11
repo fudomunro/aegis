@@ -16,9 +16,6 @@ import (
 // csrfTokenTTL bounds how long a rendered consent-page CSRF token stays valid.
 const csrfTokenTTL = 15 * time.Minute
 
-// csrfTokenPlaceholder is substituted once per GET /v1/apps/authorize render.
-const csrfTokenPlaceholder = "{{CSRF_TOKEN}}"
-
 // authKind records how AuthMiddleware / AdminMiddleware authenticated the
 // request so write guards can tell ambient tailnet identity from explicit
 // credentials (issue #182).

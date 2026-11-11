@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/apps"
+	"github.com/fudomunro/aegis/internal/admin/apps"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -278,7 +278,7 @@ func TestAppAuthorize_FormCSRFRequired(t *testing.T) {
 		"/v1/apps/authorize?client_id=eco&scopes=freebusy:read&redirect_uri=/demo/third-party",
 		nil)
 	w := httptest.NewRecorder()
-	srv.HandleAppAuthorize(w, req)
+	srv.admin().HandleAppAuthorize(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("get: %d", w.Code)
 	}
@@ -298,7 +298,7 @@ func TestAppAuthorize_FormCSRFRequired(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("missing csrf: %d %s", w.Code, w.Body.String())
 	}
@@ -310,7 +310,7 @@ func TestAppAuthorize_FormCSRFRequired(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("bad csrf: %d %s", w.Code, w.Body.String())
 	}
@@ -322,7 +322,7 @@ func TestAppAuthorize_FormCSRFRequired(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusFound {
 		t.Fatalf("valid csrf: %d %s", w.Code, w.Body.String())
 	}
@@ -331,7 +331,7 @@ func TestAppAuthorize_FormCSRFRequired(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("reused csrf: %d %s", w.Code, w.Body.String())
 	}
@@ -352,7 +352,7 @@ func TestAppAuthorize_JSONGrantStillWorksWithAPIKey(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("json grant: %d %s", w.Code, w.Body.String())
 	}
@@ -370,7 +370,7 @@ func TestAppAuthorize_TailnetSameOriginFormWithCSRF(t *testing.T) {
 		"/v1/apps/authorize?client_id=eco&scopes=freebusy:read&redirect_uri=/demo/third-party",
 		nil)
 	w := httptest.NewRecorder()
-	srv.HandleAppAuthorize(w, req)
+	srv.admin().HandleAppAuthorize(w, req)
 	token := extractCSRFToken(t, w.Body.String())
 	if token == "" {
 		t.Fatal("missing csrf token")
@@ -387,7 +387,7 @@ func TestAppAuthorize_TailnetSameOriginFormWithCSRF(t *testing.T) {
 	req.Header.Set("Origin", "https://aegis.example.com")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusFound {
 		t.Fatalf("same-origin form grant: %d %s", w.Code, w.Body.String())
 	}

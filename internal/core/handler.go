@@ -12,8 +12,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fudomunro/aegis/internal/admin"
+	"github.com/fudomunro/aegis/internal/admin/apps"
+	"github.com/fudomunro/aegis/internal/admin/scopes"
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/hookhealth"
@@ -21,7 +23,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/ownership"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/core/udk"
@@ -108,6 +109,9 @@ type Server struct {
 	// routes, content transport, and agent-facing copy.
 	lib         *library.Handlers
 	libraryOnce sync.Once
+	// adminHandlers is the management surface (issue #358).
+	adminHandlers *admin.Handlers
+	adminOnce     sync.Once
 	// dataDir is the resolved local state directory (issue #74). Surfaced
 	// on the admin Runtime panel so the layout is discoverable.
 	dataDir string
@@ -791,7 +795,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	// (and the no-bypass policy); do not gate library hints on zero service matches.
 	libraryInstructions := s.library().LibraryHintsForMessage(r, payload.UserMessage)
 	// Local mail archive search is a separate surface from live provider listing.
-	libraryInstructions = append(libraryInstructions, s.mailArchiveHints(r, payload.UserMessage)...)
+	libraryInstructions = append(libraryInstructions, s.library().MailArchiveHints(r, payload.UserMessage)...)
 
 	if len(matched) == 0 && len(libraryInstructions) == 0 {
 		logger.Debug("no services matched, allowing")

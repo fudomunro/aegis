@@ -35,7 +35,7 @@ func TestLibraryKinds_RegistryConsistency(t *testing.T) {
 
 func TestServiceProvidedTypes_IncludesDocuments(t *testing.T) {
 	var conn any = &fakeDocumentProvider{}
-	got := serviceProvidedTypes(conn)
+	got := kinds.ProvidedTypes(conn)
 	found := false
 	for _, name := range got {
 		if name == "documents" {

@@ -261,7 +261,7 @@ func TestAdminHTMLVisibleText_NoIssueRefsOrAvoidTerms(t *testing.T) {
 	// admin.html and the maintenance dashboard template are the visible
 	// operator UI: copy rules apply to all of them.
 	for _, rel := range []string{
-		filepath.Join("internal", "core", "web", "admin.html"),
+		filepath.Join("internal", "admin", "web", "admin.html"),
 		filepath.Join("cmd", "aegis-dashboard", "maintenance_dashboard.html"),
 	} {
 		path := filepath.Join(repoRoot(t), rel)
@@ -450,7 +450,7 @@ func TestImmichAPIKeyContract_SingleOwner(t *testing.T) {
 		return string(b)
 	}
 
-	admin := read("internal/core/web/admin.html")
+	admin := read("internal/admin/web/admin.html")
 	for _, rel := range []string{
 		"docs/immich-live-testing.md",
 		"docs/connect/immich.md",
@@ -509,10 +509,10 @@ func TestImmichVIPContract_SingleOwner(t *testing.T) {
 		"Declare a host tag",
 		"never Funnel",
 	}
-	admin := read("internal/core/web/admin.html")
+	admin := read("internal/admin/web/admin.html")
 	for _, rel := range []string{
 		"internal/core/host.go",
-		"internal/core/onboarding.go",
+		"internal/admin/onboarding.go",
 		"internal/core/run.go",
 		"internal/core/service_connections.go",
 	} {
@@ -537,7 +537,7 @@ func TestImmichVIPContract_SingleOwner(t *testing.T) {
 // also contain it.
 func TestAdminHTML_RestatesNoOnboardingCopy(t *testing.T) {
 	root := repoRoot(t)
-	b, err := os.ReadFile(filepath.Join(root, "internal/core/web/admin.html"))
+	b, err := os.ReadFile(filepath.Join(root, "internal/admin/web/admin.html"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -222,7 +222,7 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminMailStatus)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminMailStatus)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}

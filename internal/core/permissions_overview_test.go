@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/admin"
+	"github.com/fudomunro/aegis/internal/admin/apps"
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
@@ -71,7 +72,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	}
 	srv.copyLedger = copyLedger
 
-	overview := srv.permissionsOverview()
+	overview := srv.admin().PermissionsOverview()
 	if len(overview.Kinds) == 0 || len(overview.Rows) == 0 {
 		t.Fatalf("overview = %+v", overview)
 	}
@@ -139,7 +140,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	}
 	foundMail := false
 	for _, acc := range messages.Accessors {
-		if acc.ID == syncMailID {
+		if acc.ID == admin.SyncMailID {
 			foundMail = true
 			if acc.Kind != policy.AccessorSync || acc.Level != shared.AccessRead {
 				t.Fatalf("mail row = %+v", acc)
@@ -264,7 +265,7 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 		}},
 	}
 
-	overview := srv.permissionsOverview()
+	overview := srv.admin().PermissionsOverview()
 	var playlists *policy.KindAccess
 	for i := range overview.Rows {
 		if overview.Rows[i].ID == "playlists" {

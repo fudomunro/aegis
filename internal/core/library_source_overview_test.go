@@ -169,7 +169,7 @@ func TestAdminHTML_LibrarySourceOverview(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}

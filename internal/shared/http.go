@@ -35,6 +35,10 @@ func TrimRightSlash(s string) string {
 // ReadBodyLimited reads an inbound request body up to max bytes. Overflow is
 // reported to the caller as a 413; other read failures as a 400. ok is false
 // when the response has already been written.
+// MaxAdminBodyBytes covers admin JSON request bodies (permissions,
+// hook-health paste, app and scope forms).
+const MaxAdminBodyBytes = 4 << 20 // 4 MiB
+
 func ReadBodyLimited(w http.ResponseWriter, r *http.Request, max int64) ([]byte, bool) {
 	if r.Body == nil {
 		return nil, true

@@ -17,7 +17,7 @@ func TestHandleAdminHookHealth_GetAndCheck(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/hook-health", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminHookHealth)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminHookHealth)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -33,7 +33,7 @@ func TestHandleAdminHookHealth_GetAndCheck(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/admin/hook-health/check", body)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminHookHealth)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminHookHealth)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("POST status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -42,7 +42,7 @@ func TestHandleAdminHookHealth_GetAndCheck(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/admin/hook-health/check", strings.NewReader("  "))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminHookHealth)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminHookHealth)(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("empty body status = %d", w.Code)
 	}
@@ -51,7 +51,7 @@ func TestHandleAdminHookHealth_GetAndCheck(t *testing.T) {
 	req = httptest.NewRequest("DELETE", "/v1/admin/hook-health", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminHookHealth)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminHookHealth)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("DELETE status = %d", w.Code)
 	}
@@ -59,7 +59,7 @@ func TestHandleAdminHookHealth_GetAndCheck(t *testing.T) {
 	// Unauthenticated.
 	req = httptest.NewRequest("GET", "/v1/admin/hook-health", nil)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminHookHealth)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminHookHealth)(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauth status = %d", w.Code)
 	}
@@ -113,7 +113,7 @@ func TestAdminSummary_IncludesApertureURL(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminSummary)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}

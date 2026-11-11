@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/admin/scopes"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/sampledata"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/library/links"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -710,7 +710,7 @@ func TestAdminDataScopes_CRUD(t *testing.T) {
 		req := httptest.NewRequest(method, path, reader)
 		req.Header.Set("X-Api-Key", "test-key")
 		w := httptest.NewRecorder()
-		srv.AuthMiddleware(srv.HandleAdminDataScopes)(w, req)
+		srv.AuthMiddleware(srv.admin().HandleAdminDataScopes)(w, req)
 		return w
 	}
 

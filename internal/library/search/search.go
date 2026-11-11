@@ -453,19 +453,3 @@ func (x *Index) CountsByKind() (map[string]int, error) {
 }
 
 // KindStatus describes one library kind's search posture.
-type KindStatus struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	// Searchable reports whether the kind declares a SearchSpec.
-	Searchable bool `json:"searchable"`
-	// Docs is the indexed document count (0 when never materialized).
-	Docs int `json:"docs"`
-}
-
-// Status is the admin-facing search index summary.
-type Status struct {
-	Enabled bool         `json:"enabled"`
-	Path    string       `json:"path,omitempty"`
-	Total   int          `json:"total"`
-	Kinds   []KindStatus `json:"kinds"`
-}

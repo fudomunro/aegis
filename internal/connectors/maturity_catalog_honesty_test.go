@@ -1,4 +1,4 @@
-package core
+package connectors
 
 import (
 	"encoding/json"
@@ -7,57 +7,58 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/shared"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
-// maturityHost is the minimal connectors.Host the connector constructors
+// maturityHost is the minimal Host the connector constructors
 // need; Capabilities() and provider methods are pure declarations over it.
 type maturityHost struct{}
 
-func (maturityHost) GetValidToken(string, *slog.Logger) string    { return "" }
-func (maturityHost) UpstreamBaseFor(_, fallback string) string    { return fallback }
-func (maturityHost) ServiceConfig(string) *connectors.ServiceInfo { return nil }
-func (maturityHost) RequestLevel(*http.Request, string) string    { return "" }
-func (maturityHost) BaseURL() string                              { return "https://aegis.example.com" }
-func (maturityHost) CacheGet(string) (string, bool)               { return "", false }
-func (maturityHost) CacheSet(string, string, time.Duration)       {}
-func (maturityHost) ObserveUpstream(string, time.Duration, int)   {}
-func (maturityHost) LibraryReadable(string) bool                  { return false }
-func (maturityHost) CanonicalOwner(string) string                 { return "" }
-func (maturityHost) SetupSecret(string) string                    { return "" }
-func (maturityHost) SetupSettings(string) map[string]string       { return nil }
+func (maturityHost) GetValidToken(string, *slog.Logger) string  { return "" }
+func (maturityHost) UpstreamBaseFor(_, fallback string) string  { return fallback }
+func (maturityHost) ServiceConfig(string) *ServiceInfo          { return nil }
+func (maturityHost) RequestLevel(*http.Request, string) string  { return "" }
+func (maturityHost) BaseURL() string                            { return "https://aegis.example.com" }
+func (maturityHost) CacheGet(string) (string, bool)             { return "", false }
+func (maturityHost) CacheSet(string, string, time.Duration)     {}
+func (maturityHost) ObserveUpstream(string, time.Duration, int) {}
+func (maturityHost) LibraryReadable(string) bool                { return false }
+func (maturityHost) CanonicalOwner(string) string               { return "" }
+func (maturityHost) SetupSecret(string) string                  { return "" }
+func (maturityHost) SetupSettings(string) map[string]string     { return nil }
 
 // catalogTestConnector is one connector under consistency check: its
 // registered ID, the instance, and the capability names it advertises.
 type catalogTestConnector struct {
 	id   string
-	conn connectors.ServiceConnector
+	conn ServiceConnector
 }
 
 func maturityTestConnectors() []catalogTestConnector {
 	host := maturityHost{}
 	return []catalogTestConnector{
-		{id: "spotify", conn: connectors.NewSpotifyConnector(host)},
-		{id: "youtube-music", conn: connectors.NewYouTubeMusicConnector(host)},
-		{id: "amazon-music", conn: connectors.NewAmazonMusicConnector(host)},
-		{id: connectors.GoogleGmailServiceID, conn: connectors.NewGoogleGmailConnector(host)},
-		{id: connectors.GooglePhotosServiceID, conn: connectors.NewGooglePhotosConnector(host)},
-		{id: connectors.GoogleContactsServiceID, conn: connectors.NewGoogleContactsConnector(host)},
-		{id: connectors.GoogleCalendarServiceID, conn: connectors.NewGoogleCalendarConnector(host)},
-		{id: connectors.GoogleDriveServiceID, conn: connectors.NewGoogleDriveConnector(host)},
-		{id: connectors.ImmichServiceID, conn: connectors.NewImmichConnector(host)},
-		{id: connectors.BlueskyServiceID, conn: connectors.NewBlueskyConnector(host)},
-		{id: connectors.YNABServiceID, conn: connectors.NewYNABConnector(host)},
-		{id: connectors.OwnTracksServiceID, conn: connectors.NewOwnTracksConnector(host)},
-		{id: connectors.CalDAVServiceID, conn: connectors.NewCalDAVConnector(host)},
-		{id: connectors.CardDAVServiceID, conn: connectors.NewCardDAVConnector(host)},
-		{id: connectors.PaperlessServiceID, conn: connectors.NewPaperlessConnector(host)},
-		{id: connectors.SignalServiceID, conn: connectors.NewSignalConnector(nil)},
-		{id: connectors.QuickenServiceID, conn: connectors.NewQuickenConnector(nil)},
-		{id: connectors.TimelineServiceID, conn: connectors.NewTimelineConnector(nil)},
+		{id: "spotify", conn: NewSpotifyConnector(host)},
+		{id: "youtube-music", conn: NewYouTubeMusicConnector(host)},
+		{id: "amazon-music", conn: NewAmazonMusicConnector(host)},
+		{id: GoogleGmailServiceID, conn: NewGoogleGmailConnector(host)},
+		{id: GooglePhotosServiceID, conn: NewGooglePhotosConnector(host)},
+		{id: GoogleContactsServiceID, conn: NewGoogleContactsConnector(host)},
+		{id: GoogleCalendarServiceID, conn: NewGoogleCalendarConnector(host)},
+		{id: GoogleDriveServiceID, conn: NewGoogleDriveConnector(host)},
+		{id: ImmichServiceID, conn: NewImmichConnector(host)},
+		{id: BlueskyServiceID, conn: NewBlueskyConnector(host)},
+		{id: YNABServiceID, conn: NewYNABConnector(host)},
+		{id: OwnTracksServiceID, conn: NewOwnTracksConnector(host)},
+		{id: CalDAVServiceID, conn: NewCalDAVConnector(host)},
+		{id: CardDAVServiceID, conn: NewCardDAVConnector(host)},
+		{id: PaperlessServiceID, conn: NewPaperlessConnector(host)},
+		{id: SignalServiceID, conn: NewSignalConnector(nil)},
+		{id: QuickenServiceID, conn: NewQuickenConnector(nil)},
+		{id: TimelineServiceID, conn: NewTimelineConnector(nil)},
 	}
 }
 
@@ -101,7 +102,7 @@ func providerKindNames(v any) map[string]bool {
 	return out
 }
 
-func maturityByService(t *testing.T) map[string]connectors.ConnectionMaturity {
+func maturityByService(t *testing.T) map[string]ConnectionMaturity {
 	t.Helper()
 	out := MaturityByService()
 	if len(out) != len(ConnectionMaturityCatalog()) {
@@ -204,10 +205,10 @@ func TestMaturityCatalogFieldCoverageIsReal(t *testing.T) {
 	for _, m := range ConnectionMaturityCatalog() {
 		for _, dt := range m.Kinds {
 			want := map[string]bool{}
-			for _, f := range connectors.MaturityContentFields[dt.Name] {
+			for _, f := range MaturityContentFields[dt.Name] {
 				want[f] = true
 			}
-			if len(dt.Fields) > 0 && len(connectors.MaturityContentFields[dt.Name]) == 0 {
+			if len(dt.Fields) > 0 && len(MaturityContentFields[dt.Name]) == 0 {
 				t.Errorf("%s/%s: field coverage on a type with no neutral model", m.Service, dt.Name)
 			}
 			for _, f := range dt.Fields {
@@ -222,11 +223,11 @@ func TestMaturityCatalogFieldCoverageIsReal(t *testing.T) {
 // TestMaturityCatalogTransportsAreClassified pins the transport vocabulary
 // the dashboard badges rely on.
 func TestMaturityCatalogTransportsAreClassified(t *testing.T) {
-	valid := map[connectors.Transport]bool{
-		connectors.TransportAPI:               true,
-		connectors.TransportProtocol:          true,
-		connectors.TransportReverseEngineered: true,
-		connectors.TransportArchive:           true,
+	valid := map[Transport]bool{
+		TransportAPI:               true,
+		TransportProtocol:          true,
+		TransportReverseEngineered: true,
+		TransportArchive:           true,
 	}
 	for _, m := range ConnectionMaturityCatalog() {
 		if !valid[m.Transport] {
@@ -261,5 +262,71 @@ func TestMaturityCatalogCoversPublishedManifest(t *testing.T) {
 		if _, ok := cat[e.ID]; !ok {
 			t.Errorf("published service %q has no maturity catalog entry", e.ID)
 		}
+	}
+}
+
+// TestOwnershipStartDeclarationsAreReal pins the connector-declared
+// call-to-action (issue #165 phase 2) against the seams it names: "setup"
+// connectors implement Onboarder, "import" sources expose an import panel,
+// everything else is "connect". Core reads these declarations and never
+// derives the action, so a wrong one is the only thing left to catch.
+func TestOwnershipStartDeclarationsAreReal(t *testing.T) {
+	conns := map[string]ServiceConnector{}
+	for _, c := range maturityTestConnectors() {
+		conns[c.id] = c.conn
+	}
+	for _, m := range ConnectionMaturityCatalog() {
+		conn := conns[m.Service]
+		if conn == nil {
+			t.Fatalf("catalog entry %q has no connector under test", m.Service)
+		}
+		start := m.Start
+		if start.Label == "" {
+			t.Errorf("connector %q: Start.Label is empty", m.Service)
+		}
+		_, isOnboarder := conn.(Onboarder)
+		isImportStore := false
+		switch conn.(type) {
+		case *SignalConnector, *QuickenConnector, *TimelineConnector:
+			// Local import stores: their admin import panel is the seam
+			// an "import" action names (issue #266).
+			isImportStore = true
+		}
+		switch {
+		case isOnboarder && isImportStore:
+			t.Errorf("connector %q is both Onboarder and an import store; Start.Kind cannot be honest", m.Service)
+		case isOnboarder:
+			if start.Kind != shared.OwnershipActionSetup {
+				t.Errorf("connector %q implements Onboarder but Start.Kind = %q, want %q", m.Service, start.Kind, shared.OwnershipActionSetup)
+			}
+		case isImportStore:
+			if start.Kind != shared.OwnershipActionImport {
+				t.Errorf("connector %q is an import store but Start.Kind = %q, want %q", m.Service, start.Kind, shared.OwnershipActionImport)
+			}
+		default:
+			if start.Kind != shared.OwnershipActionConnect {
+				t.Errorf("connector %q has no setup or import seam but Start.Kind = %q, want %q", m.Service, start.Kind, shared.OwnershipActionConnect)
+			}
+		}
+	}
+}
+
+// TestOwnershipStartCoversIngestOnlySources pins the ingest-only route
+// declarations: a MailSource outside the maturity catalog must declare its
+// own Start so core never has to invent one.
+func TestOwnershipStartCoversIngestOnlySources(t *testing.T) {
+	start := MailSourceFor(TakeoutServiceID).Start
+	if start == nil {
+		t.Fatal("takeout MailSource has no Start declaration")
+	}
+	if start.Kind != shared.OwnershipActionImport {
+		t.Fatalf("takeout Start.Kind = %q, want %q", start.Kind, shared.OwnershipActionImport)
+	}
+	if start.Label == "" {
+		t.Fatal("takeout Start.Label is empty")
+	}
+	// Gmail is a connection first; its Start lives on the maturity row.
+	if got := MailSourceFor(GoogleGmailServiceID).Start; got != nil {
+		t.Fatal("gmail MailSource must not override the maturity Start")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -251,11 +252,11 @@ func TestAdminSummary_IncludesCanonicalFor(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdminSummary(w, req)
+	srv.admin().HandleAdminSummary(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var summary AdminSummary
+	var summary admin.AdminSummary
 	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -271,7 +272,7 @@ func TestAdminHTML_ShowsCanonicalBadges(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	body := w.Body.String()
 	for _, want := range []string{"canonical_for", "hasCanonicalSource", "Authoritative non-Aegis location"} {
 		if !strings.Contains(body, want) {
@@ -289,12 +290,12 @@ func TestFlowTopology_NotesConfiguredCanonical(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin/flow", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdminFlow(w, req)
+	srv.admin().HandleAdminFlow(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
 	var payload struct {
-		Nodes []FlowNode `json:"nodes"`
+		Nodes []admin.FlowNode `json:"nodes"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode: %v", err)

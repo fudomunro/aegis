@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/admin/scopes"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -56,7 +56,7 @@ func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("audit rows = %d, want 2", len(rows))
 	}
-	snap := srv.metricsSnapshot(time.Hour)
+	snap := srv.admin().MetricsSnapshot(time.Hour)
 	if snap.TotalHits != 2 {
 		t.Fatalf("ring hits = %d, want 2", snap.TotalHits)
 	}

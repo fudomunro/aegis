@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
@@ -366,7 +367,7 @@ func TestHandleAdminSyncPauseResume(t *testing.T) {
 
 	req := adminRequest(http.MethodPost, "/v1/admin/sync/pause", "admin-key", `{"service":"google-gmail","reason":"quota"}`)
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncPause)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncPause)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("pause status = %d, body %s", w.Code, w.Body.String())
 	}
@@ -383,8 +384,8 @@ func TestHandleAdminSyncPauseResume(t *testing.T) {
 	// The status model reports the pause.
 	req = adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	var status SyncStatus
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
+	var status admin.SyncStatus
 	_ = json.Unmarshal(w.Body.Bytes(), &status)
 	if len(status.Paused) != 1 || status.Paused[0] != "google-gmail" {
 		t.Fatalf("status.paused = %v", status.Paused)
@@ -392,7 +393,7 @@ func TestHandleAdminSyncPauseResume(t *testing.T) {
 
 	req = adminRequest(http.MethodPost, "/v1/admin/sync/resume", "admin-key", `{"service":"google-gmail"}`)
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncResume)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncResume)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("resume status = %d, body %s", w.Code, w.Body.String())
 	}
@@ -403,7 +404,7 @@ func TestHandleAdminSyncPauseResume(t *testing.T) {
 	// Global pause with an empty body.
 	req = adminRequest(http.MethodPost, "/v1/admin/sync/pause", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncPause)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncPause)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("global pause status = %d", w.Code)
 	}
@@ -412,7 +413,7 @@ func TestHandleAdminSyncPauseResume(t *testing.T) {
 	}
 	req = adminRequest(http.MethodPost, "/v1/admin/sync/resume", "admin-key", `{}`)
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncResume)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncResume)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("global resume status = %d", w.Code)
 	}
@@ -420,7 +421,7 @@ func TestHandleAdminSyncPauseResume(t *testing.T) {
 	// Method and disabled-store guards.
 	req = adminRequest(http.MethodGet, "/v1/admin/sync/pause", "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncPause)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncPause)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET pause = %d, want 405", w.Code)
 	}
@@ -429,7 +430,7 @@ func TestHandleAdminSyncPauseResume(t *testing.T) {
 	off.syncJobs = &syncjobs.JobStore{}
 	req = adminRequest(http.MethodPost, "/v1/admin/sync/pause", "admin-key", `{}`)
 	w = httptest.NewRecorder()
-	off.AdminMiddleware(off.HandleAdminSyncPause)(w, req)
+	off.AdminMiddleware(off.admin().HandleAdminSyncPause)(w, req)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("disabled pause = %d, want 503", w.Code)
 	}

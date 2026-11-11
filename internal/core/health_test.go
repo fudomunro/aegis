@@ -83,7 +83,7 @@ func TestHealthzRouteUnauthenticated(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", srv.HandleHealthz)
 	mux.HandleFunc("GET /readyz", srv.HandleReadyz)
-	mux.HandleFunc("GET /metrics", srv.AuthMiddleware(srv.HandleMetrics))
+	mux.HandleFunc("GET /metrics", srv.AuthMiddleware(srv.admin().HandleMetrics))
 
 	// Health probes need no credentials.
 	for _, path := range []string{"/healthz", "/readyz"} {
@@ -200,7 +200,7 @@ func TestHandleMetrics_MethodAndNilProm(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest(http.MethodPost, "/metrics", nil)
 	w := httptest.NewRecorder()
-	srv.HandleMetrics(w, req)
+	srv.admin().HandleMetrics(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status = %d, want 405", w.Code)
 	}
@@ -208,7 +208,7 @@ func TestHandleMetrics_MethodAndNilProm(t *testing.T) {
 	srv.prom = nil
 	req = httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	w = httptest.NewRecorder()
-	srv.HandleMetrics(w, req)
+	srv.admin().HandleMetrics(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("nil prom status = %d, want 200", w.Code)
 	}

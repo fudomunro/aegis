@@ -267,7 +267,7 @@ func (c *snapshotChecker) Services() []string { return []string{c.service} }
 
 // Check implements CopyChecker.
 func (c *snapshotChecker) Check(_ context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
-	p, ok := c.srv.mailIngestFor(c.service).(kinds.SnapshotProber)
+	p, ok := c.srv.mailIngests[c.service].(kinds.SnapshotProber)
 	if !ok {
 		return copies.Version{}, false, false, nil
 	}

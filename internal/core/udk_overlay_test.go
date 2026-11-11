@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -53,11 +54,11 @@ func TestHandleAdminUDK_StatusBrowseAndSelect(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/udk/status", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status code=%d body=%s", w.Code, w.Body.String())
 	}
-	var st udkAdminStatus
+	var st admin.UDKAdminStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatal(err)
 	}
@@ -72,11 +73,11 @@ func TestHandleAdminUDK_StatusBrowseAndSelect(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/v1/admin/udk/browse?path="+browseDir, nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("browse code=%d body=%s", w.Code, w.Body.String())
 	}
-	var br udkBrowseResult
+	var br admin.UDKBrowseResult
 	if err := json.Unmarshal(w.Body.Bytes(), &br); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +92,7 @@ func TestHandleAdminUDK_StatusBrowseAndSelect(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("select code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -124,7 +125,7 @@ func TestHandleAdminUDK_StatusBrowseAndSelect(t *testing.T) {
 	req = httptest.NewRequest(http.MethodDelete, "/v1/admin/udk/kinds/reading-list/sources/sample-export", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("clear code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -163,7 +164,7 @@ func TestHandleAdminUDK_ExtraFile(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("extra code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -175,7 +176,7 @@ func TestHandleAdminUDK_ExtraFile(t *testing.T) {
 	req = httptest.NewRequest(http.MethodDelete, "/v1/admin/udk/kinds/notes/extra/my-extra", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("delete extra code=%d", w.Code)
 	}

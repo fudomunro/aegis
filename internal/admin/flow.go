@@ -1,4 +1,4 @@
-package core
+package admin
 
 import (
 	"encoding/json"
@@ -13,7 +13,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -190,13 +189,13 @@ type FlowTopology struct {
 
 // HandleAdminFlow returns the data-flow topology for the admin Map view.
 // GET /v1/admin/flow[?window=5m|1h|24h]
-func (s *Server) HandleAdminFlow(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminFlow(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	window, windowLabel := parseFlowWindow(r.URL.Query().Get("window"))
-	topo := s.buildFlowTopology(window, windowLabel)
+	topo := h.buildFlowTopology(window, windowLabel)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(topo)
 }
@@ -215,8 +214,8 @@ func parseFlowWindow(raw string) (time.Duration, string) {
 
 // buildFlowTopology assembles the graph from config, connectors, and tokens.
 // Secrets are never included.
-func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) FlowTopology {
-	tokens := s.tokens.Status()
+func (h *Handlers) buildFlowTopology(window time.Duration, windowLabel string) FlowTopology {
+	tokens := h.Tokens.Status()
 
 	nodes := []FlowNode{
 		{
@@ -263,9 +262,9 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		Parent: "aegis",
 		Status: "disabled",
 	}
-	if s.search.Enabled() {
+	if h.Search.Enabled() {
 		searchNode.Status = "enabled"
-		if counts, err := s.search.CountsByKind(); err == nil {
+		if counts, err := h.Search.CountsByKind(); err == nil {
 			total := 0
 			for _, n := range counts {
 				total += n
@@ -293,7 +292,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		nodes = append(nodes, FlowNode{
 			ID:     "tok:" + connID,
 			Kind:   FlowKindToken,
-			Label:  s.tokenDisplayName(connID),
+			Label:  h.TokenDisplayName(connID),
 			Detail: "OAuth token held for this connection",
 			Parent: "tokens",
 			Status: status,
@@ -303,15 +302,15 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 	// Static header credentials (YNAB PAT, Immich API key) live in
 	// service_connections.json, not the OAuth token store. Surface them in
 	// the vault too so the map matches what Aegis can actually inject.
-	for _, svc := range s.config.ServiceSnapshots() {
+	for _, svc := range h.Host.ServiceRows() {
 		if strings.EqualFold(svc.Action, "block") {
 			continue
 		}
-		connID := s.config.connectionIDForService(svc.ID)
+		connID := h.Host.ConnectionIDForService(svc.ID)
 		if seenVault[connID] {
 			continue
 		}
-		cred := staticCredentialLabel(svc)
+		cred := svc.StaticCredentialLabel
 		if cred == "" {
 			continue
 		}
@@ -319,7 +318,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		nodes = append(nodes, FlowNode{
 			ID:     "tok:" + connID,
 			Kind:   FlowKindToken,
-			Label:  s.tokenDisplayName(connID),
+			Label:  h.TokenDisplayName(connID),
 			Detail: cred + " held for this connection",
 			Parent: "tokens",
 			Status: FlowStatusConnected,
@@ -334,11 +333,11 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 
 	// Library kinds this server can aggregate, with which services feed them.
 	libraryProviders := make(map[string][]string)
-	for _, kind := range s.library().AllLibraryKinds() {
+	for _, kind := range h.KindCatalog.AllLibraryKinds() {
 		libraryProviders[kind.ID] = nil
 	}
 
-	for _, svc := range s.config.ServiceSnapshots() {
+	for _, svc := range h.Host.ServiceRows() {
 		node := FlowNode{
 			ID:       "svc:" + svc.ID,
 			Kind:     FlowKindService,
@@ -352,12 +351,12 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			node.Status = FlowStatusBlocked
 			node.Detail = "Blocked in this environment"
 		} else {
-			connID := s.config.connectionIDForService(svc.ID)
+			connID := h.Host.ConnectionIDForService(svc.ID)
 			node.ConnectionID = connID
 			node.Status = flowServiceStatus(svc, tokens[connID])
 		}
 
-		connector, hasConnector := s.connectors[svc.ID]
+		connector, hasConnector := h.Connectors[svc.ID]
 		if hasConnector {
 			caps := connector.Capabilities()
 			kindList := make([]string, 0, len(caps.Kinds))
@@ -366,8 +365,8 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			}
 			node.Kinds = kindList
 
-			for _, kind := range s.library().AllLibraryKinds() {
-				if s.flowProvidesKind(connector, kind.ID) {
+			for _, kind := range h.KindCatalog.AllLibraryKinds() {
+				if h.FlowProvidesKind(connector, kind.ID) {
 					node.Providers = append(node.Providers, kind.ID)
 					if !strings.EqualFold(svc.Action, "block") {
 						libraryProviders[kind.ID] = append(libraryProviders[kind.ID], svc.ID)
@@ -411,10 +410,10 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		// Library fan-in edge for each kind this non-blocked service can provide.
 		if !strings.EqualFold(svc.Action, "block") {
 			for _, kindID := range node.Providers {
-				if !s.ownerGrants().AllowsRead(kindID) {
+				if !h.Host.OwnerGrants().AllowsRead(kindID) {
 					continue
 				}
-				kind := library.LibraryKindByID(kindID)
+				kind := kinds.BuiltinKindByID(kindID)
 				if kind == nil {
 					continue
 				}
@@ -448,12 +447,12 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		return edges[i].Label < edges[j].Label
 	})
 
-	kindList := s.library().AllLibraryKinds()
+	kindList := h.KindCatalog.AllLibraryKinds()
 	libraries := make([]FlowLibrary, 0, len(kindList))
 	for _, kind := range kindList {
 		providers := append([]string(nil), libraryProviders[kind.ID]...)
 		// User-defined kinds are fed by schema sources, not OAuth connectors.
-		if schema, ok := s.library().UDKSchemaForKind(kind.ID); ok && len(providers) == 0 {
+		if schema, ok := h.KindCatalog.UDKSchemaForKind(kind.ID); ok && len(providers) == 0 {
 			for _, src := range schema.Sources {
 				providers = append(providers, src.ID)
 			}
@@ -468,7 +467,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		})
 	}
 
-	stats := s.buildFlowStats(window, windowLabel)
+	stats := h.buildFlowStats(window, windowLabel)
 	// Individual agent nodes + access arrows to library kinds they used
 	// (issue #114). Agent → service arrows are omitted so the map keeps focus
 	// on kinds rather than backends.
@@ -538,15 +537,15 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			Label:     lib.Label,
 			Path:      lib.Path,
 			Kind:      "library",
-			Readable:  len(lib.Providers) > 0 && s.library().LibraryReadableFor(lib.ID),
+			Readable:  len(lib.Providers) > 0 && h.KindCatalog.LibraryReadableFor(lib.ID),
 			Providers: lib.Providers,
 		})
 	}
 
 	return FlowTopology{
 		Runtime: FlowRuntime{
-			AuthMode: s.authMode,
-			BaseURL:  s.baseURL,
+			AuthMode: h.Host.RuntimeFacts().AuthMode,
+			BaseURL:  h.BaseURL,
 		},
 		Narrative: "Agents reach Aegis through Aperture’s hook and Aegis’s proxy/library APIs. " +
 			"Aegis (nested inside Aperture) holds the token vault and response cache, attaches OAuth " +
@@ -561,11 +560,11 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 }
 
 // buildFlowStats aggregates recent access metrics for the map (issue #32).
-func (s *Server) buildFlowStats(window time.Duration, windowLabel string) FlowStats {
+func (h *Handlers) buildFlowStats(window time.Duration, windowLabel string) FlowStats {
 	if windowLabel == "" {
 		windowLabel = "1h"
 	}
-	snap := s.metricsSnapshot(window)
+	snap := h.MetricsSnapshot(window)
 	services := make(map[string]FlowEndpointStats, len(snap.Services))
 	for id, st := range snap.Services {
 		services[id] = flowEndpointFromMetrics(st)
@@ -648,14 +647,12 @@ func accessEdgeLabel(hits int) string {
 }
 
 // tokenDisplayName returns a human label for a vault connection id.
-func (s *Server) tokenDisplayName(connID string) string {
-	if s.config != nil {
-		if conn, ok := s.config.Connections[connID]; ok && conn.Name != "" {
-			return conn.Name
-		}
-		if svc := s.config.GetService(connID); svc != nil && svc.Name != "" {
-			return svc.Name
-		}
+func (h *Handlers) TokenDisplayName(connID string) string {
+	if name := h.Host.ConnectionName(connID); name != "" {
+		return name
+	}
+	if svc, ok := h.Host.ServiceRow(connID); ok && svc.Name != "" {
+		return svc.Name
 	}
 	// Fallback: title-case the id ("google" → "Google").
 	if connID == "" {
@@ -673,14 +670,14 @@ func (s *Server) tokenDisplayName(connID string) string {
 	return strings.Join(parts, " ")
 }
 
-func flowServiceStatus(svc Service, st tokens.TokenStatus) string {
+func flowServiceStatus(svc ServiceFacts, st tokens.TokenStatus) string {
 	if st.HasToken {
 		if st.Expired {
 			return FlowStatusExpired
 		}
 		return FlowStatusConnected
 	}
-	if staticCredentialLabel(svc) != "" {
+	if svc.StaticCredentialLabel != "" {
 		return FlowStatusConnected
 	}
 	if svc.Connection == "" {
@@ -689,30 +686,11 @@ func flowServiceStatus(svc Service, st tokens.TokenStatus) string {
 	return FlowStatusNeedsAuth
 }
 
-// staticCredentialLabel returns a short human label when the service holds a
-// static auth header (API token / key). Secrets never appear in the label.
-// The rule keys on header-name shape, never on a service id (issue #254).
-func staticCredentialLabel(svc Service) string {
-	for k, v := range svc.Headers {
-		if strings.TrimSpace(v) == "" {
-			continue
-		}
-		lower := strings.ToLower(k)
-		switch {
-		case strings.EqualFold(k, "Authorization"), strings.Contains(lower, "token"):
-			return "API token"
-		case strings.Contains(lower, "key"):
-			return "API key"
-		}
-	}
-	return ""
-}
-
 // flowProvidesKind reports whether the connector feeds the named library
 // kind. Dispatch is registry-driven so a new kind cannot silently drop out
 // of the flow map (issue #254).
-func (s *Server) flowProvidesKind(connector connectors.ServiceConnector, kindID string) bool {
-	if k, ok := s.library().RegistryKind(kindID); ok {
+func (h *Handlers) FlowProvidesKind(connector connectors.ServiceConnector, kindID string) bool {
+	if k, ok := h.KindCatalog.RegistryKind(kindID); ok {
 		return k.Provides(connector)
 	}
 	return false

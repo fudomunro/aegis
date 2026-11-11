@@ -1,4 +1,4 @@
-package core
+package admin
 
 import (
 	"encoding/json"
@@ -16,8 +16,8 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// udkAdminStatus is the GET /v1/admin/udk/status payload (issue #15).
-type udkAdminStatus struct {
+// UDKAdminStatus is the GET /v1/admin/udk/status payload (issue #15).
+type UDKAdminStatus struct {
 	Enabled    bool           `json:"enabled"`
 	Overlay    string         `json:"overlay,omitempty"`
 	UserKinds  string         `json:"user_kinds_dir,omitempty"`
@@ -58,7 +58,7 @@ type udkBrowseEntry struct {
 	Size  int64  `json:"size,omitempty"`
 }
 
-type udkBrowseResult struct {
+type UDKBrowseResult struct {
 	Path    string           `json:"path"`
 	Parent  string           `json:"parent,omitempty"`
 	Entries []udkBrowseEntry `json:"entries"`
@@ -79,7 +79,7 @@ type udkExtraRequest struct {
 
 // HandleAdminUDK serves /v1/admin/udk/* — local file selection for
 // user-defined kinds (issue #15). Registered under AuthMiddleware.
-func (s *Server) HandleAdminUDK(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminUDK(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/udk"), "/")
 	switch {
 	case path == "" || path == "status":
@@ -87,58 +87,58 @@ func (s *Server) HandleAdminUDK(w http.ResponseWriter, r *http.Request) {
 			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		s.writeUDKStatus(w)
+		h.writeUDKStatus(w)
 	case path == "browse":
 		if r.Method != http.MethodGet {
 			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		s.handleUDKBrowse(w, r)
+		h.handleUDKBrowse(w, r)
 	case strings.HasPrefix(path, "kinds/"):
-		s.handleUDKKindRoutes(w, r, strings.TrimPrefix(path, "kinds/"))
+		h.handleUDKKindRoutes(w, r, strings.TrimPrefix(path, "kinds/"))
 	default:
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
 }
 
-func (s *Server) udkOverlayPath() string {
-	if s == nil || s.udks == nil {
+func (h *Handlers) udkOverlayPath() string {
+	if h == nil || h.UDKs == nil {
 		return ""
 	}
-	return s.udks.OverlayPath()
+	return h.UDKs.OverlayPath()
 }
 
-func (s *Server) udkOverlay() (*udk.UserKindsOverlay, error) {
-	return udk.LoadOverlay(s.udkOverlayPath())
+func (h *Handlers) udkOverlay() (*udk.UserKindsOverlay, error) {
+	return udk.LoadOverlay(h.udkOverlayPath())
 }
 
-func (s *Server) writeUDKStatus(w http.ResponseWriter) {
+func (h *Handlers) writeUDKStatus(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s.udkStatus())
+	json.NewEncoder(w).Encode(h.udkStatus())
 }
 
-func (s *Server) udkStatus() udkAdminStatus {
-	st := udkAdminStatus{
-		Enabled: s.udks != nil && len(s.udks.All()) > 0,
-		Overlay: s.udkOverlayPath(),
+func (h *Handlers) udkStatus() UDKAdminStatus {
+	st := UDKAdminStatus{
+		Enabled: h.UDKs != nil && len(h.UDKs.All()) > 0,
+		Overlay: h.udkOverlayPath(),
 	}
-	if s.udks != nil {
-		st.UserKinds = s.udks.BaseDir()
+	if h.UDKs != nil {
+		st.UserKinds = h.UDKs.BaseDir()
 	}
-	root := strings.TrimRight(s.baseURL, "/")
+	root := strings.TrimRight(h.BaseURL, "/")
 	if st.UserKinds == "" {
 		st.Hints = append(st.Hints,
 			"No user-kinds directory loaded. Copy a schema pack into <data-dir>/user-kinds/ (or set AEGIS_USER_KINDS_DIR) and restart.")
 	}
-	ov, err := s.udkOverlay()
+	ov, err := h.udkOverlay()
 	if err != nil {
 		st.Hints = append(st.Hints, "Overlay error: "+err.Error())
 		ov = &udk.UserKindsOverlay{Kinds: map[string]udk.KindOverlay{}}
 	}
-	if s.udks == nil {
+	if h.UDKs == nil {
 		return st
 	}
-	for _, schema := range s.udks.All() {
+	for _, schema := range h.UDKs.All() {
 		kind := udkAdminKind{
 			ID:      schema.ID,
 			Label:   schema.Label,
@@ -185,7 +185,7 @@ func (s *Server) udkStatus() udkAdminStatus {
 
 // handleUDKBrowse lists a directory so the admin UI can offer file selection.
 // GET /v1/admin/udk/browse?path=
-func (s *Server) handleUDKBrowse(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) handleUDKBrowse(w http.ResponseWriter, r *http.Request) {
 	raw := strings.TrimSpace(r.URL.Query().Get("path"))
 	if raw == "" {
 		if home, err := os.UserHomeDir(); err == nil {
@@ -213,7 +213,7 @@ func (s *Server) handleUDKBrowse(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("cannot list %s: %v", dir, err))
 		return
 	}
-	res := udkBrowseResult{Path: dir}
+	res := UDKBrowseResult{Path: dir}
 	if parent := filepath.Dir(dir); parent != dir {
 		res.Parent = parent
 	}
@@ -255,7 +255,7 @@ func (s *Server) handleUDKBrowse(w http.ResponseWriter, r *http.Request) {
 //	DELETE /v1/admin/udk/kinds/{kind}/sources/{id}
 //	POST   /v1/admin/udk/kinds/{kind}/extra          {extra:{…}}
 //	DELETE /v1/admin/udk/kinds/{kind}/extra/{id}
-func (s *Server) handleUDKKindRoutes(w http.ResponseWriter, r *http.Request, rest string) {
+func (h *Handlers) handleUDKKindRoutes(w http.ResponseWriter, r *http.Request, rest string) {
 	parts := strings.Split(strings.Trim(rest, "/"), "/")
 	if len(parts) < 2 {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
@@ -268,19 +268,19 @@ func (s *Server) handleUDKKindRoutes(w http.ResponseWriter, r *http.Request, res
 		if len(parts) >= 3 {
 			sourceID = parts[2]
 		}
-		s.handleUDKSourceUpdate(w, r, kindID, sourceID)
+		h.handleUDKSourceUpdate(w, r, kindID, sourceID)
 	case "extra":
 		extraID := ""
 		if len(parts) >= 3 {
 			extraID = parts[2]
 		}
-		s.handleUDKExtraUpdate(w, r, kindID, extraID)
+		h.handleUDKExtraUpdate(w, r, kindID, extraID)
 	default:
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
 }
 
-func (s *Server) handleUDKSourceUpdate(w http.ResponseWriter, r *http.Request, kindID, sourceID string) {
+func (h *Handlers) handleUDKSourceUpdate(w http.ResponseWriter, r *http.Request, kindID, sourceID string) {
 	if sourceID == "" {
 		shared.WriteJSONError(w, http.StatusBadRequest, "source id is required")
 		return
@@ -288,7 +288,7 @@ func (s *Server) handleUDKSourceUpdate(w http.ResponseWriter, r *http.Request, k
 	var req udkSourceUpdateRequest
 	switch r.Method {
 	case http.MethodPut, http.MethodPost:
-		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, shared.MaxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -302,14 +302,14 @@ func (s *Server) handleUDKSourceUpdate(w http.ResponseWriter, r *http.Request, k
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	s.applyUDKFileSource(w, kindID, sourceID, req)
+	h.applyUDKFileSource(w, kindID, sourceID, req)
 }
 
-func (s *Server) handleUDKExtraUpdate(w http.ResponseWriter, r *http.Request, kindID, extraID string) {
+func (h *Handlers) handleUDKExtraUpdate(w http.ResponseWriter, r *http.Request, kindID, extraID string) {
 	var req udkExtraRequest
 	switch r.Method {
 	case http.MethodPost, http.MethodPut:
-		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, shared.MaxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -329,11 +329,11 @@ func (s *Server) handleUDKExtraUpdate(w http.ResponseWriter, r *http.Request, ki
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	s.applyUDKExtra(w, kindID, req)
+	h.applyUDKExtra(w, kindID, req)
 }
 
-func (s *Server) loadOrInitKindOverlay(kindID string) (*udk.UserKindsOverlay, udk.KindOverlay, error) {
-	ov := s.udks.Overlay()
+func (h *Handlers) loadOrInitKindOverlay(kindID string) (*udk.UserKindsOverlay, udk.KindOverlay, error) {
+	ov := h.UDKs.Overlay()
 	// Copy so concurrent writers do not share maps until save.
 	cp := &udk.UserKindsOverlay{Version: ov.Version, Kinds: map[string]udk.KindOverlay{}}
 	for k, v := range ov.Kinds {
@@ -347,31 +347,31 @@ func (s *Server) loadOrInitKindOverlay(kindID string) (*udk.UserKindsOverlay, ud
 }
 
 // saveUDKOverlayLocked writes user_kinds.json and refreshes the cache.
-// Caller must hold s.udks.overlayMu.
-func (s *Server) saveUDKOverlayLocked(ov *udk.UserKindsOverlay) error {
-	if s.udks == nil {
+// Caller must hold h.UDKs.overlayMu.
+func (h *Handlers) saveUDKOverlayLocked(ov *udk.UserKindsOverlay) error {
+	if h.UDKs == nil {
 		return fmt.Errorf("user-defined kinds not loaded")
 	}
-	if err := udk.SaveOverlay(s.udkOverlayPath(), ov); err != nil {
+	if err := udk.SaveOverlay(h.udkOverlayPath(), ov); err != nil {
 		return err
 	}
-	s.udks.SetOverlay(ov)
+	h.UDKs.SetOverlay(ov)
 	return nil
 }
 
-func (s *Server) applyUDKFileSource(w http.ResponseWriter, kindID, sourceID string, req udkSourceUpdateRequest) {
-	if s.udks == nil {
+func (h *Handlers) applyUDKFileSource(w http.ResponseWriter, kindID, sourceID string, req udkSourceUpdateRequest) {
+	if h.UDKs == nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, "user-defined kinds not loaded")
 		return
 	}
-	schema, ok := s.udks.Get(kindID)
+	schema, ok := h.UDKs.Get(kindID)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown user-defined kind")
 		return
 	}
-	s.udks.LockOverlayWrite()
-	defer s.udks.UnlockOverlayWrite()
-	ov, kindOV, err := s.loadOrInitKindOverlay(kindID)
+	h.UDKs.LockOverlayWrite()
+	defer h.UDKs.UnlockOverlayWrite()
+	ov, kindOV, err := h.loadOrInitKindOverlay(kindID)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -398,28 +398,28 @@ func (s *Server) applyUDKFileSource(w http.ResponseWriter, kindID, sourceID stri
 		delete(kindOV.FileSources, sourceID)
 	}
 	ov.Kinds[kindID] = kindOV
-	if err := s.saveUDKOverlayLocked(ov); err != nil {
+	if err := h.saveUDKOverlayLocked(ov); err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.invalidateLibraryKind(kindID)
+	h.Host.InvalidateLibraryKind(kindID)
 	slog.Info("udk file selection saved",
 		"kind", kindID, "source", sourceID, "clear", req.Clear, "paths", req.Paths)
-	s.writeUDKStatus(w)
+	h.writeUDKStatus(w)
 }
 
-func (s *Server) applyUDKExtra(w http.ResponseWriter, kindID string, req udkExtraRequest) {
-	if s.udks == nil {
+func (h *Handlers) applyUDKExtra(w http.ResponseWriter, kindID string, req udkExtraRequest) {
+	if h.UDKs == nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, "user-defined kinds not loaded")
 		return
 	}
-	if _, ok := s.udks.Get(kindID); !ok {
+	if _, ok := h.UDKs.Get(kindID); !ok {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown user-defined kind")
 		return
 	}
-	s.udks.LockOverlayWrite()
-	defer s.udks.UnlockOverlayWrite()
-	ov, kindOV, err := s.loadOrInitKindOverlay(kindID)
+	h.UDKs.LockOverlayWrite()
+	defer h.UDKs.UnlockOverlayWrite()
+	ov, kindOV, err := h.loadOrInitKindOverlay(kindID)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -465,11 +465,11 @@ func (s *Server) applyUDKExtra(w http.ResponseWriter, kindID string, req udkExtr
 		}
 	}
 	ov.Kinds[kindID] = kindOV
-	if err := s.saveUDKOverlayLocked(ov); err != nil {
+	if err := h.saveUDKOverlayLocked(ov); err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.invalidateLibraryKind(kindID)
+	h.Host.InvalidateLibraryKind(kindID)
 	slog.Info("udk extra file saved", "kind", kindID, "id", id, "clear", req.Clear)
-	s.writeUDKStatus(w)
+	h.writeUDKStatus(w)
 }

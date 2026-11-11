@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/tokens"
@@ -94,7 +95,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/flow", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminFlow)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminFlow)(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
@@ -116,7 +117,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 		}
 	}
 
-	var topo FlowTopology
+	var topo admin.FlowTopology
 	if err := json.Unmarshal(w.Body.Bytes(), &topo); err != nil {
 		t.Fatalf("parse flow: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 		t.Fatal("expected narrative")
 	}
 
-	byID := map[string]FlowNode{}
+	byID := map[string]admin.FlowNode{}
 	for _, n := range topo.Nodes {
 		byID[n.ID] = n
 	}
@@ -138,17 +139,17 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 		}
 	}
 
-	if byID["svc:spotify"].Status != FlowStatusConnected {
+	if byID["svc:spotify"].Status != admin.FlowStatusConnected {
 		t.Fatalf("spotify status = %q, want connected", byID["svc:spotify"].Status)
 	}
-	if byID["svc:youtube-music"].Status != FlowStatusExpired {
+	if byID["svc:youtube-music"].Status != admin.FlowStatusExpired {
 		t.Fatalf("youtube status = %q, want expired", byID["svc:youtube-music"].Status)
 	}
 	// Photos shares the Google connection, so it inherits the same token status.
-	if byID["svc:google-photos"].Status != FlowStatusExpired {
+	if byID["svc:google-photos"].Status != admin.FlowStatusExpired {
 		t.Fatalf("photos status = %q, want expired", byID["svc:google-photos"].Status)
 	}
-	if byID["svc:tidal"].Status != FlowStatusBlocked {
+	if byID["svc:tidal"].Status != admin.FlowStatusBlocked {
 		t.Fatalf("tidal status = %q, want blocked", byID["svc:tidal"].Status)
 	}
 
@@ -178,7 +179,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	// Token vault lists held connections as child nodes (issue #32 map cleanup).
 	var tokenChildren []string
 	for _, n := range topo.Nodes {
-		if n.Parent == "tokens" && n.Kind == FlowKindToken {
+		if n.Parent == "tokens" && n.Kind == admin.FlowKindToken {
 			tokenChildren = append(tokenChildren, n.ID)
 		}
 	}
@@ -204,7 +205,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	if byID["tok:ynab"].Detail == "" || !strings.Contains(byID["tok:ynab"].Detail, "API token") {
 		t.Fatalf("ynab vault detail = %q, want API token label", byID["tok:ynab"].Detail)
 	}
-	if byID["svc:ynab"].Status != FlowStatusConnected {
+	if byID["svc:ynab"].Status != admin.FlowStatusConnected {
 		t.Fatalf("ynab status = %q, want connected", byID["svc:ynab"].Status)
 	}
 	if byID["svc:spotify"].ConnectionID == "" {
@@ -251,13 +252,13 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	foundDenied := false
 	foundLibrary := false
 	for _, e := range topo.Edges {
-		if e.From == "aperture" && e.To == "aegis" && e.Style == FlowEdgeHook {
+		if e.From == "aperture" && e.To == "aegis" && e.Style == admin.FlowEdgeHook {
 			foundHook = true
 		}
-		if e.From == "aegis" && e.To == "svc:tidal" && e.Style == FlowEdgeDenied {
+		if e.From == "aegis" && e.To == "svc:tidal" && e.Style == admin.FlowEdgeDenied {
 			foundDenied = true
 		}
-		if e.From == "svc:spotify" && e.To == "aegis" && e.Style == FlowEdgeLibrary {
+		if e.From == "svc:spotify" && e.To == "aegis" && e.Style == admin.FlowEdgeLibrary {
 			foundLibrary = true
 		}
 	}
@@ -271,7 +272,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 		t.Fatal("expected spotify → aegis library fan-in edge")
 	}
 
-	var playlists *FlowLibrary
+	var playlists *admin.FlowLibrary
 	for i := range topo.Libraries {
 		if topo.Libraries[i].ID == "playlists" {
 			playlists = &topo.Libraries[i]
@@ -295,7 +296,7 @@ func TestHandleAdminFlow_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/admin/flow", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminFlow)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminFlow)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", w.Code)
 	}
@@ -345,7 +346,7 @@ func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/flow?window=1h", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminFlow)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminFlow)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -368,7 +369,7 @@ func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 		t.Fatal("stats must not include OAuth tokens")
 	}
 
-	var topo FlowTopology
+	var topo admin.FlowTopology
 	if err := json.Unmarshal(w.Body.Bytes(), &topo); err != nil {
 		t.Fatalf("parse flow: %v", err)
 	}
@@ -388,7 +389,7 @@ func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 		t.Fatalf("playlists hits = %d, want 1", topo.Stats.Libraries["playlists"].Hits)
 	}
 
-	byID := map[string]FlowNode{}
+	byID := map[string]admin.FlowNode{}
 	for _, n := range topo.Nodes {
 		byID[n.ID] = n
 	}
@@ -403,9 +404,9 @@ func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 	if len(topo.Stats.Agents.Detail) != 2 {
 		t.Fatalf("agent detail = %d, want 2", len(topo.Stats.Agents.Detail))
 	}
-	byAgentID := map[string]FlowNode{}
+	byAgentID := map[string]admin.FlowNode{}
 	for _, n := range topo.Nodes {
-		if n.Kind == FlowKindAgentInstance {
+		if n.Kind == admin.FlowKindAgentInstance {
 			byAgentID[n.ID] = n
 		}
 	}
@@ -428,7 +429,7 @@ func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 		if e.From == "agent:alice@example.com" && e.To == "svc:spotify" {
 			foundAgentServiceEdge = true
 		}
-		if e.From == "agent:alice@example.com" && e.To == "lib:playlists" && e.Style == FlowEdgeData {
+		if e.From == "agent:alice@example.com" && e.To == "lib:playlists" && e.Style == admin.FlowEdgeData {
 			foundAgentLibraryEdge = true
 		}
 	}
@@ -445,11 +446,11 @@ func TestHandleAdminFlow_AgentDetailWithoutHits(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/flow", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminFlow)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminFlow)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var topo FlowTopology
+	var topo admin.FlowTopology
 	if err := json.Unmarshal(w.Body.Bytes(), &topo); err != nil {
 		t.Fatalf("parse flow: %v", err)
 	}
@@ -458,7 +459,7 @@ func TestHandleAdminFlow_AgentDetailWithoutHits(t *testing.T) {
 	}
 	hasInstance := false
 	for _, n := range topo.Nodes {
-		if n.Kind == FlowKindAgentInstance {
+		if n.Kind == admin.FlowKindAgentInstance {
 			hasInstance = true
 		}
 	}
@@ -490,11 +491,11 @@ func TestHandleAdminFlow_WindowParam(t *testing.T) {
 		req := httptest.NewRequest("GET", "/v1/admin/flow?"+tc.query, nil)
 		req.Header.Set("X-Api-Key", "test-key")
 		w := httptest.NewRecorder()
-		srv.AuthMiddleware(srv.HandleAdminFlow)(w, req)
+		srv.AuthMiddleware(srv.admin().HandleAdminFlow)(w, req)
 		if w.Code != http.StatusOK {
 			t.Fatalf("query %q status = %d", tc.query, w.Code)
 		}
-		var topo FlowTopology
+		var topo admin.FlowTopology
 		if err := json.Unmarshal(w.Body.Bytes(), &topo); err != nil {
 			t.Fatalf("parse %q: %v", tc.query, err)
 		}
@@ -511,7 +512,7 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -589,11 +590,11 @@ func TestFlowProvidesKind_CoversEveryProviderKind(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := placesDocumentsConnector{}
 	for _, kind := range []string{"places", "documents"} {
-		if !srv.flowProvidesKind(conn, kind) {
+		if !srv.admin().FlowProvidesKind(conn, kind) {
 			t.Errorf("flowProvidesKind(conn, %q) = false, want true", kind)
 		}
 	}
-	if srv.flowProvidesKind(conn, "tracks") {
+	if srv.admin().FlowProvidesKind(conn, "tracks") {
 		t.Error(`flowProvidesKind(conn, "tracks") = true, want false`)
 	}
 }

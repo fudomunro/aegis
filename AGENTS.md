@@ -106,7 +106,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Data directory + state path layout | `internal/core` hub | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `internal/core` hub (`Config`) | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
 | Admin permissions overlay | `internal/core` hub | `data_grants.json` v3: `data_grants` (primary DataGrant); admin saves never rewrite aegis.json |
-| Data scopes (principal → dataset) | `internal/core/scopes/`, `internal/shared` (request view), `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens. The stored record stays hub-side; the dataset-partition view crosses into the kinds pipeline as `shared.DataScope` |
+| Data scopes (principal → dataset) | `internal/admin/scopes/`, `internal/shared` (request view), `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens. The admin surface owns the store; the dataset-partition view crosses into the kinds pipeline as `shared.DataScope` |
 | External access (listeners, invite tokens) | `docs/external-access.md`, `SECURITY.md` | Split listeners: API (publishable, credential perimeter) vs admin (in-tailnet). Contract for issue #149 multi-user |
 | Pre-request injection | `internal/core/inject` (engine: wire-shape detection + JSON surgery), `internal/core` hub (`handler.go` hook) | `allow` / `block` / `modify`; structured `Operation` contract |
 | Hook-health engine | `internal/core/hookhealth/` (engine), `internal/core` hub (`hookhealth.go` wrapper, admin handlers) | Ring of redacted hook observations + Aperture config checks (`/v1/admin/hook-health`); `hook_skip.go` stays in the hub |
@@ -117,15 +117,16 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go` runners) | Durable SQLite-backed jobs (issue #227). The engine takes a `SyncMetrics` seam; hub wiring and runners stay in core |
 | Access + Prometheus metrics engines | `internal/core/metrics/` (engines), `internal/core` hub (`metrics.go` handlers/derivation) | `AccessMetrics` ring + `PromMetrics` text export. The hub feeds them from request handlers; `PromMetrics` satisfies `syncjobs.SyncMetrics` |
 | Sample/demo datasets + sample:// connector | `internal/core/sampledata/`, `docs/development.md`, `docs/demo-datasets.md` | Deterministic fixtures (generic + LotR/Lincoln packs), mbox/JSON writers, `SampleLibraryConnector`. Demo lockdown validation stays in the hub (`demo.go`) |
-| UDK registry + admin overlay | `internal/core/udk/` (registry/loader + `user_kinds.json` overlay), `internal/core` hub (`udk_admin.go`, `udk_handlers.go`) | User-defined kinds (issue #15). Schema packs under `user-kinds/` load into the same pipeline; the hub owns the admin handlers |
-| Apps registry + consent grants | `internal/core/apps/` (store + grant codes), `internal/core` hub (`apps_grant.go` handlers, `apps_admin.go`) | Third-party app tokens (issue #131). The store mints/verifies tokens; the hub owns the authorize/token/revoke HTTP surface |
+| UDK registry + admin overlay | `internal/core/udk/` (registry/loader + `user_kinds.json` overlay), `internal/admin` (`udk_admin.go`), `internal/library` (serving glue) | User-defined kinds (issue #15). Schema packs under `user-kinds/` load into the same pipeline. The registry stays a `core/` engine — the data plane's kind composition consumes it |
+| Apps registry + consent grants | `internal/admin/apps/` (store + grant codes), `internal/admin` (`apps_grant.go`, `apps_admin.go`) | Third-party app tokens (issue #131). The admin surface owns registration, consent, and revocation; the hub's auth reads the minted identities |
 | Neutral models + kind data | `internal/kinds` | Models, merge, and kind registry metadata; authorization vocabulary is `internal/shared` and stored grant resolution is `internal/core/policy` — never here |
 | Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points) | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; `internal/library` owns the fixed cross-kind routes, kind composition, and agent-facing copy; admin writes stay admin-side |
 | Agent data plane | `internal/library` (+ `library/links`, `library/search`) | Fixed `/v1/library/*` write/maintenance routes, `/v1/services` content transport, kind registry composition, agent-facing instruction copy. The hub constructs `library.Handlers`, mounts its route map behind auth, and implements its `kinds.Host` seam |
+| Management surface | `internal/admin` (+ `admin/apps`, `admin/scopes`) | `/v1/admin/*`, the admin UI shell, setup flows, admin-owned writes (data grants, apps, data scopes, UDK overlay, connections, ownership), and the admin read models. The hub constructs `admin.Handlers`, mounts its routes behind the admin perimeter, and implements its `admin.Host` seam; the surfaces never import each other |
 | Merge / entity IDs | `internal/kinds` (merge), `internal/core/links/` (entity-link store) | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors` (one file per named service; local import stores share the surface) | Register in the hub's ordered `srv.connectors` list; stores use a local-transport constructor (design: `docs/local-import-stores.md`) |
 | Location history (places) | `internal/connectors` (timeline, owntracks), the places kind | Visits/trips, city/read/precise redaction (issue #142); default `none` |
-| Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265) |
+| Admin UI | `internal/admin/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265). Brand/demo assets stay in `internal/core/web/` |
 | Onboarding runner | `internal/core` hub (host), `internal/shared` (shapes), impls beside each connector | Generic `/v1/admin/setup/{id}` host over `connectors.Onboarder` (design: `docs/connector-onboarding.md`) |
 | Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
 | Maintenance tooling (dashboard, scanner, tickets) | `cmd/aegis-dashboard` | Separate tool (issues #335, #344): builds the static sync-maintenance dashboard from the repo's issue record, the services manifest, captured signal bundles (`build -bundles`), and the connector metadata catalog; `scan` runs the maintenance scanner that opens sync-failure tickets. Instance-level captures stay on the admin surface (`/v1/admin/maintenance/signals`); the application code contains no dashboard, scanner, or ticket surface |
@@ -234,8 +235,9 @@ Principles, not a closed package list. `import_boundary_test.go` and
 `churn_guardrails_test.go` enforce these; this section explains them.
 
 > **Layout transition (issue #358).** This section states the **target**
-> dependency direction; the tree is mid-move toward it (P1 seam vocabulary
-> and P2 `internal/library` are landed). The per-package import
+> dependency direction; the tree is mid-move toward it (P1–P3 landed:
+> shared seam vocabulary, `internal/library`, and `internal/admin`). The
+> per-package import
 > table in `churn_guardrails_test.go` is the ratchet and keeps matching the
 > current tree — each move PR updates the table in the same commit as the
 > move. The frozen file → package map, move phases, and settled placement
@@ -474,7 +476,7 @@ scope runs everything.
 | Token encrypt/persist under exclusive map lock | Mutate under lock; persist outside; ordered `persistMu` |
 | Per-service OAuth config resurrected | Top-level `connections` only |
 | Resurrecting per-service grant limits or provider tighten overrides | One grant map per key is the only policy; keep authorization a single lookup |
-| Large admin HTML pasted back into `admin.go` | Keep `internal/core/web/admin.html` embed |
+| Large admin HTML pasted back into `admin.go` | Keep `internal/admin/web/admin.html` embed |
 | Kind route without declared exposure | Declare exposure on the route (`AppReadable`); API-listener and app-token allowlists derive from declarations — prefix allows must not grow (#312) |
 | Coverage floor lowered to green a PR | Add tests, or split untested work out |
 | Name-only merges for music entities | Prefer ISRC/UPC/MBID; duration-guard name merges |
@@ -495,13 +497,13 @@ scope runs everything.
 | Hook behavior / system instructions | the `internal/core` hub (pre-request hook), connector `SystemInstructions` |
 | Proxy + cache + token injection | `internal/core` hub (proxy/cache/token injection), `internal/connectors` (upstream transport), `internal/shared` (HTTP client) |
 | Config schema / service matching | `internal/core` hub (`Config`), `aegis.example.json`, README “Configuration” |
-| Admin data-grant writes | `internal/core` hub (admin handlers), `internal/core/policy`, `docs/configuration.md` “Data grants” |
+| Admin data-grant writes | `internal/admin` (handlers), `internal/core/policy` (resolution + overlay persistence), `docs/configuration.md` “Data grants” |
 | OAuth / connections / refresh | `internal/core` hub (flows), `internal/core/tokens/` (store) |
 | Unified library + merge | `internal/kinds` (models/merge/kind data + aggregate pipeline) |
 | Mail ingest / local mail archive | `docs/mail-ingest.md`, `internal/connectors` (ingests), `internal/core` hub (`MailSink` wiring) |
 | Data grants / agent visibility | `internal/core/policy` (`DataGrant` resolution), `internal/shared` (`GrantMap` vocabulary) + hub enforcement | One grant map per key, deny-by-default; product English: **data grant** |
 | Data ownership / completeness feedback | `docs/data-ownership.md`, `internal/core/ownership` (store), `internal/shared` (shapes), hub (derivation) | Per-kind user confirmation + derived evidence; distinct from connection maturity |
-| Admin map / flow | `internal/core` hub, `internal/core/web/admin.html` |
+| Admin map / flow | `internal/admin`, `internal/admin/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core` hub (identity) |
 | Product/API docs | `README.md` (entry), `docs/api.md`, `docs/configuration.md`, `docs/connect/` |
 | Sync maintenance / self-repair loop | `docs/sync-maintenance.md` (#86); capture surface in `docs/observability.md`, scanner and ticket surface in `cmd/aegis-dashboard` |
