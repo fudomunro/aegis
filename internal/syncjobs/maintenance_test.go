@@ -1,10 +1,8 @@
-package core
+package syncjobs
 
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +10,6 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 func TestScrubSignalError(t *testing.T) {
@@ -45,10 +42,10 @@ func TestScrubSignalError(t *testing.T) {
 }
 
 func TestCollectMaintenanceSignals_BuildStamp(t *testing.T) {
-	srv := adminSplitServer(t)
-	sig := srv.CollectMaintenanceSignals()
-	if sig.Version != Version || sig.Commit != Commit {
-		t.Fatalf("build stamp = %s/%s, want %s/%s", sig.Version, sig.Commit, Version, Commit)
+	run := &Runners{Version: "dev", Commit: "none"}
+	sig := run.CollectMaintenanceSignals()
+	if sig.Version != "dev" || sig.Commit != "none" {
+		t.Fatalf("build stamp = %s/%s, want dev/none", sig.Version, sig.Commit)
 	}
 	if sig.CapturedAt.IsZero() {
 		t.Fatal("CapturedAt must be set")
@@ -59,22 +56,22 @@ func TestCollectMaintenanceSignals_BuildStamp(t *testing.T) {
 }
 
 func TestCollectMaintenanceSignals_SyncFailures(t *testing.T) {
-	srv := adminSplitServer(t)
+	run := &Runners{Version: "dev", Commit: "none"}
 	store := testJobStore(t)
-	srv.syncJobs = store
-	mustEnqueue(t, store, syncjobs.SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
+	run.Jobs = store
+	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
 
 	claimed, ok, err := store.Claim("tester", time.Now())
 	if err != nil || !ok {
 		t.Fatalf("Claim = ok=%v err=%v", ok, err)
 	}
-	_, err = store.Fail(claimed, syncjobs.SyncStep{}, fmt.Errorf(
-		"%w: 401 from api.example.com for bob@corp.example (access_token=abc12345)", syncjobs.ErrSyncTerminal))
+	_, err = store.Fail(claimed, SyncStep{}, fmt.Errorf(
+		"%w: 401 from api.example.com for bob@corp.example (access_token=abc12345)", ErrSyncTerminal))
 	if err != nil {
 		t.Fatalf("Fail: %v", err)
 	}
 
-	sig := srv.CollectMaintenanceSignals()
+	sig := run.CollectMaintenanceSignals()
 	if sig.Sync == nil || !sig.Sync.Enabled {
 		t.Fatalf("Sync = %+v, want enabled", sig.Sync)
 	}
@@ -91,8 +88,8 @@ func TestCollectMaintenanceSignals_SyncFailures(t *testing.T) {
 	if f.JobType != "ingest" || f.Service != "google-gmail" {
 		t.Fatalf("failure = %+v", f)
 	}
-	if f.ErrorClass != syncjobs.SyncErrorClassTerminal {
-		t.Fatalf("error class = %q, want %q", f.ErrorClass, syncjobs.SyncErrorClassTerminal)
+	if f.ErrorClass != SyncErrorClassTerminal {
+		t.Fatalf("error class = %q, want %q", f.ErrorClass, SyncErrorClassTerminal)
 	}
 	if strings.Contains(f.Error, "bob@corp.example") || strings.Contains(f.Error, "abc12345") {
 		t.Fatalf("failure error not scrubbed: %q", f.Error)
@@ -111,8 +108,8 @@ func TestWriteMaintenanceSignals(t *testing.T) {
 		Commit:     "none",
 		Sync: &MaintenanceSync{
 			Enabled:   true,
-			Counts:    syncjobs.SyncCounts{Succeeded: 3, Failed: 1},
-			ByService: map[string]syncjobs.SyncCounts{"spotify": {Succeeded: 3, Failed: 1}},
+			Counts:    SyncCounts{Succeeded: 3, Failed: 1},
+			ByService: map[string]SyncCounts{"spotify": {Succeeded: 3, Failed: 1}},
 			Failures: []MaintenanceFailure{{
 				ID: "j1", Kind: "tracks", JobType: "canary", Service: "spotify",
 				State: "failed", ErrorClass: "terminal", Error: "boom", Attempts: 1,
@@ -121,9 +118,9 @@ func TestWriteMaintenanceSignals(t *testing.T) {
 		},
 		Freshness: []copies.Freshness{{Kind: "tracks", InSync: 2, Stale: 1}},
 	}
-	path, err := WriteMaintenanceSignals(dir, sig)
+	path, err := writeMaintenanceSignals(dir, sig)
 	if err != nil {
-		t.Fatalf("WriteMaintenanceSignals: %v", err)
+		t.Fatalf("writeMaintenanceSignals: %v", err)
 	}
 	wantPath := filepath.Join(dir, "signals-20260210T120000Z.json")
 	if path != wantPath {
@@ -200,77 +197,5 @@ func requireJSONKeys(t *testing.T, raw []byte, v any, what string, keys ...strin
 		if _, ok := m[k]; !ok {
 			t.Fatalf("%s missing %q: %s", what, k, raw)
 		}
-	}
-}
-
-func TestHandleAdminMaintenanceSignals_Get(t *testing.T) {
-	srv := adminSplitServer(t)
-	srv.syncJobs = testJobStore(t)
-
-	req := adminRequest(http.MethodGet, "/v1/admin/maintenance/signals", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceSignals)(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
-	}
-	var got MaintenanceSignals
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got.Sync == nil || !got.Sync.Enabled {
-		t.Fatalf("sync = %+v, want enabled", got.Sync)
-	}
-}
-
-func TestHandleAdminMaintenanceSignals_AgentKeyRejected(t *testing.T) {
-	srv := adminSplitServer(t)
-	req := adminRequest(http.MethodGet, "/v1/admin/maintenance/signals", "agent-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceSignals)(w, req)
-	if w.Code == http.StatusOK {
-		t.Fatalf("agent credentials must not read maintenance signals: %d", w.Code)
-	}
-}
-
-func TestHandleAdminMaintenanceSignals_Capture(t *testing.T) {
-	srv := adminSplitServer(t)
-	srv.syncJobs = testJobStore(t)
-	srv.dataDir = t.TempDir()
-
-	req := adminRequest(http.MethodPost, "/v1/admin/maintenance/signals", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceSignals)(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
-	}
-	var got MaintenanceCaptureResult
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if !strings.HasPrefix(got.Path, filepath.Join(srv.dataDir, "maintenance")) {
-		t.Fatalf("capture path = %q, want under data dir maintenance/", got.Path)
-	}
-	if _, err := os.Stat(got.Path); err != nil {
-		t.Fatalf("captured bundle missing: %v", err)
-	}
-}
-
-func TestHandleAdminMaintenanceSignals_MethodAndConfig(t *testing.T) {
-	srv := adminSplitServer(t)
-
-	req := adminRequest(http.MethodPut, "/v1/admin/maintenance/signals", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceSignals)(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("PUT status = %d, want 405", w.Code)
-	}
-
-	req = adminRequest(http.MethodPost, "/v1/admin/maintenance/signals", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceSignals)(w, req)
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("POST without data dir = %d, want 500", w.Code)
 	}
 }

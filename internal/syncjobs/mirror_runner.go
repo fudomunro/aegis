@@ -1,4 +1,4 @@
-package core
+package syncjobs
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -53,16 +52,16 @@ type mirrorJobPayload struct {
 
 // mirrorRunner runs mirror and repair jobs for one library kind.
 type mirrorRunner struct {
-	srv  *Server
+	run  *Runners
 	kind string
 }
 
-// JobTypes implements syncjobs.SyncRunner.
+// JobTypes implements SyncRunner.
 func (r *mirrorRunner) JobTypes() []string {
-	return []string{syncjobs.SyncJobTypeMirror, syncjobs.SyncJobTypeRepair}
+	return []string{SyncJobTypeMirror, SyncJobTypeRepair}
 }
 
-// Kind implements syncjobs.SyncRunner.
+// Kind implements SyncRunner.
 func (r *mirrorRunner) Kind() string { return r.kind }
 
 // mirrorKinds are the kinds a mirror runner is registered for. Contacts and
@@ -72,49 +71,49 @@ var mirrorKinds = []string{library.MirrorKindPlaylists, library.MirrorKindTracks
 
 // Run executes one bounded mirror step and chains until the source list is
 // exhausted.
-func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.SyncStep, error) {
-	if r == nil || r.srv == nil {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: mirror runner not wired", syncjobs.ErrSyncTerminal)
+func (r *mirrorRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
+	if r == nil || r.run == nil {
+		return SyncStep{}, fmt.Errorf("%w: mirror runner not wired", ErrSyncTerminal)
 	}
-	s := r.srv
+	s := r.run
 	var p mirrorJobPayload
 	if len(job.Payload) > 0 {
 		if err := json.Unmarshal(job.Payload, &p); err != nil {
-			return syncjobs.SyncStep{}, fmt.Errorf("%w: bad mirror payload: %v", syncjobs.ErrSyncTerminal, err)
+			return SyncStep{}, fmt.Errorf("%w: bad mirror payload: %v", ErrSyncTerminal, err)
 		}
 	}
 	if p.Kind == "" {
 		p.Kind = r.kind
 	}
 	if p.TargetService == "" {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: target_service is required", syncjobs.ErrSyncTerminal)
+		return SyncStep{}, fmt.Errorf("%w: target_service is required", ErrSyncTerminal)
 	}
 	if p.Kind == library.MirrorKindPlaylists && p.SourceID == "" {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: source_id is required for kind=playlists", syncjobs.ErrSyncTerminal)
+		return SyncStep{}, fmt.Errorf("%w: source_id is required for kind=playlists", ErrSyncTerminal)
 	}
 	if p.SourceService == "" {
-		p.SourceService = s.library().DefaultMirrorSource(p.Kind)
+		p.SourceService = s.Mirror.DefaultMirrorSource(p.Kind)
 	}
 	if p.SourceService == "" {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: source_service is required (no canonical home configured)", syncjobs.ErrSyncTerminal)
+		return SyncStep{}, fmt.Errorf("%w: source_service is required (no canonical home configured)", ErrSyncTerminal)
 	}
 	if p.SourceService == p.TargetService {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: source_service and target_service must differ", syncjobs.ErrSyncTerminal)
+		return SyncStep{}, fmt.Errorf("%w: source_service and target_service must differ", ErrSyncTerminal)
 	}
 	// Background sync runs at owner tier: no request key is in play.
-	if err := s.library().RequireMirrorWritable(s.ownerGrants(), p.TargetService, p.Kind); err != nil {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
+	if err := s.Mirror.RequireMirrorWritable(s.Host.OwnerGrants(), p.TargetService, p.Kind); err != nil {
+		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
 	}
-	if err := s.library().RequireMirrorReadable(s.ownerGrants(), p.SourceService, p.Kind); err != nil {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
+	if err := s.Mirror.RequireMirrorReadable(s.Host.OwnerGrants(), p.SourceService, p.Kind); err != nil {
+		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
 	}
-	src, err := s.library().MirrorSourceFor(p.SourceService, p.Kind)
+	src, err := s.Mirror.MirrorSourceFor(p.SourceService, p.Kind)
 	if err != nil {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
+		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
 	}
-	dst, err := s.library().MirrorTargetFor(p.TargetService, p.Kind)
+	dst, err := s.Mirror.MirrorTargetFor(p.TargetService, p.Kind)
 	if err != nil {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
+		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
 	}
 
 	pageLimit := p.Limit
@@ -140,7 +139,7 @@ func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.
 		tracks, total, next = page.Tracks, page.Total, page.Next
 		srcRef = library.MirrorRef{Service: p.SourceService, Name: "liked/saved tracks", Count: total}
 	default:
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: kind %q is not a mirrorable list", syncjobs.ErrSyncTerminal, p.Kind)
+		return SyncStep{}, fmt.Errorf("%w: kind %q is not a mirrorable list", ErrSyncTerminal, p.Kind)
 	}
 	if err != nil {
 		// Provider trouble is retryable; the cursor is already durable in the
@@ -215,23 +214,23 @@ func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.
 	if !p.DryRun {
 		switch p.Kind {
 		case library.MirrorKindPlaylists:
-			s.library().RecordMirrorCopy(library.MirrorKindPlaylists, p.SourceService, p.SourceID,
+			s.Mirror.RecordMirrorCopy(library.MirrorKindPlaylists, p.SourceService, p.SourceID,
 				p.TargetService, p.TargetID, name, p.Copied, "")
 		case library.MirrorKindTracks:
-			s.library().RecordMirrorCopy(library.MirrorKindTracks, p.SourceService, "",
+			s.Mirror.RecordMirrorCopy(library.MirrorKindTracks, p.SourceService, "",
 				p.TargetService, "", "liked/saved tracks", p.Copied, "")
 		}
 	}
 	return r.step(p, true), nil
 }
 
-// step projects the accumulated payload onto a syncjobs.SyncStep. done closes the job;
+// step projects the accumulated payload onto a SyncStep. done closes the job;
 // otherwise the step carries the cursor forward for the next one.
-func (r *mirrorRunner) step(p mirrorJobPayload, done bool) syncjobs.SyncStep {
+func (r *mirrorRunner) step(p mirrorJobPayload, done bool) SyncStep {
 	if p.Kind == "" {
 		p.Kind = r.kind
 	}
-	s := syncjobs.SyncStep{
+	s := SyncStep{
 		Done: done,
 		Progress: map[string]any{
 			"kind":           p.Kind,
@@ -276,8 +275,8 @@ func repairIdentityKey(t kinds.Track) string {
 // loadTargetIdentities reads what a target playlist already holds so a repair
 // can skip those items. It reuses the items operation on the target service,
 // so no extra adapter method is needed.
-func loadTargetIdentities(ctx context.Context, s *Server, targetService, targetID string) (map[string]bool, error) {
-	src, err := s.library().MirrorSourceFor(targetService, library.MirrorKindPlaylists)
+func loadTargetIdentities(ctx context.Context, s *Runners, targetService, targetID string) (map[string]bool, error) {
+	src, err := s.Mirror.MirrorSourceFor(targetService, library.MirrorKindPlaylists)
 	if err != nil {
 		return nil, err
 	}
@@ -300,17 +299,17 @@ func loadTargetIdentities(ctx context.Context, s *Server, targetService, targetI
 }
 
 // newMirrorRunners builds one mirror/repair runner per supported kind.
-func newMirrorRunners(srv *Server) []syncjobs.SyncRunner {
-	out := make([]syncjobs.SyncRunner, 0, len(mirrorKinds))
+func newMirrorRunners(run *Runners) []SyncRunner {
+	out := make([]SyncRunner, 0, len(mirrorKinds))
 	for _, kind := range mirrorKinds {
-		out = append(out, &mirrorRunner{srv: srv, kind: kind})
+		out = append(out, &mirrorRunner{run: run, kind: kind})
 	}
 	return out
 }
 
 // registerMirrorRunners adds the mirror/repair runners to a registry.
-func registerMirrorRunners(reg *syncjobs.RunnerRegistry, srv *Server) {
-	for _, r := range newMirrorRunners(srv) {
+func registerMirrorRunners(reg *RunnerRegistry, run *Runners) {
+	for _, r := range newMirrorRunners(run) {
 		reg.Register(r)
 	}
 }

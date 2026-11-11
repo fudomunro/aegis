@@ -23,7 +23,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/ownership"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -31,6 +30,7 @@ import (
 	"github.com/fudomunro/aegis/internal/library/links"
 	"github.com/fudomunro/aegis/internal/library/search"
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/syncjobs"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -112,6 +112,9 @@ type Server struct {
 	// adminHandlers is the management surface (issue #358).
 	adminHandlers *admin.Handlers
 	adminOnce     sync.Once
+	// syncDomain is the background-consistency executor (issue #358).
+	syncDomain     *syncjobs.Runners
+	syncDomainOnce sync.Once
 	// dataDir is the resolved local state directory (issue #74). Surfaced
 	// on the admin Runtime panel so the layout is discoverable.
 	dataDir string
@@ -164,9 +167,6 @@ type Server struct {
 	timeline *connectors.TimelineStore
 	// signal is the optional local Signal import store (issue #168).
 	signal *connectors.SignalStore
-	// mailSyncMu serializes archive ingest so admin UI and agents cannot
-	// interleave two Gmail page cursors into the same store.
-	mailSyncMu sync.Mutex
 	// hookHealth records Aperture pre-request outcomes for admin diagnostics.
 	hookHealth *hookhealth.HookHealth
 	// audit is the durable access audit log (issue #105). May be disabled.

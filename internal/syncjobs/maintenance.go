@@ -1,9 +1,8 @@
-package core
+package syncjobs
 
 import (
 	"encoding/json"
 	"errors"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,20 +10,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
-	"github.com/fudomunro/aegis/internal/shared"
 )
-
-// Maintenance signals (issue #86): the phase-1 observation bundle the sync
-// maintenance loop collects from a live instance. Named "maintenance" to
-// stay clear of the Signal messenger connector (signal.go / signal.db /
-// /v1/admin/signal).
-//
-// Privacy posture matches the audit log and metrics: redacted metadata,
-// never payloads. Failure text is scrubbed before it lands in a bundle, and
-// bundles are written 0600 under <data-dir>/maintenance/ so the maintenance
-// tool (scanner and dashboard) and any later cloud compute can read them as
-// plain files.
 
 const (
 	// dataDirMaintenanceSubdir is the bundle directory under the data dir.
@@ -48,12 +34,12 @@ type MaintenanceSignals struct {
 
 // MaintenanceSync is the sync-queue slice of a signal bundle.
 type MaintenanceSync struct {
-	Enabled   bool                           `json:"enabled"`
-	Counts    syncjobs.SyncCounts            `json:"counts"`
-	ByJobType map[string]syncjobs.SyncCounts `json:"by_job_type,omitempty"`
-	ByKind    map[string]syncjobs.SyncCounts `json:"by_kind,omitempty"`
-	ByService map[string]syncjobs.SyncCounts `json:"by_service,omitempty"`
-	Failures  []MaintenanceFailure           `json:"failures,omitempty"`
+	Enabled   bool                  `json:"enabled"`
+	Counts    SyncCounts            `json:"counts"`
+	ByJobType map[string]SyncCounts `json:"by_job_type,omitempty"`
+	ByKind    map[string]SyncCounts `json:"by_kind,omitempty"`
+	ByService map[string]SyncCounts `json:"by_service,omitempty"`
+	Failures  []MaintenanceFailure  `json:"failures,omitempty"`
 }
 
 // MaintenanceFailure is one recent failed sync job with scrubbed error text.
@@ -79,24 +65,29 @@ type MaintenanceCaptureResult struct {
 // CollectMaintenanceSignals snapshots the durable signal sources on this
 // instance: sync-queue rollups and recent failures, freshness rollup, and
 // the build stamp. In-memory only — writes happen via WriteMaintenanceSignals.
-func (s *Server) CollectMaintenanceSignals() MaintenanceSignals {
+
+// CollectMaintenanceSignals snapshots the durable signal sources on this
+// instance: sync-queue rollups and recent failures, freshness rollup, and
+// the build stamp. In-memory only — writes happen through
+// WriteMaintenanceSignals.
+func (r *Runners) CollectMaintenanceSignals() MaintenanceSignals {
 	hostname, _ := os.Hostname()
 	sig := MaintenanceSignals{
 		CapturedAt: time.Now().UTC(),
 		Hostname:   hostname,
-		Version:    Version,
-		Commit:     Commit,
+		Version:    r.Version,
+		Commit:     r.Commit,
 	}
-	if s.syncJobs != nil {
-		sync := &MaintenanceSync{Enabled: s.syncJobs.Enabled()}
+	if r.Jobs != nil {
+		sync := &MaintenanceSync{Enabled: r.Jobs.Enabled()}
 		if sync.Enabled {
-			sync.Counts = s.syncJobs.Counts("", "")
-			if b := s.syncJobs.Breakdown(); len(b.ByKind) > 0 || len(b.ByJobType) > 0 || len(b.ByService) > 0 {
+			sync.Counts = r.Jobs.Counts("", "")
+			if b := r.Jobs.Breakdown(); len(b.ByKind) > 0 || len(b.ByJobType) > 0 || len(b.ByService) > 0 {
 				sync.ByKind = b.ByKind
 				sync.ByJobType = b.ByJobType
 				sync.ByService = b.ByService
 			}
-			for _, j := range s.syncJobs.List(syncjobs.SyncFilter{State: syncjobs.SyncJobFailed, Limit: signalFailureCap}) {
+			for _, j := range r.Jobs.List(SyncFilter{State: SyncJobFailed, Limit: signalFailureCap}) {
 				sync.Failures = append(sync.Failures, MaintenanceFailure{
 					ID:         j.ID,
 					Kind:       j.Kind,
@@ -112,8 +103,8 @@ func (s *Server) CollectMaintenanceSignals() MaintenanceSignals {
 		}
 		sig.Sync = sync
 	}
-	if s.copyLedger != nil {
-		sig.Freshness = s.copyLedger.FreshnessRollup()
+	if r.Copies != nil {
+		sig.Freshness = r.Copies.FreshnessRollup()
 	}
 	return sig
 }
@@ -141,29 +132,37 @@ func WriteMaintenanceSignals(dir string, sig MaintenanceSignals) (string, error)
 	return path, nil
 }
 
+// WriteMaintenanceSignals writes sig as a 0600 JSON file under the
+// instance's maintenance directory and returns its path. The file is
+// self-contained: no local handles or references, so the scanner can move
+// off-box later (issue #86).
+func (r *Runners) WriteMaintenanceSignals(sig MaintenanceSignals) (string, error) {
+	return writeMaintenanceSignals(filepath.Join(r.DataDir, dataDirMaintenanceSubdir), sig)
+}
+
+func writeMaintenanceSignals(dir string, sig MaintenanceSignals) (string, error) {
+	if dir == "" {
+		return "", errors.New("empty maintenance signals directory")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	name := "signals-" + sig.CapturedAt.UTC().Format("20060102T150405Z") + ".json"
+	path := filepath.Join(dir, name)
+	data, err := json.MarshalIndent(sig, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
 // HandleAdminMaintenanceSignals reports (GET) or captures (POST) the signal
 // bundle. Admin-scoped like the rest of /v1/admin — the bundle names services
 // and failure modes and must not leak to agent credentials (issue #181).
-func (s *Server) HandleAdminMaintenanceSignals(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		shared.WriteJSON(w, s.CollectMaintenanceSignals())
-	case http.MethodPost:
-		if s.dataDir == "" {
-			shared.WriteJSONError(w, http.StatusInternalServerError, "data directory not configured")
-			return
-		}
-		sig := s.CollectMaintenanceSignals()
-		path, err := WriteMaintenanceSignals(filepath.Join(s.dataDir, dataDirMaintenanceSubdir), sig)
-		if err != nil {
-			shared.WriteJSONError(w, http.StatusInternalServerError, "capture failed: "+err.Error())
-			return
-		}
-		shared.WriteJSON(w, MaintenanceCaptureResult{Path: path, Signals: sig})
-	default:
-		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-	}
-}
 
 // signalSecretPatterns are the token-ish shapes scrubbed from failure text.
 var (

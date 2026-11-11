@@ -20,6 +20,22 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **The sync domain leaves the hub (issue #358, P4).** `internal/syncjobs` is
+  now the whole background-consistency surface: the durable job queue engine
+  (promoted from `core/syncjobs`), the mail-ingest and mirror-repair and
+  canary runners, the copy-freshness engine, and the maintenance signal
+  capture — collector, bundle writer, and capture shape together (the P3
+  deferral). The admin maintenance handler lands in `internal/admin` over a
+  narrow capture interface, and the one ingest walk serves both the admin
+  sync route and the queue through the hub's seam. The layering settles as
+  a chain rather than three peers — the runners drive the data plane's
+  mirror engine, and the management surface reads the queue — so
+  `shared → kinds → connectors → library → syncjobs → admin → core`; the
+  two HTTP surfaces still never import each other. `core/copies` stays
+  dual-use beneath all of them. Runner tests move beside their sources
+  with in-memory fixture hosts. Recorded refinements are in
+  `docs/restructure-packaging.md`. No product behavior change.
+
 - **The management surface leaves the hub (issue #358, P3).** `internal/admin`
   now owns the `/v1/admin/*` surface end to end: the admin UI shell and its
   embedded markup, setup flows, admin-owned writes (data grants, apps, data

@@ -56,7 +56,7 @@ func TestServer_RecordTakeoutSnapshot(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.copyLedger = c
 
-	srv.recordTakeoutSnapshot("/tmp/takeout-export", 10, 8, 2, true, connectors.TakeoutServiceID)
+	srv.runners().RecordTakeoutSnapshot("/tmp/takeout-export", 10, 8, 2, true, connectors.TakeoutServiceID)
 	rows := c.List(copies.Filter{Kind: "messages"})
 	if len(rows) != 1 {
 		t.Fatalf("rows = %d", len(rows))

@@ -12,11 +12,11 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/ownership"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/syncjobs"
 )
 
 // KindCatalog is the kind-registry query surface the admin views need. The
@@ -27,6 +27,14 @@ type KindCatalog interface {
 	RegistryKind(id string) (kinds.Kind, bool)
 	UDKSchemaForKind(id string) (kinds.UserDefinedKindSchema, bool)
 	LibraryReadableFor(permType string) bool
+}
+
+// MaintenanceCapture is the maintenance signal-bundle surface (capture and
+// persist). The sync domain's Runners satisfies it; the hub wires the
+// instance so the surfaces stay uncoupled.
+type MaintenanceCapture interface {
+	CollectMaintenanceSignals() syncjobs.MaintenanceSignals
+	WriteMaintenanceSignals(sig syncjobs.MaintenanceSignals) (string, error)
 }
 
 // SearchStatus is the search-index status view. The concrete engine
@@ -46,6 +54,8 @@ type Handlers struct {
 	KindCatalog KindCatalog
 	// Search reports search-index status.
 	Search SearchStatus
+	// Maintenance captures and persists the signal bundles.
+	Maintenance MaintenanceCapture
 	// Apps is the third-party app registry (mint/verify/consent).
 	Apps *apps.Store
 	// Grants mints and consumes one-time app consent codes.

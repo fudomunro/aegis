@@ -9,6 +9,7 @@ import (
 	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/syncjobs"
 )
 
 // adminHost adapts the hub onto the admin.Host seam (issue #358): the config
@@ -25,6 +26,7 @@ func (s *Server) admin() *admin.Handlers {
 				Host:          s,
 				KindCatalog:   s.library(),
 				Search:        searchStatus{s},
+				Maintenance:   s.runners(),
 				Tokens:        s.tokens,
 				Apps:          s.apps,
 				Grants:        s.grants,
@@ -248,16 +250,39 @@ func (s *Server) WithSkipAccessMetrics(r *http.Request) *http.Request {
 	return withSkipAccessMetrics(r)
 }
 
+// syncRunners returns the background-consistency executor, built lazily so
+// &Server{} fixtures fail open.
+func (s *Server) runners() *syncjobs.Runners {
+	s.syncDomainOnce.Do(func() {
+		if s.syncDomain == nil {
+			s.syncDomain = &syncjobs.Runners{
+				Host:        s,
+				Mirror:      s.library(),
+				Mail:        s.mail,
+				MailIngests: s.mailIngests,
+				Connectors:  s.connectors,
+				Copies:      s.copyLedger,
+				Jobs:        s.syncJobs,
+				DataDir:     s.dataDir,
+				Version:     Version,
+				Commit:      Commit,
+			}
+		}
+	})
+	return s.syncDomain
+}
+
+// ServiceBlocked implements syncjobs.Host: a configured service is blocked
+// (or missing). Ingest-only sync locations are not services.
+func (s *Server) ServiceBlocked(serviceID string) bool {
+	svc := s.config.GetService(serviceID)
+	return svc == nil || svc.Action == "block"
+}
+
 // RunMailIngest implements admin.Host — one ingest walk shared with the sync
 // queue runner (issue #227).
 func (s *Server) RunMailIngest(ctx context.Context, service string, opts shared.MailIngestOptions) (shared.MailIngestResult, error) {
-	return s.doMailIngest(ctx, mailIngestPayload{
-		Service:     service,
-		MaxMessages: opts.MaxMessages,
-		Query:       opts.Query,
-		Path:        opts.Path,
-		ResetCursor: opts.ResetCursor,
-	})
+	return s.runners().DoMailIngest(ctx, service, opts)
 }
 
 var _ admin.Host = (*Server)(nil)

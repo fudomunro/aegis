@@ -39,16 +39,23 @@ import (
 var allowedImports = map[string][]string{
 	"internal/shared":      nil,
 	"internal/core/policy": {"github.com/fudomunro/aegis/internal/shared"},
-	"internal/core/syncjobs": {
+	// the sync domain (issue #358): queue engine, background runners,
+	// freshness, and maintenance capture. It drives the data plane's mirror
+	// engine, so it sits above internal/library in the layering.
+	"internal/syncjobs": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/kinds",
+		"github.com/fudomunro/aegis/internal/connectors",
+		"github.com/fudomunro/aegis/internal/library",
+		"github.com/fudomunro/aegis/internal/core/copies",
+		"github.com/fudomunro/aegis/internal/core/mail",
 	},
 	// metrics consumes the sync rollup shape (SyncCounts) to render the
 	// queue-depth gauges, so it may name syncjobs; audit supplies the
 	// allow/deny decision vocabulary. Stated reasons, per the package rule.
 	"internal/core/metrics": {
 		"github.com/fudomunro/aegis/internal/core/audit",
-		"github.com/fudomunro/aegis/internal/core/syncjobs",
+		"github.com/fudomunro/aegis/internal/syncjobs",
 	},
 	// sample datasets are fixture generators plus the sample://library
 	// connector; they speak neutral models and the mail store only.
@@ -104,8 +111,9 @@ var allowedImports = map[string][]string{
 		"github.com/fudomunro/aegis/internal/shared",
 	},
 	// the management surface: admin API and UI, setup flows, admin-owned
-	// writes. It reads the data plane's kind catalog through a narrow
-	// interface the hub wires — the surfaces never import each other.
+	// writes. It reads the data plane's kind catalog and the sync domain's
+	// capture surface through narrow interfaces the hub wires — the two
+	// HTTP surfaces (admin, library) never import each other.
 	"internal/admin": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/kinds",
@@ -116,7 +124,7 @@ var allowedImports = map[string][]string{
 		"github.com/fudomunro/aegis/internal/core/metrics",
 		"github.com/fudomunro/aegis/internal/core/ownership",
 		"github.com/fudomunro/aegis/internal/core/policy",
-		"github.com/fudomunro/aegis/internal/core/syncjobs",
+		"github.com/fudomunro/aegis/internal/syncjobs",
 		"github.com/fudomunro/aegis/internal/core/tokens",
 		"github.com/fudomunro/aegis/internal/core/udk",
 		"github.com/fudomunro/aegis/internal/admin/apps",
