@@ -318,32 +318,6 @@ jobs:
             go test -run='^$' -fuzz="^${t}$" -fuzztime=30s ./internal/connectors
           done
 
-  # Branch protection requires a check named exactly "Fuzz". The three scoped
-  # groups report under their own names, so this aggregate keeps that contract:
-  # it passes when every group passed or was out of scope, and fails on any
-  # real failure. It must not use the implicit success() gate — a skipped group
-  # would then skip this job and a failed group would report as neutral.
-  fuzz:
-    name: Fuzz
-    needs: [fuzz-inject, fuzz-core, fuzz-connectors]
-    if: ${{ always() && !cancelled() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Require the fuzz groups
-        run: |
-          set -uo pipefail
-          inject='${{ needs.fuzz-inject.result }}'
-          core='${{ needs.fuzz-core.result }}'
-          connectors='${{ needs.fuzz-connectors.result }}'
-          echo "fuzz groups: inject=$inject core=$core connectors=$connectors"
-          for r in "$inject" "$core" "$connectors"; do
-            if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
-              echo "fuzz group did not pass: $r"
-              exit 1
-            fi
-          done
-
   build:
     name: Build
     needs: changes
