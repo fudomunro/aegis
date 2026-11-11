@@ -10,6 +10,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -58,7 +59,7 @@ func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/freebusy"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -91,7 +92,7 @@ func TestHandleLibraryEvents_FreeBusyKeyDenied(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body=%s, want 403", w.Code, w.Body.String())
 	}
@@ -112,7 +113,7 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -123,7 +124,7 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 
 func TestPermissionNotice_FreeBusy(t *testing.T) {
 	p := shared.GrantMap{"freebusy": shared.AccessRead, "player": shared.AccessNone}
-	notice := permissionNotice(p)
+	notice := library.PermissionNotice(p)
 	// Deny-by-default map: the notice is an allow list (player is simply
 	// outside it), with the freebusy route caveat attached.
 	for _, want := range []string{"only these library routes are available", "freebusy", "availability only", "/v1/library/freebusy"} {
@@ -134,7 +135,7 @@ func TestPermissionNotice_FreeBusy(t *testing.T) {
 }
 
 func TestLibraryRouteHandlers_IncludesFreeBusy(t *testing.T) {
-	handlers := (&Server{}).libraryRouteHandlers()
+	handlers := (&Server{}).library().RouteHandlers()
 	if _, ok := handlers["/v1/library/freebusy"]; !ok {
 		t.Fatal("freebusy route not registered")
 	}
@@ -155,7 +156,7 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/freebusy"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}

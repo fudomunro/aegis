@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 )
 
 func TestAlbumServiceName_AndPhotosInstructions(t *testing.T) {
@@ -17,15 +18,15 @@ func TestAlbumServiceName_AndPhotosInstructions(t *testing.T) {
 	}
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryInstructionsFor("photos")
+	instr := srv.library().LibraryInstructionsFor("photos")
 	if !strings.Contains(instr, "/v1/library/photos") {
 		t.Fatalf("photos instructions missing endpoint: %s", instr)
 	}
 
-	if !LibraryKindByID("photos").Mentions("what photos do I have?") {
+	if !library.LibraryKindByID("photos").Mentions("what photos do I have?") {
 		t.Fatal("expected photo mention")
 	}
-	if LibraryKindByID("photos").Mentions("play my jazz playlists") {
+	if library.LibraryKindByID("photos").Mentions("play my jazz playlists") {
 		t.Fatal("playlists should not trigger photos hint")
 	}
 }

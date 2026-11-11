@@ -1,7 +1,6 @@
-package core
+package library
 
 import (
-	"log/slog"
 	"net/http"
 	"strings"
 
@@ -17,15 +16,15 @@ import (
 // are reported in MirrorResult instead of picking a winner.
 
 // recordMirrorItemCopy stores per-item etag/sync watermarks (issue #146).
-func (s *Server) recordMirrorItemCopy(kind, entityName, service, externalID, name, etag string) {
-	if s == nil || s.copyLedger == nil {
+func (h *Handlers) RecordMirrorItemCopy(kind, entityName, service, externalID, name, etag string) {
+	if h == nil || h.Copies == nil {
 		return
 	}
 	entity := kind + ":" + strings.TrimSpace(entityName)
 	if strings.TrimSpace(externalID) == "" {
 		return
 	}
-	_, _ = s.copyLedger.Upsert(copies.Record{
+	_, _ = h.Copies.Upsert(copies.Record{
 		Kind:          kind,
 		EntityKey:     entity,
 		SourceService: service,
@@ -48,17 +47,17 @@ func (s *Server) recordMirrorItemCopy(kind, entityName, service, externalID, nam
 // handleEntityMirror copies contacts or events between services
 // (issue #146). Conflicts are reported; a newer remote edit is never
 // overwritten. Sync watermarks (etag) land in the copy ledger.
-func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req MirrorRequest) {
-	logger := withPeerLog(slog.With("handler", "library_mirror",
-		"kind", req.Kind, "target", req.TargetService, "dry_run", req.DryRun), r)
+func (h *Handlers) HandleEntityMirror(w http.ResponseWriter, r *http.Request, req MirrorRequest) {
+	logger := h.Host.Logger(r, "library_mirror").With(
+		"kind", req.Kind, "target", req.TargetService, "dry_run", req.DryRun)
 
-	if err := s.requireMirrorWritable(s.requestGrants(r), req.TargetService, req.Kind); err != nil {
+	if err := h.RequireMirrorWritable(h.requestGrants(r), req.TargetService, req.Kind); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 	sourceService := req.SourceService
 	if sourceService == "" {
-		sourceService = s.defaultMirrorSource(req.Kind)
+		sourceService = h.DefaultMirrorSource(req.Kind)
 	}
 	if sourceService == "" {
 		shared.WriteJSONError(w, http.StatusBadRequest, "source_service is required (no canonical home configured)")
@@ -68,7 +67,7 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		shared.WriteJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
 		return
 	}
-	if err := s.requireMirrorReadable(s.requestGrants(r), sourceService, req.Kind); err != nil {
+	if err := h.RequireMirrorReadable(h.requestGrants(r), sourceService, req.Kind); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -81,24 +80,24 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 
 	switch req.Kind {
 	case MirrorKindContacts:
-		src, err := mirrorOpFor[kinds.ContactProvider](s, sourceService, "contact mirror source")
+		src, err := MirrorOpFor[kinds.ContactProvider](h, sourceService, "contact mirror source")
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		dst, err := mirrorOpFor[kinds.ContactWriteProvider](s, req.TargetService, "contact mirror target")
+		dst, err := MirrorOpFor[kinds.ContactWriteProvider](h, req.TargetService, "contact mirror target")
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		items, tr, err := src.ListUserContacts(ctx)
 		if err != nil {
-			s.writeMirrorUpstreamError(w, logger, sourceService, err)
+			h.WriteMirrorUpstreamError(w, logger, sourceService, err)
 			return
 		}
 		truncated = tr
-		if len(items) > mirrorTrackCap {
-			items = items[:mirrorTrackCap]
+		if len(items) > MirrorTrackCap {
+			items = items[:MirrorTrackCap]
 			truncated = true
 		}
 		planned = len(items)
@@ -114,13 +113,13 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		}
 		res, err := dst.PlaceContacts(ctx, items)
 		if err != nil {
-			s.writeMirrorUpstreamError(w, logger, req.TargetService, err)
+			h.WriteMirrorUpstreamError(w, logger, req.TargetService, err)
 			return
 		}
 		for _, rec := range res.Placed {
-			s.recordMirrorItemCopy(MirrorKindContacts, rec.Name, req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
+			h.RecordMirrorItemCopy(MirrorKindContacts, rec.Name, req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
 		}
-		s.recordMirrorCopy(MirrorKindContacts, sourceService, "", req.TargetService, "", "contacts", res.Copied, "")
+		h.RecordMirrorCopy(MirrorKindContacts, sourceService, "", req.TargetService, "", "contacts", res.Copied, "")
 		result = MirrorResult{
 			Kind: req.Kind, Source: srcRef,
 			Target:    MirrorRef{Service: req.TargetService, Name: "contacts", Count: res.Copied},
@@ -132,24 +131,24 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 			Truncated: truncated,
 		}
 	case MirrorKindEvents:
-		src, err := mirrorOpFor[kinds.CalendarEventProvider](s, sourceService, "event mirror source")
+		src, err := MirrorOpFor[kinds.CalendarEventProvider](h, sourceService, "event mirror source")
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		dst, err := mirrorOpFor[kinds.CalendarEventWriteProvider](s, req.TargetService, "event mirror target")
+		dst, err := MirrorOpFor[kinds.CalendarEventWriteProvider](h, req.TargetService, "event mirror target")
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		items, tr, err := src.ListCalendarEvents(ctx)
 		if err != nil {
-			s.writeMirrorUpstreamError(w, logger, sourceService, err)
+			h.WriteMirrorUpstreamError(w, logger, sourceService, err)
 			return
 		}
 		truncated = tr
-		if len(items) > mirrorTrackCap {
-			items = items[:mirrorTrackCap]
+		if len(items) > MirrorTrackCap {
+			items = items[:MirrorTrackCap]
 			truncated = true
 		}
 		planned = len(items)
@@ -165,13 +164,13 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		}
 		res, err := dst.PlaceEvents(ctx, items)
 		if err != nil {
-			s.writeMirrorUpstreamError(w, logger, req.TargetService, err)
+			h.WriteMirrorUpstreamError(w, logger, req.TargetService, err)
 			return
 		}
 		for _, rec := range res.Placed {
-			s.recordMirrorItemCopy(MirrorKindEvents, rec.Name, req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
+			h.RecordMirrorItemCopy(MirrorKindEvents, rec.Name, req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
 		}
-		s.recordMirrorCopy(MirrorKindEvents, sourceService, "", req.TargetService, "", "events", res.Copied, "")
+		h.RecordMirrorCopy(MirrorKindEvents, sourceService, "", req.TargetService, "", "events", res.Copied, "")
 		result = MirrorResult{
 			Kind: req.Kind, Source: srcRef,
 			Target:    MirrorRef{Service: req.TargetService, Name: "events", Count: res.Copied},

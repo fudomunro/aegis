@@ -11,6 +11,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -118,7 +119,7 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("places"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -144,7 +145,7 @@ func TestHandleLibraryPlaces_DeniedByDefault(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("places"))(w, req)
 	// Places is opt-in: with no permission the agent is denied (not empty 200).
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body=%s, want 403", w.Code, w.Body.String())
@@ -165,7 +166,7 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places/city", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/places/city"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/places/city"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -200,7 +201,7 @@ func TestHandleLibraryPlaces_NamesOmitsCoords(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places/names", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/places/names"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/places/names"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -235,7 +236,7 @@ func TestHandleLibraryPlaces_FullKeepsCoords(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("places"))(w, req)
 	var list kinds.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
@@ -255,7 +256,7 @@ func TestHandleLibraryPlaces_FullKeepsCoords(t *testing.T) {
 }
 
 func TestLibraryKindPlaces_Registered(t *testing.T) {
-	k := LibraryKindByID("places")
+	k := library.LibraryKindByID("places")
 	if k == nil {
 		t.Fatal("places kind missing")
 	}

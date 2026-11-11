@@ -18,16 +18,17 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/hookhealth"
 	"github.com/fudomunro/aegis/internal/core/inject"
-	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/scopes"
-	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
+	"github.com/fudomunro/aegis/internal/library/links"
+	"github.com/fudomunro/aegis/internal/library/search"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -103,30 +104,26 @@ type Server struct {
 	// identity resolves Tailscale peer identity. Optional in api-key mode.
 	identity IdentityResolver
 	baseURL  string
+	// lib is the agent data plane (issue #358): kind composition, library
+	// routes, content transport, and agent-facing copy.
+	lib         *library.Handlers
+	libraryOnce sync.Once
 	// dataDir is the resolved local state directory (issue #74). Surfaced
 	// on the admin Runtime panel so the layout is discoverable.
 	dataDir string
 	config  *Config
-	cache   *Cache
+	cache   *shared.Cache
 	// mbCache holds MusicBrainz MBID lookups (issue #273). Separate from
 	// cache so library invalidation and aggregate churn never spend the
 	// rate-limited lookup budget re-resolving the same tracks.
-	mbCache     *Cache
+	mbCache     *shared.Cache
 	tokens      *tokens.TokenStore
 	oauthStates *shared.StateStore
 	// rl damps credential guessing on auth/token surfaces (issue #253).
 	rl *rateLimiter
 	// refreshFlight coalesces concurrent OAuth refresh calls per connection.
 	refreshFlight shared.FlightGroup[*tokens.OAuthToken]
-	// kindEngine owns the aggregate pipeline's cache coalescing and search
-	// write-behind (issue #312); built over cache and search below.
-	kindEngine     *kinds.Engine
-	kindEngineOnce sync.Once
-	// kindList is the kinds registry (kinds.Builtin) wired over this
-	// server (issue #312).
-	kindList         []kinds.Kind
-	builtinKindsOnce sync.Once
-	connectors       map[string]connectors.ServiceConnector
+	connectors    map[string]connectors.ServiceConnector
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
 	metrics *metrics.AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).
@@ -149,10 +146,6 @@ type Server struct {
 	// syncSchedules holds recurring sync job templates (issue #227 phase 2).
 	// May be disabled.
 	syncSchedules *syncjobs.ScheduleStore
-	// mirrorSourceFn / mirrorTargetFn override the mirror adapter lookup.
-	// Nil in production; tests use them to stub a provider.
-	mirrorSourceFn func(serviceID, kind string) (mirrorSource, error)
-	mirrorTargetFn func(serviceID, kind string) (mirrorTarget, error)
 	// mail is the optional local compressed mail archive (the messages
 	// kind's local source).
 	mail *mail.Archive
@@ -796,7 +789,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	// Surface matching unified library endpoints alongside service proxy hints.
 	// Issue #125: photo questions that named a service still need /v1/library/photos
 	// (and the no-bypass policy); do not gate library hints on zero service matches.
-	libraryInstructions := s.libraryHintsForMessage(r, payload.UserMessage)
+	libraryInstructions := s.library().LibraryHintsForMessage(r, payload.UserMessage)
 	// Local mail archive search is a separate surface from live provider listing.
 	libraryInstructions = append(libraryInstructions, s.mailArchiveHints(r, payload.UserMessage)...)
 
@@ -836,7 +829,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		// Skip services that deny every kind — nothing useful to inject.
-		if allDataDenied(s.requestGrants(r)) {
+		if library.AllDataDenied(s.requestGrants(r)) {
 			logger.Info("skipping inject: all kinds denied by permission", "service", svc.ID)
 			continue
 		}
@@ -852,12 +845,16 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 			)
 			instructions = append(instructions, instruction)
 		}
-		if notice := permissionNotice(s.requestGrants(r)); notice != "" {
+		if notice := library.PermissionNotice(s.requestGrants(r)); notice != "" {
 			instructions = append(instructions, notice)
 		}
 	}
 
-	instructions = append(instructions, s.writePolicyNotices(matched)...)
+	views := make([]kinds.ServiceView, 0, len(matched))
+	for _, svc := range matched {
+		views = append(views, serviceViewOf(svc))
+	}
+	instructions = append(instructions, s.library().WritePolicyNotices(views)...)
 	instructions = append(instructions, libraryInstructions...)
 
 	if len(instructions) == 0 {

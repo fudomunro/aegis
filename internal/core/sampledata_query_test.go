@@ -456,7 +456,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("tracks status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -484,7 +484,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("messages status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -509,7 +509,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("contacts status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -539,7 +539,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("tracks denied status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -561,7 +561,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("truncated tracks status = %d body=%s", w.Code, w.Body.String())
 	}

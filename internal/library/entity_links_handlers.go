@@ -1,4 +1,4 @@
-package core
+package library
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library/links"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -31,8 +31,8 @@ func linkGrantKey(kind string) string {
 //	GET    /v1/library/links
 //	POST   /v1/library/links          {"kind":"playlist","sources":[{"service","id"},...],"note"?}
 //	DELETE /v1/library/links/{id}
-func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
-	if s.links == nil {
+func (h *Handlers) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
+	if h.Links == nil {
 		shared.WriteJSONError(w, http.StatusNotFound, "entity links not configured")
 		return
 	}
@@ -43,8 +43,8 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case path == "" && r.Method == http.MethodGet:
 		shared.WriteJSON(w, map[string]any{
-			"links": s.links.List(),
-			"total": len(s.links.List()),
+			"links": h.Links.List(),
+			"total": len(h.Links.List()),
 		})
 	case path == "" && r.Method == http.MethodPost:
 		var body struct {
@@ -59,13 +59,13 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 		if body.Kind == "" {
 			body.Kind = "playlist"
 		}
-		grants := s.requestGrants(r)
+		grants := h.requestGrants(r)
 		if !grants.AllowsKindMethod(linkGrantKey(body.Kind), r.Method) {
 			shared.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf(
 				"denied: data grant for %s is %q", linkGrantKey(body.Kind), grants.Level(linkGrantKey(body.Kind))))
 			return
 		}
-		link, err := s.links.Add(body.Kind, body.Sources, body.Note)
+		link, err := h.Links.Add(body.Kind, body.Sources, body.Note)
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
@@ -75,7 +75,7 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(link)
 	case path != "" && r.Method == http.MethodDelete:
 		var linkKind string
-		for _, link := range s.links.List() {
+		for _, link := range h.Links.List() {
 			if link.ID == path {
 				linkKind = link.Kind
 				break
@@ -85,19 +85,19 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 			shared.WriteJSONError(w, http.StatusNotFound, "link not found")
 			return
 		}
-		grants := s.requestGrants(r)
+		grants := h.requestGrants(r)
 		if !grants.AllowsKindMethod(linkGrantKey(linkKind), r.Method) {
 			shared.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf(
 				"denied: data grant for %s is %q", linkGrantKey(linkKind), grants.Level(linkGrantKey(linkKind))))
 			return
 		}
-		if !s.links.Delete(path) {
+		if !h.Links.Delete(path) {
 			shared.WriteJSONError(w, http.StatusNotFound, "link not found")
 			return
 		}
 		shared.WriteJSON(w, map[string]any{"deleted": path})
 	case path != "" && r.Method == http.MethodGet:
-		for _, link := range s.links.List() {
+		for _, link := range h.Links.List() {
 			if link.ID == path {
 				shared.WriteJSON(w, link)
 				return
@@ -127,7 +127,7 @@ type MergeReviewResponse struct {
 
 // HandleMergeReview returns multi-source entities joined by name (not by
 // ISRC/UPC/MBID/explicit link). GET /v1/library/review
-func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -148,16 +148,16 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		itemsMu.Unlock()
 	}
 
-	if kindReadable("tracks", s) {
+	if KindReadable("tracks", h) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			trackProviders, _ := kinds.Collect[kinds.Track, kinds.LikedTrackProvider](s, r, "tracks",
+			trackProviders, _ := kinds.Collect[kinds.Track, kinds.LikedTrackProvider](h.Host, r, "tracks",
 				func(p kinds.LikedTrackProvider) func(context.Context) ([]kinds.Track, bool, error) {
 					return p.ListUserLikedTracks
 				})
-			all := listProvidersParallel[kinds.Track](ctx, trackProviders)
-			s.resolveTrackEntities(ctx, all)
+			all := ListProvidersParallel[kinds.Track](ctx, trackProviders)
+			h.Deps.ResolveTracks(ctx, all)
 			var batch []MergeReviewItem
 			for _, tr := range kinds.MergeTracksSync(all) {
 				if tr.Match != kinds.TrackMatchName || len(tr.Sources) < 2 {
@@ -167,7 +167,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 					Kind:    "track",
 					Match:   tr.Match,
 					Name:    tr.Name,
-					Sources: trackSourceRefs(tr),
+					Sources: TrackSourceRefs(tr),
 					Note:    "joined by title+artist (no shared ISRC/MBID)",
 				})
 			}
@@ -175,16 +175,16 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	if kindReadable("albums", s) {
+	if KindReadable("albums", h) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			albumProviders, _ := kinds.Collect[kinds.Album, kinds.AlbumProvider](s, r, "albums",
+			albumProviders, _ := kinds.Collect[kinds.Album, kinds.AlbumProvider](h.Host, r, "albums",
 				func(p kinds.AlbumProvider) func(context.Context) ([]kinds.Album, bool, error) {
 					return p.ListUserSavedAlbums
 				})
-			all := listProvidersParallel[kinds.Album](ctx, albumProviders)
-			s.resolveAlbumEntities(ctx, all)
+			all := ListProvidersParallel[kinds.Album](ctx, albumProviders)
+			h.Deps.ResolveAlbums(ctx, all)
 			var batch []MergeReviewItem
 			for _, al := range kinds.MergeAlbumsSync(all) {
 				if al.Match != kinds.TrackMatchName || len(al.Sources) < 2 {
@@ -194,7 +194,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 					Kind:    "album",
 					Match:   al.Match,
 					Name:    al.Name,
-					Sources: albumSourceRefs(al),
+					Sources: AlbumSourceRefs(al),
 					Note:    "joined by title+artist (no shared UPC/MBID)",
 				})
 			}
@@ -202,16 +202,16 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	if kindReadable("artists", s) {
+	if KindReadable("artists", h) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			artistProviders, _ := kinds.Collect[kinds.Artist, kinds.ArtistProvider](s, r, "artists",
+			artistProviders, _ := kinds.Collect[kinds.Artist, kinds.ArtistProvider](h.Host, r, "artists",
 				func(p kinds.ArtistProvider) func(context.Context) ([]kinds.Artist, bool, error) {
 					return p.ListUserFollowedArtists
 				})
-			all := listProvidersParallel[kinds.Artist](ctx, artistProviders)
-			s.resolveArtistEntities(ctx, all)
+			all := ListProvidersParallel[kinds.Artist](ctx, artistProviders)
+			h.Deps.ResolveArtists(ctx, all)
 			var batch []MergeReviewItem
 			for _, ar := range kinds.MergeArtistLibrary(all) {
 				if ar.Match != kinds.TrackMatchName || len(ar.Sources) < 2 {
@@ -221,7 +221,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 					Kind:    "artist",
 					Match:   ar.Match,
 					Name:    ar.Name,
-					Sources: artistSourceRefs(ar),
+					Sources: ArtistSourceRefs(ar),
 					Note:    "joined by name (no shared MBID)",
 				})
 			}
@@ -229,17 +229,17 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	if kindReadable("playlists", s) {
+	if KindReadable("playlists", h) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			plProviders, _ := kinds.Collect[kinds.Playlist, kinds.PlaylistProvider](s, r, "playlists",
+			plProviders, _ := kinds.Collect[kinds.Playlist, kinds.PlaylistProvider](h.Host, r, "playlists",
 				func(p kinds.PlaylistProvider) func(context.Context) ([]kinds.Playlist, bool, error) {
 					return p.ListUserPlaylists
 				})
-			all := listProvidersParallel[kinds.Playlist](ctx, plProviders)
+			all := ListProvidersParallel[kinds.Playlist](ctx, plProviders)
 			var batch []MergeReviewItem
-			for _, pl := range kinds.MergePlaylistsSyncLinked(all, s.links.PlaylistLinkKey) {
+			for _, pl := range kinds.MergePlaylistsSyncLinked(all, h.Links.PlaylistLinkKey) {
 				if pl.Match != kinds.PlaylistMatchName || len(pl.Sources) < 2 {
 					continue
 				}
@@ -247,7 +247,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 					Kind:    "playlist",
 					Match:   pl.Match,
 					Name:    pl.Name,
-					Sources: playlistSourceRefs(pl),
+					Sources: PlaylistSourceRefs(pl),
 					Note:    "joined by name — POST /v1/library/links to confirm or split by renaming",
 				})
 			}
@@ -261,7 +261,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 
 // listProvidersParallel fans out named listers like handleLibraryAggregate.
 // Provider errors are skipped (same as the previous sequential review path).
-func listProvidersParallel[T any](ctx context.Context, providers []kinds.NamedLister[T]) []T {
+func ListProvidersParallel[T any](ctx context.Context, providers []kinds.NamedLister[T]) []T {
 	if len(providers) == 0 {
 		return nil
 	}
@@ -287,34 +287,34 @@ func listProvidersParallel[T any](ctx context.Context, providers []kinds.NamedLi
 	return all
 }
 
-func trackSourceRefs(t kinds.Track) []string {
+func TrackSourceRefs(t kinds.Track) []string {
 	out := make([]string, 0, len(t.Sources))
-	for _, s := range t.Sources {
-		out = append(out, s.Service+":"+s.ID)
+	for _, src := range t.Sources {
+		out = append(out, src.Service+":"+src.ID)
 	}
 	return out
 }
 
-func albumSourceRefs(a kinds.Album) []string {
+func AlbumSourceRefs(a kinds.Album) []string {
 	out := make([]string, 0, len(a.Sources))
-	for _, s := range a.Sources {
-		out = append(out, s.Service+":"+s.ID)
+	for _, src := range a.Sources {
+		out = append(out, src.Service+":"+src.ID)
 	}
 	return out
 }
 
-func artistSourceRefs(a kinds.Artist) []string {
+func ArtistSourceRefs(a kinds.Artist) []string {
 	out := make([]string, 0, len(a.Sources))
-	for _, s := range a.Sources {
-		out = append(out, s.Service+":"+s.ID)
+	for _, src := range a.Sources {
+		out = append(out, src.Service+":"+src.ID)
 	}
 	return out
 }
 
-func playlistSourceRefs(p kinds.Playlist) []string {
+func PlaylistSourceRefs(p kinds.Playlist) []string {
 	out := make([]string, 0, len(p.Sources))
-	for _, s := range p.Sources {
-		out = append(out, s.Service+":"+s.ID)
+	for _, src := range p.Sources {
+		out = append(out, src.Service+":"+src.ID)
 	}
 	return out
 }

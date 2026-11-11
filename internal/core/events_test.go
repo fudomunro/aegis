@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -52,7 +53,7 @@ func TestHandleLibraryEvents_AggregatesServices(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -97,7 +98,7 @@ func TestHandleLibraryEvents_CanonicalStamp(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -115,7 +116,7 @@ func TestHandleLibraryEvents_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -138,7 +139,7 @@ func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -153,7 +154,7 @@ func TestHandleLibraryEvents_UnauthorizedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -176,7 +177,7 @@ func TestHandleLibraryEvents_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -194,14 +195,14 @@ func TestHandleLibraryEvents_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d", w.Code)
 	}
 }
 
 func TestLibraryKindEvents_Registered(t *testing.T) {
-	k := LibraryKindByID("events")
+	k := library.LibraryKindByID("events")
 	if k == nil {
 		t.Fatal("events library kind not registered")
 	}
@@ -211,7 +212,7 @@ func TestLibraryKindEvents_Registered(t *testing.T) {
 	if !k.Mentions("what is on my calendar?") {
 		t.Fatal("expected calendar keyword match")
 	}
-	handlers := (&Server{}).libraryRouteHandlers()
+	handlers := (&Server{}).library().RouteHandlers()
 	if _, ok := handlers["/v1/library/events"]; !ok {
 		t.Fatal("events route not registered")
 	}
@@ -219,7 +220,7 @@ func TestLibraryKindEvents_Registered(t *testing.T) {
 
 func TestLibraryEventsInstructions_MentionEndpoint(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryInstructionsFor("events")
+	instr := srv.library().LibraryInstructionsFor("events")
 	for _, want := range []string{
 		"/v1/library/events",
 		"calendar events",

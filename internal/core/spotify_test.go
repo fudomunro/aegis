@@ -27,7 +27,7 @@ func TestSpotifyConnector_HandleProxy_NoToken(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", w.Code)
@@ -73,7 +73,7 @@ func TestSpotifyConnector_HandleProxy_WithMockSpotify(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusOK {
 		body := w.Body.String()

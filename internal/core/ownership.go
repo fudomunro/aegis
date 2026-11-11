@@ -10,6 +10,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -17,7 +18,7 @@ import (
 // joined with live evidence. Fail-open throughout — a store or ledger that
 // cannot be read simply drops its evidence from the derivation.
 func (s *Server) ownershipStatuses() []shared.OwnershipStatus {
-	kindList := s.allLibraryKinds()
+	kindList := s.library().AllLibraryKinds()
 	sources, routes := s.ownershipEvidence()
 	freshness := s.ownershipFreshnessByKind()
 
@@ -75,7 +76,7 @@ func (s *Server) ownershipEvidence() (map[string][]shared.OwnershipSource, map[s
 		}
 		u := use[svc.ID]
 		name := ownershipServiceName(svc, conn)
-		for _, kind := range s.allLibraryKinds() {
+		for _, kind := range s.library().AllLibraryKinds() {
 			if !s.flowProvidesKind(conn, kind.ID) {
 				continue
 			}
@@ -106,7 +107,7 @@ func (s *Server) ownershipEvidence() (map[string][]shared.OwnershipSource, map[s
 				continue
 			}
 			kind := dt.Name
-			if LibraryKindByID(kind) == nil {
+			if library.LibraryKindByID(kind) == nil {
 				continue
 			}
 			u := use[id]
@@ -377,8 +378,8 @@ func (s *Server) HandleAdminOwnership(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleOwnershipConfirm(w http.ResponseWriter, r *http.Request, kind string) {
-	if LibraryKindByID(kind) == nil {
-		if _, ok := s.udkSchemaForKind(kind); !ok {
+	if library.LibraryKindByID(kind) == nil {
+		if _, ok := s.library().UDKSchemaForKind(kind); !ok {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown kind "+kind)
 			return
 		}
@@ -406,8 +407,8 @@ func (s *Server) handleOwnershipConfirm(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Server) handleOwnershipReopen(w http.ResponseWriter, r *http.Request, kind string) {
-	if LibraryKindByID(kind) == nil {
-		if _, ok := s.udkSchemaForKind(kind); !ok {
+	if library.LibraryKindByID(kind) == nil {
+		if _, ok := s.library().UDKSchemaForKind(kind); !ok {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown kind "+kind)
 			return
 		}

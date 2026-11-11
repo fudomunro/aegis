@@ -47,7 +47,7 @@ func TestHandleAdminUDK_StatusBrowseAndSelect(t *testing.T) {
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udks = reg
-	srv.registerUserDefinedKinds()
+	srv.library().RegisterUserDefinedKinds()
 
 	// Status
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/udk/status", nil)
@@ -111,7 +111,7 @@ func TestHandleAdminUDK_StatusBrowseAndSelect(t *testing.T) {
 	// Library aggregate uses the selected file (empty items list still 200)
 	shared.MarkKindDefaultNone("reading-list")
 	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: shared.AccessRead})
-	handler := srv.routeHandler(schema.Path)
+	handler := srv.library().RouteHandler(schema.Path)
 	req = httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()

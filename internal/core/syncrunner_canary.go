@@ -36,7 +36,7 @@ func (r *canaryRunner) Kind() string { return "tracks" }
 
 // Run implements syncjobs.SyncRunner: fetch one page and judge it.
 func (r *canaryRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.SyncStep, error) {
-	src, err := r.srv.mirrorSourceFor(job.Service, "tracks")
+	src, err := r.srv.library().MirrorSourceFor(job.Service, "tracks")
 	if err != nil {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
 	}

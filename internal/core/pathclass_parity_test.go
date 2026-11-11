@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/library"
 	"testing"
 )
 
@@ -59,11 +60,11 @@ func TestKindPathRules_Parity(t *testing.T) {
 		"/unknown/thing":             "",
 	}
 	for path, want := range cases {
-		if got := KindForCanonicalPath(path); got != want {
-			t.Errorf("KindForCanonicalPath(%q) = %q, want %q", path, got, want)
+		if got := library.KindForCanonicalPath(path); got != want {
+			t.Errorf("library.KindForCanonicalPath(%q) = %q, want %q", path, got, want)
 		}
-		if got := KindForPath(path); got != want {
-			t.Errorf("KindForPath(%q) = %q, want %q", path, got, want)
+		if got := library.KindForPath(path); got != want {
+			t.Errorf("library.KindForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }

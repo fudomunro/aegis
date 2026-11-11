@@ -27,7 +27,7 @@ func (s *Server) requireMailArchive(w http.ResponseWriter) *mail.Archive {
 // mailReadable reports whether any non-blocked service allows message reads
 // (owner tier). Request-scoped callers use mailReadableFor.
 func (s *Server) mailReadable() bool {
-	return s.libraryReadableFor(mailPermType)
+	return s.library().LibraryReadableFor(mailPermType)
 }
 
 // mailReadableFor reports whether the request may use the mail archive:

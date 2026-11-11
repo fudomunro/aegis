@@ -27,7 +27,7 @@ func TestWritePolicyNotice_HomeAndSecondary(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
-	home := srv.writePolicyNotice(cfg.Services[0])
+	home := srv.library().WritePolicyNotice(serviceViewOf(cfg.Services[0]))
 	if !strings.Contains(home, "canonical home for playlists") {
 		t.Fatalf("home notice missing: %s", home)
 	}
@@ -44,7 +44,7 @@ func TestWritePolicyNotice_HomeAndSecondary(t *testing.T) {
 		}
 	}
 
-	sec := srv.writePolicyNotice(cfg.Services[1])
+	sec := srv.library().WritePolicyNotice(serviceViewOf(cfg.Services[1]))
 	if !strings.Contains(sec, "prefer Spotify") {
 		t.Fatalf("secondary should prefer home: %s", sec)
 	}
@@ -64,14 +64,14 @@ func TestWritePolicyNotice_EmptyWithoutWriteOrHome(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	if got := srv.writePolicyNotice(cfg.Services[0]); got != "" {
+	if got := srv.library().WritePolicyNotice(serviceViewOf(cfg.Services[0])); got != "" {
 		t.Fatalf("expected empty notice, got %q", got)
 	}
 }
 
 func TestLibraryInstructions_MultiSourceMutationRule(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryInstructionsFor("playlists")
+	instr := srv.library().LibraryInstructionsFor("playlists")
 	if !strings.Contains(instr, "Multi-source mutation") {
 		t.Fatalf("missing multi-source rule: %s", instr)
 	}
@@ -150,7 +150,7 @@ func TestWritePolicyNotices_DedupesIdentical(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	notices := srv.writePolicyNotices([]Service{svc, svc})
+	notices := srv.library().WritePolicyNotices(serviceViewsOf([]Service{svc, svc}))
 	if len(notices) != 1 {
 		t.Fatalf("expected 1 deduped notice, got %d: %#v", len(notices), notices)
 	}

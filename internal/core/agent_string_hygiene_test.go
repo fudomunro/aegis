@@ -7,6 +7,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -76,7 +77,7 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 		add("LibraryKind.Instructions/"+k.ID, k.Instructions(base))
 		add("LibraryKind.DenyMsg/"+k.ID, k.DenyMsg)
 		add("LibraryKind.EmptyMsg/"+k.ID, k.EmptyMsg)
-		add("libraryInstructionsFor/"+k.ID, srv.libraryInstructionsFor(k.ID))
+		add("libraryInstructionsFor/"+k.ID, srv.library().LibraryInstructionsFor(k.ID))
 	}
 
 	schema := kinds.UserDefinedKindSchema{
@@ -90,23 +91,23 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 	if err := schema.Normalize(); err != nil {
 		t.Fatalf("normalize udk schema: %v", err)
 	}
-	add("userDefinedHint/default", srv.userDefinedHint(schema))
+	add("userDefinedHint/default", srv.library().UserDefinedHint(schema))
 	add("userDefinedHint.DenyMsg", schema.DenyMsg)
 	add("userDefinedHint.EmptyMsg", schema.EmptyMsg)
 	add("userDefinedHint.FailMsg", schema.FailMsg)
 
-	add("multiSourceMutationRule", multiSourceMutationRule())
+	add("multiSourceMutationRule", library.MultiSourceMutationRule())
 	add("PhotoSourceDiscipline", kinds.PhotoSourceDiscipline())
 
-	for _, notice := range srv.writePolicyNotices(cfg.Services) {
+	for _, notice := range srv.library().WritePolicyNotices(serviceViewsOf(cfg.Services)) {
 		add("writePolicyNotice", notice)
 	}
 
-	add("permissionNotice/denied", permissionNotice(shared.GrantMap{
+	add("permissionNotice/denied", library.PermissionNotice(shared.GrantMap{
 		shared.DefaultKey: shared.AccessNone,
 		"photos":          shared.AccessNone,
 	}))
-	add("permissionNotice/freebusy", permissionNotice(shared.GrantMap{
+	add("permissionNotice/freebusy", library.PermissionNotice(shared.GrantMap{
 		shared.DefaultKey: shared.AccessRead,
 		"events":          shared.AccessRead,
 	}))

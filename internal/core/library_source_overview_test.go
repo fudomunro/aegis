@@ -146,7 +146,7 @@ func TestHandleLibraryPlaylists_SourceOverviewFields(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}

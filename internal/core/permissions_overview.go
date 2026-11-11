@@ -30,7 +30,7 @@ const agentAccessorID = "agent"
 // what each is allowed to access.
 func (s *Server) permissionsOverview() policy.PermissionsOverview {
 	preferred := make([]string, 0, 16)
-	for _, kind := range s.allLibraryKinds() {
+	for _, kind := range s.library().AllLibraryKinds() {
 		key := kind.PermType
 		if key == "" {
 			key = kind.ID

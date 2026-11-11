@@ -16,7 +16,7 @@ import (
 )
 
 func TestCache_SnapshotStatsClear(t *testing.T) {
-	c := NewCache()
+	c := shared.NewCache()
 	c.Set("library:playlists", `{"playlists":[]}`, time.Minute)
 	c.Set("spotify:/me", "x", time.Minute)
 	c.Set("expired", "old", -time.Second)

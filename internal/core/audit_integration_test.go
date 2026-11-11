@@ -103,7 +103,7 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body=%s", w.Code, w.Body.String())
@@ -236,7 +236,7 @@ func TestDenyAuditRows_CarryClientIP(t *testing.T) {
 	req.RemoteAddr = "203.0.113.44:41000"
 	req.Header.Set("X-Api-Key", "wrong-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -247,7 +247,7 @@ func TestDenyAuditRows_CarryClientIP(t *testing.T) {
 	req.RemoteAddr = "203.0.113.44:41000"
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleServiceProxy)(w, req)
+	srv.AuthMiddleware(srv.library().HandleServiceProxy)(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("proxy status = %d body=%s", w.Code, w.Body.String())
 	}

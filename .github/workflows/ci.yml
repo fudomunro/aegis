@@ -52,7 +52,7 @@ jobs:
           # jobs and the imports of each *_fuzz_test.go; TestCIFuzzScope in
           # internal enforces the sync.
           fuzz_inject_watch='internal/core/inject/*|internal/shared/*|testdata/*'
-          fuzz_core_watch='internal/kinds/*|internal/core/links/*|internal/shared/*|internal/core/match_fuzz_test.go|internal/core/testdata/*'
+          fuzz_core_watch='internal/kinds/*|internal/library/*|internal/library/links/*|internal/shared/*|internal/core/match_fuzz_test.go|internal/core/testdata/*'
           fuzz_connectors_watch='internal/connectors/*|internal/kinds/*|internal/shared/*'
 
           # 'true' means "run this job". Defaults run everything so a

@@ -203,7 +203,7 @@ func TestLibraryPlaylists_ConfigCanonicalForStampsAndSorts(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -233,7 +233,7 @@ func TestLibraryInstructions_MentionCanonical(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	instr := srv.libraryInstructionsFor("tracks")
+	instr := srv.library().LibraryInstructionsFor("tracks")
 	if !strings.Contains(instr, "canonical") {
 		t.Fatalf("instructions should mention canonical: %s", instr)
 	}

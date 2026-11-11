@@ -3,7 +3,7 @@ package core
 import (
 	"net/http"
 
-	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/library/search"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -27,7 +27,7 @@ func (s *Server) HandleAdminSearchStatus(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	for _, kind := range s.allLibraryKinds() {
+	for _, kind := range s.library().AllLibraryKinds() {
 		n := counts[kind.ID]
 		st.Kinds = append(st.Kinds, search.KindStatus{
 			ID:         kind.ID,
