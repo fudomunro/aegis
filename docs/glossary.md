@@ -113,6 +113,17 @@ policy or the third-party one-time **grant code** (`aeg_grant_…`).
 
 ---
 
+## Packaging and layout
+
+| Prefer | Means | Notes |
+|--------|-------|-------|
+| **Hub** | `internal/core`, the wiring package: mux, auth perimeter, config, OAuth, pre-request hook | Only `main` packages import the hub. Do not use “core” for the whole of `internal/` |
+| **Surface package** | One of the three audience packages: **admin** (management surface), **library** (agent data plane), **syncjobs** (background consistency) | The hub mounts their handlers; surfaces serve no listeners of their own |
+| **Seam vocabulary** | The shapes two internal packages exchange to agree on a contract, plus trivial pure constructors, accessors, and predicates over them | Lives in `internal/shared`. Not domain behavior — anything resolving over stored state stays with its owner |
+| **Engine** | Self-contained store or runtime behind a seam (search index, job queue, token store) | Usually a `core/` sub-package or a sub-package of the owning surface |
+
+---
+
 ## Ops
 
 | Prefer | Means |

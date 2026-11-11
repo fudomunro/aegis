@@ -101,6 +101,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 
 | Area | Where | Notes |
 |------|-------|-------|
+| Packaging restructure (in progress) | [`docs/restructure-packaging.md`](docs/restructure-packaging.md) | Target layout: `internal/admin` / `internal/library` / `internal/syncjobs` surface packages + shared seam-vocabulary growth (issue #358). "Package boundaries" states the target; the churn-guardrails table ratchets the tree as code moves |
 | Entry, flags, routes, connector registration | `internal/core` hub (`main.go` is thin) | Wrap nearly every route in `AuthMiddleware` |
 | Data directory + state path layout | `internal/core` hub | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `internal/core` hub (`Config`) | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
@@ -111,7 +112,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Hook-health engine | `internal/core/hookhealth/` (engine), `internal/core` hub (`hookhealth.go` wrapper, admin handlers) | Ring of redacted hook observations + Aperture config checks (`/v1/admin/hook-health`); `hook_skip.go` stays in the hub |
 | ServiceConnector interface | `internal/connectors/host.go` | `Capabilities` + `SystemInstructions` + `HandleProxy`; the hub wires the registry |
 | Generic/shared content transport | `internal/connectors` (upstream transport), `internal/core` hub (token injection/cache), `internal/shared` (HTTP client) | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
-| Shared plumbing + seam vocabulary (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table, body-shape tokens; capability/onboarding/mail-ingest/ownership seam shapes) | `internal/shared` | Stdlib-only imports. One owner: plumbing and the shapes two internal packages exchange to agree on a contract — shapes and trivial constructors/accessors only (the `kindrules.go` test), no domain behavior, no `Host`, no service registries, no provider paths (issue #280, amended #325). Do not re-grow twins in `core` or `connectors` |
+| Shared plumbing + seam vocabulary (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table, body-shape tokens; capability/onboarding/mail-ingest/ownership seam shapes) | `internal/shared` | Stdlib-only imports. One owner: plumbing and the shapes two internal packages exchange to agree on a contract — shapes and trivial pure constructors/accessors/predicates over them (the `kindrules.go` table), no state, no I/O, no configuration resolution, no `Host`, no service registries, no provider paths (issue #280, amended #325). Do not re-grow twins in `core` or `connectors` |
 | Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared` (state store), `internal/core` hub (flows) | AES-256-GCM + PBKDF2; refresh singleflight |
 | Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go` runners) | Durable SQLite-backed jobs (issue #227). The engine takes a `SyncMetrics` seam; hub wiring and runners stay in core |
 | Access + Prometheus metrics engines | `internal/core/metrics/` (engines), `internal/core` hub (`metrics.go` handlers/derivation) | `AccessMetrics` ring + `PromMetrics` text export. The hub feeds them from request handlers; `PromMetrics` satisfies `syncjobs.SyncMetrics` |
@@ -231,32 +232,64 @@ logging. Startup logs the resolved directory and `/v1/admin/summary` exposes
 Principles, not a closed package list. `import_boundary_test.go` and
 `churn_guardrails_test.go` enforce these; this section explains them.
 
-1. **Dependency direction.** The hub (`internal/core`) sits at the top.
-   Nothing under `internal/` imports the hub; only `main` packages do (the
-   repo root and `cmd/*`). `internal/shared` (stdlib-only plumbing and seam
-   vocabulary) is a leaf. `internal/kinds` holds kind data and neutral
-   models. Domain packages
-   (`internal/connectors`, `internal/kinds`, `core/` stores and engines,
-   `core/policy`) import leaves and store sub-packages — never the hub, and
-   never each other's internals without a stated reason.
-2. **When a new package is allowed.** Any new internal package that (a)
+> **Layout transition (issue #358).** This section states the **target**
+> dependency direction; the tree is mid-move toward it. The per-package import
+> table in `churn_guardrails_test.go` is the ratchet and keeps matching the
+> current tree — each move PR updates the table in the same commit as the
+> move. The frozen file → package map, move phases, and settled placement
+> calls live in [`docs/restructure-packaging.md`](docs/restructure-packaging.md).
+> Do not re-open a settled home mid-campaign; record new questions in that
+> design record instead.
+
+1. **Dependency direction.** Layers, bottom to top: `internal/shared` →
+   `internal/kinds` → `internal/connectors` → the three surface packages
+   (`internal/admin`, `internal/library`, `internal/syncjobs`) → the hub
+   (`internal/core`) → `main`. Nothing under `internal/` imports the hub; only
+   `main` packages do (the repo root and `cmd/*`). `internal/shared` is a
+   leaf. `internal/kinds` imports `internal/shared` only; `internal/connectors`
+   imports `internal/shared` and `internal/kinds`. Surface packages may import
+   domain packages, `internal/shared`, and `core/` engine sub-packages
+   (`core/policy`, `core/tokens`, …) — never the hub.
+2. **Surface packages follow audiences.** `internal/admin` is the management
+   surface (`/v1/admin/*`, admin UI, setup flows, admin-owned writes).
+   `internal/library` is the agent data plane (`/v1/library/*`, content
+   transport, read-time enforcement). `internal/syncjobs` is background
+   consistency (queue, runners, freshness, maintenance) and serves no HTTP
+   routes. The hub registers routes and wraps handlers with the auth
+   perimeter; each surface exposes its handler set and read models for the
+   hub to mount. The pre-request hook stays in the hub (perimeter).
+3. **When a new package is allowed.** Any new internal package that (a)
    exposes one documented seam interface that the hub implements (like
    `connectors.Host`) or is a self-contained store/engine, (b) obeys the
    dependency direction, and (c) is guarded by a test. No issue or doc
    pre-approval is needed. Placement defaults still apply: managed data
    models and kind metadata → `internal/kinds`; Aegis-internal
-   stores/engines/policy → a `core/` sub-package, or a seam package when the
-   engine is a domain with its own interface (`internal/kinds` under #312);
-   stdlib-only plumbing and seam shapes → `internal/shared`. Do not park new
-   machinery in a catch-all leaf — `internal/types` was audited back out
-   three times (policy, search docs, kind rules) and then dissolved (#325).
-3. **What the hub owns.** The mux, auth/admin middleware, body limits, the
-   listener and app-token perimeters, config and overlays, state wiring, and
-   Host implementations. Handlers that need only a seam may live with their
-   domain (`ServiceConnector.HandleProxy` already does this).
-4. **Explicit wiring.** No `init()` registration of connectors or kinds.
+   stores/engines/policy → a `core/` sub-package (or under the owning
+   surface package), or a seam package when the engine is a domain with its
+   own interface (`internal/kinds` under #312); stdlib-only plumbing and seam
+   vocabulary → `internal/shared`. Do not park new machinery in a catch-all
+   leaf — `internal/types` was audited back out three times (policy, search
+   docs, kind rules) and then dissolved (#325).
+4. **What the hub owns.** The mux, auth/admin middleware, body limits, the
+   listener and app-token perimeters, the credential perimeter (OAuth flows,
+   token wiring), config and overlays, state wiring, Host implementations, and
+   the pre-request hook (`inject`, `hookhealth`, `hook_skip`). Handlers that
+   need only a seam may live with their domain (`ServiceConnector.HandleProxy`
+   already does this).
+5. **Explicit wiring.** No `init()` registration of connectors or kinds.
    Ordered literal lists (`srv.connectors`, `kinds.Builtin()`).
-5. **Enforce with tests, not prose.** `import_boundary_test.go` asserts the
+6. **`internal/shared` owns stdlib-only plumbing and cross-package seam
+   vocabulary** (issue #280, amended #325) — the shapes two internal packages
+   exchange to agree on a contract (`capabilities.go`, `onboarding.go`,
+   `mail_ingest.go`, `ownership.go`, kind rules, grant maps, dataset scopes,
+   search documents) and the trivial pure constructors, accessors, and
+   predicates over those shapes. No state, no I/O, no configuration
+   resolution, no `Host`, no service registries, no provider paths. Anything
+   that resolves over stored grants, matches, merges, or otherwise decides on
+   domain state lives with its domain owner. The `kindrules.go` table is the
+   worked example: domain owners register rules, and `core/policy` resolves
+   them.
+7. **Enforce with tests, not prose.** `import_boundary_test.go` asserts the
    dependency direction (hub imports only from `main` packages;
    `internal/shared` imports nothing from the module).
    `churn_guardrails_test.go` holds the finer per-package import table, and
@@ -361,11 +394,12 @@ over the hostile-input parsers, and `go build -o aegis .`.
 - **`internal/shared` owns stdlib-only plumbing and cross-package seam
   vocabulary** (issue #280, amended #325) — the shapes two internal packages
   exchange to agree on a contract (`capabilities.go`, `onboarding.go`,
-  `mail_ingest.go`, `ownership.go`, kind rules). Shapes and trivial
-  constructors/accessors only (the `kindrules.go` test); no domain behavior
-  (nothing that makes matching, merging, or policy decisions), no `Host`, no
-  service registries, no provider paths. Anything that makes decisions lives
-  with its domain owner.
+  `mail_ingest.go`, `ownership.go`, kind rules, grant maps, dataset scopes,
+  search documents). Shapes and trivial pure constructors, accessors, and
+  predicates over them (the `kindrules.go` table is the worked example); no
+  state, no I/O, no configuration resolution — nothing that matches, merges,
+  or resolves policy over stored configuration. Anything that decides on
+  domain state lives with its domain owner.
   The generic **kind-rule table** (`kindrules.go`: level tokens +
   `DefaultNone` flags, `RegisterKindRule` / `KindAllowsLevel` / …) is shared
   plumbing on purpose: domain owners register rules (built-in kinds at init,
@@ -442,7 +476,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Local variables named after `internal/` package names (`mail`, `scopes`, `copies`, `links`, `tokens`, `search`, `audit`, `ownership`, `kinds`, `syncjobs`, `metrics`, `sampledata`, `udk`, `apps`) | Rename the local (`mailArch`, `scopeStore`, `copyLedger`, `kindList`, `jobStore`, `accessMetrics`, `sampleSet`, `udkReg`, `appStore`, …). A local with the package name silently shadows `pkg.Symbol` and compiles until a real package ref is needed |
 | Concept named before its glossary entry | `docs/glossary.md` entry in the introducing PR; retire synonyms in the same change |
 | Parking kind data or seam shapes in a catch-all leaf "for now" | Kind data → `internal/kinds`, seam shapes → `internal/shared` — `internal/types` was audited back out three times, then dissolved (#325) |
-| Moving code again within weeks of its first move | Freeze the target layout for the duration of a move campaign; record layout questions in the design doc instead of another relocation |
+| Moving code again within weeks of its first move | Freeze the target layout for the duration of a move campaign; record layout questions in [`docs/restructure-packaging.md`](docs/restructure-packaging.md) instead of another relocation |
 | Mutating a worktree without checking which one | Preflight `git rev-parse --show-toplevel` and pass `workdir` on every call |
 
 ## Where to look first
