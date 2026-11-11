@@ -20,6 +20,18 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Hub cleanup completes the packaging restructure (issue #358, P5).** The
+  MBID lookup moves to `internal/kinds` beside the merge domain it serves
+  (`MusicBrainzLookups` over the cache seam), the operator subcommands
+  (seed / import / rekey) move to `internal/cli` — one-shot tooling over
+  explicit paths, with the `aegis` flag surface unchanged — and the
+  pre-request and auth halves of the old `handler.go` split into `hook.go`
+  and `auth.go`. `UpstreamBaseFor` folds into the `connectors.Host` file
+  and the dev fake-upstream seeding folds into the startup wiring. With
+  this, the tree matches the frozen target: `shared → kinds → connectors →
+  library → syncjobs → admin → core`, and the design record in
+  `docs/restructure-packaging.md` is complete. No product behavior change.
+
 - **The sync domain leaves the hub (issue #358, P4).** `internal/syncjobs` is
   now the whole background-consistency surface: the durable job queue engine
   (promoted from `core/syncjobs`), the mail-ingest and mirror-repair and

@@ -263,11 +263,12 @@ func (s *Server) library() *library.Handlers {
 // libraryDeps wires the kind-constructor args (issue #312): entity-link
 // keys, MBID resolvers, local-source probes, and the mail archive adapter.
 func (s *Server) libraryDeps() kinds.Deps {
+	mb := kinds.NewMusicBrainz(s.mbCache)
 	return kinds.Deps{
 		PlaylistLinkKey: s.links.PlaylistLinkKey,
-		ResolveTracks:   s.resolveTrackEntities,
-		ResolveAlbums:   s.resolveAlbumEntities,
-		ResolveArtists:  s.resolveArtistEntities,
+		ResolveTracks:   mb.ResolveTracks,
+		ResolveAlbums:   mb.ResolveAlbums,
+		ResolveArtists:  mb.ResolveArtists,
 		PlacesLocalSource: func() bool {
 			return s.timeline != nil && s.timeline.Enabled()
 		},

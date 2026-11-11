@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -13,9 +12,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fudomunro/aegis/internal/admin/apps"
 	"github.com/fudomunro/aegis/internal/admin/scopes"
+	"github.com/fudomunro/aegis/internal/cli"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
@@ -798,60 +799,16 @@ type cliModeOptions struct {
 // runCLIMode checks whether a one-shot CLI flag was given and, if so, runs
 // the corresponding mode and returns its exit code. The second result is
 // true when the caller should exit immediately (issue #274).
-func runCLIMode(opts cliModeOptions, paths DataPaths) (code int, handled bool) {
-	if opts.seedSample {
-		return runSeedSampleCLI(paths.Dir, paths.MailArchive, opts.seedSampleCount, opts.seedSampleStress), true
-	}
-	if opts.seedLotR || opts.seedDemoDatasets {
-		return runSeedDemoDatasetsCLI(paths.Dir, paths.MailArchive), true
-	}
-	if strings.TrimSpace(opts.importTakeout) != "" {
-		return runImportTakeoutCLI(paths.MailArchive, paths.CopyLedger, opts.importTakeout, opts.importTakeoutBatch), true
-	}
-	if strings.TrimSpace(opts.importQuicken) != "" {
-		return runImportQuickenCLI(paths.Quicken, opts.importQuicken), true
-	}
-	if strings.TrimSpace(opts.importTimeline) != "" {
-		return runImportTimelineCLI(paths.Timeline, opts.importTimeline), true
-	}
-	if strings.TrimSpace(opts.importSignal) != "" {
-		return runImportSignalCLI(paths.Signal, opts.importSignal), true
-	}
-	if strings.TrimSpace(opts.tokenNewPass) != "" {
-		pass := opts.tokenPass
-		if pass == "" {
-			pass = os.Getenv("AEGIS_TOKEN_PASS")
-		}
-		return runTokenRekeyCLI(paths.Tokens, pass, opts.tokenNewPass), true
-	}
-	return 0, false
-}
 
-// runSeedSampleCLI writes synthetic sample fixtures under the data directory
-// and loads the mail set into the configured archive, then exits.
-// Data is fictional; safe to regenerate. See README "Sample data".
-func runSeedSampleCLI(dataDir, archivePath string, count int, stress bool) int {
-	count = seedSampleCountOrDefault(count, stress)
-	sampleDir := filepath.Join(dataDir, "sample")
-	mboxPath, libraryPath, _, err := sampledata.WriteSampleFiles(sampleDir, count)
-	if err != nil {
-		slog.Error("failed to write sample files", "dir", sampleDir, "error", err)
-		return 1
-	}
-	set, err := sampledata.SeedSampleArchive(archivePath, count)
-	if err != nil {
-		slog.Error("failed to seed mail archive", "path", archivePath, "error", err)
-		return 1
-	}
-	slog.Info("sample data ready (all synthetic)",
-		"mail_messages", len(set.Records),
-		"oldest_id", set.OldestID,
-		"newest_id", set.NewestID,
-		"mail_archive", archivePath,
-		"mbox", mboxPath,
-		"library_json", libraryPath,
-	)
-	return 0
+// ensureLocalStoreService injects a local import store's service card into
+// config so /v1/library fan-in sees it as a source (issue #266).
+func ensureLocalStoreService(cfg *Config, d connectors.LocalStoreService) {
+	cfg.EnsureService(Service{
+		ID:          d.ID,
+		Name:        d.Name,
+		Action:      d.Action,
+		Description: d.Description,
+	})
 }
 
 // parseServiceConcurrency reads "service=N,service=M" caps for the sync
@@ -876,249 +833,67 @@ func parseServiceConcurrency(raw string) map[string]int {
 	return out
 }
 
-func seedSampleCountOrDefault(count int, stress bool) int {
-	if stress {
-		if count > 0 && count != sampledata.SampleMailCount {
-			return count
+func runCLIMode(opts cliModeOptions, paths DataPaths) (code int, handled bool) {
+	if opts.seedSample {
+		return cli.SeedSample(paths.Dir, paths.MailArchive, opts.seedSampleCount, opts.seedSampleStress), true
+	}
+	if opts.seedLotR || opts.seedDemoDatasets {
+		return cli.SeedDemoDatasets(paths.Dir, paths.MailArchive), true
+	}
+	if strings.TrimSpace(opts.importTakeout) != "" {
+		return cli.ImportTakeout(paths.MailArchive, paths.CopyLedger, opts.importTakeout, opts.importTakeoutBatch), true
+	}
+	if strings.TrimSpace(opts.importQuicken) != "" {
+		return cli.ImportQuicken(paths.Quicken, opts.importQuicken), true
+	}
+	if strings.TrimSpace(opts.importTimeline) != "" {
+		return cli.ImportTimeline(paths.Timeline, opts.importTimeline), true
+	}
+	if strings.TrimSpace(opts.importSignal) != "" {
+		return cli.ImportSignal(paths.Signal, opts.importSignal), true
+	}
+	if strings.TrimSpace(opts.tokenNewPass) != "" {
+		pass := opts.tokenPass
+		if pass == "" {
+			pass = os.Getenv("AEGIS_TOKEN_PASS")
 		}
-		return sampledata.SampleMailStressCount
+		return cli.TokenRekey(paths.Tokens, pass, opts.tokenNewPass), true
 	}
-	if count <= 0 {
-		return sampledata.SampleMailCount
-	}
-	return count
+	return 0, false
 }
 
-// runSeedDemoDatasetsCLI writes named demo packs (shire, gondor, lincoln)
-// under <data-dir>/sample/datasets/ and loads each partition's mail into the
-// archive. Content rules vary by pack; see docs/demo-datasets.md (issue #217).
-func runSeedDemoDatasetsCLI(dataDir, archivePath string) int {
-	outDir := filepath.Join(dataDir, "sample", "datasets")
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		slog.Error("failed to create demo dataset dir", "dir", outDir, "error", err)
-		return 1
+// Fake-upstream host support (issue #86): the dev-only mount that serves
+// connectors.FakeUpstream so the sync-maintenance loop can be driven with
+// injected drift before real drift appears. Never enabled by default.
+
+// fakeUpstreamMount is where -fake-upstream serves the injectable provider.
+// Services that should talk to it point their configured endpoint here.
+const fakeUpstreamMount = "/demo/fake-upstream"
+
+// seedFakeUpstreamTokens gives configured services that point at the mounted
+// fake upstream a placeholder token, so fetch paths (which always attach
+// one) run without real OAuth. Dev-only companion to -fake-upstream: real
+// instances never enable the mount, so this never touches their stores.
+func seedFakeUpstreamTokens(srv *Server) int {
+	if srv == nil || srv.config == nil || srv.tokens == nil {
+		return 0
 	}
-	archive, err := mail.Open(archivePath)
-	if err != nil {
-		slog.Error("failed to open mail archive", "path", archivePath, "error", err)
-		return 1
-	}
-	if archive != nil {
-		defer archive.Close()
-	}
-	for _, dataset := range sampledata.DemoDatasetIDs() {
-		lib, ok := sampledata.GenerateDemoDataset(dataset)
-		if !ok {
+	seeded := 0
+	for _, svc := range srv.config.Services {
+		if !strings.Contains(svc.Endpoint, fakeUpstreamMount) {
 			continue
 		}
-		libPath := filepath.Join(outDir, dataset+"-library.json")
-		if err := sampledata.WriteSampleLibraryJSON(libPath, lib); err != nil {
-			slog.Error("failed to write demo library", "path", libPath, "error", err)
-			return 1
+		if srv.GetValidToken(svc.ID, slog.Default()) != "" {
+			continue
 		}
-		mail := sampledata.GenerateDemoMail(dataset)
-		if archive != nil {
-			for _, rec := range mail.Records {
-				if err := archive.Upsert(rec); err != nil {
-					slog.Error("failed to seed demo mail", "dataset", dataset, "error", err)
-					return 1
-				}
-			}
-		}
-		slog.Info("demo dataset ready",
-			"dataset", dataset,
-			"mail_messages", len(mail.Records),
-			"library_json", libPath,
-		)
-	}
-	slog.Info("demo dataset packs written", "dir", outDir, "mail_archive", archivePath)
-	return 0
-}
-
-// runImportTakeoutCLI syncs a read-only Takeout export into the mail archive
-// and exits. Used for large local exports that should not go through HTTP.
-func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch int) int {
-	archivePath = strings.TrimSpace(archivePath)
-	if archivePath == "" {
-		slog.Error("mail-archive path is required for -import-takeout")
-		return 1
-	}
-	a, err := mail.Open(archivePath)
-	if err != nil {
-		slog.Error("failed to open mail archive", "path", archivePath, "error", err)
-		return 1
-	}
-	if a == nil {
-		slog.Error("mail archive disabled — set -mail-archive")
-		return 1
-	}
-	defer a.Close()
-	copyLedger, err := copies.Open(copyLedgerPath)
-	if err != nil {
-		slog.Error("failed to open copy ledger", "path", copyLedgerPath, "error", err)
-		return 1
-	}
-	if copyLedger != nil {
-		defer copyLedger.Close()
-	}
-	if batch <= 0 {
-		batch = 20000
-	}
-	ingest := connectors.NewTakeoutIngest()
-	sink := mail.Sink{A: a}
-	var stored, skipped, scanned, failed int
-	done := false
-	for {
-		// Path persists the export location (the CLI's -import-takeout contract).
-		res, err := ingest.IngestMail(context.Background(), sink,
-			shared.MailIngestOptions{Path: takeoutPath, MaxMessages: batch})
-		stored += res.Stored
-		skipped += res.Skipped
-		scanned += res.Listed
-		failed += res.Failed
-		slog.Info("takeout import batch",
-			"path", takeoutPath,
-			"scanned", res.Listed,
-			"stored", res.Stored,
-			"skipped", res.Skipped,
-			"failed", res.Failed,
-			"done", res.Done,
-			"error", res.Error,
-		)
-		if err != nil && res.Error != "" && res.Stored == 0 && res.Listed == 0 {
-			return 1
-		}
-		if res.Done {
-			done = true
-			break
-		}
-		if !res.Truncated {
-			break
-		}
-	}
-	copyLedger.RecordTakeoutSnapshot(takeoutPath, scanned, stored, skipped, done, connectors.TakeoutServiceID)
-	slog.Info("takeout import finished",
-		"path", takeoutPath,
-		"scanned", scanned,
-		"stored", stored,
-		"skipped", skipped,
-		"failed", failed,
-	)
-	return 0
-}
-
-// ensureLocalStoreService injects a local import store's service card into
-// config so /v1/library fan-in sees it as a source (issue #266).
-func ensureLocalStoreService(cfg *Config, d connectors.LocalStoreService) {
-	cfg.EnsureService(Service{
-		ID:          d.ID,
-		Name:        d.Name,
-		Action:      d.Action,
-		Description: d.Description,
-	})
-}
-
-// runImportCLI runs a one-shot import against any local import store, then
-// exits (issue #266). Flag parsing stays here; the store owns the run.
-func runImportCLI(name, storePath, importPath string, open func(string) (connectors.ImportStore, error), run func(connectors.ImportStore, string) (connectors.ImportOutcome, error)) int {
-	storePath = strings.TrimSpace(storePath)
-	if storePath == "" {
-		slog.Error(name + " store path is required for -import-" + name)
-		return 1
-	}
-	store, err := open(storePath)
-	if err != nil {
-		slog.Error("failed to open "+name+" store", "path", storePath, "error", err)
-		return 1
-	}
-	if store == nil || !store.Enabled() {
-		slog.Error(name + " store disabled — set -" + name + "-store")
-		return 1
-	}
-	defer store.Close()
-	res, err := run(store, importPath)
-	if err != nil {
-		slog.Error(name+" import failed", "path", importPath, "error", err)
-		return 1
-	}
-	slog.Info(name+" import finished",
-		append([]any{"path", importPath}, res.LogAttrs()...)...,
-	)
-	if res.Failed() {
-		return 1
-	}
-	return 0
-}
-
-// runImportQuickenCLI imports a QIF/QFX file or directory into the local
-// Quicken store, then exits (issue #141).
-func runImportQuickenCLI(storePath, importPath string) int {
-	return runImportCLI("quicken", storePath, importPath,
-		func(p string) (connectors.ImportStore, error) {
-			return connectors.OpenQuickenStore(p)
-		},
-		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
-			return connectors.ImportQuickenPath(st.(*connectors.QuickenStore), p)
+		srv.tokens.Save(svc.ID, &tokens.OAuthToken{
+			AccessToken: "fake-upstream-token",
+			Expiry:      time.Now().Add(10 * 365 * 24 * time.Hour),
 		})
-}
-
-// runImportTimelineCLI imports a Google Timeline JSON file/directory/zip into
-// the local store, then exits (issue #142).
-func runImportTimelineCLI(storePath, importPath string) int {
-	return runImportCLI("timeline", storePath, importPath,
-		func(p string) (connectors.ImportStore, error) {
-			return connectors.OpenTimelineStore(p)
-		},
-		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
-			return connectors.ImportTimelinePath(st.(*connectors.TimelineStore), p)
-		})
-}
-
-// runImportSignalCLI imports a Signal export file or directory into the local
-// store, then exits (issue #168).
-func runImportSignalCLI(storePath, importPath string) int {
-	return runImportCLI("signal", storePath, importPath,
-		func(p string) (connectors.ImportStore, error) {
-			return connectors.OpenSignalStore(p)
-		},
-		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
-			return connectors.ImportSignalPath(st.(*connectors.SignalStore), p)
-		})
-}
-
-// runTokenRekeyCLI re-encrypts the token store under a new passphrase with
-// current KDF parameters, then exits (issue #101). Passing the same passphrase
-// still rotates the master salt and raises PBKDF2 cost on legacy files.
-func runTokenRekeyCLI(path, currentPass, newPass string) int {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		slog.Error("token file path is required for -token-new-pass")
-		return 1
+		slog.Info("seeded placeholder token for fake upstream", "service", svc.ID)
+		seeded++
 	}
-	if currentPass == "" {
-		slog.Error("token-pass (current) is required for -token-new-pass")
-		return 1
-	}
-	if strings.TrimSpace(newPass) == "" {
-		slog.Error("token-new-pass must not be empty")
-		return 1
-	}
-	ts, err := tokens.NewTokenStore(path, currentPass)
-	if err != nil {
-		slog.Error("failed to load token store for rekey", "path", path, "error", err)
-		return 1
-	}
-	if err := ts.ChangePassphrase(newPass); err != nil {
-		slog.Error("failed to rekey token store", "path", path, "error", err)
-		return 1
-	}
-	slog.Info("token store rekeyed",
-		"path", path,
-		"services", len(ts.Tokens),
-		"secrets", len(ts.Secrets),
-		"iterations", ts.KDFIterations(),
-	)
-	return 0
+	return seeded
 }
 
 func initLogger(level, format string, w io.Writer) *slog.Logger {

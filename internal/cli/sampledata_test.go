@@ -1,4 +1,4 @@
-package core
+package cli
 
 import (
 	"os"
@@ -27,7 +27,7 @@ func TestSeedSampleCountOrDefault(t *testing.T) {
 func TestRunSeedSampleCLI(t *testing.T) {
 	dir := t.TempDir()
 	archive := filepath.Join(dir, "mail-archive.db")
-	if code := runSeedSampleCLI(dir, archive, 3, false); code != 0 {
+	if code := SeedSample(dir, archive, 3, false); code != 0 {
 		t.Fatalf("seed cli exit = %d", code)
 	}
 	a, err := mail.Open(archive)

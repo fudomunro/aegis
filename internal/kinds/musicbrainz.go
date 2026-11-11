@@ -1,4 +1,4 @@
-package core
+package kinds
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -32,6 +31,18 @@ const (
 // mbLookupBase is overridable in tests.
 var mbLookupBase = musicBrainzBase
 
+// MusicBrainzLookups resolves MBIDs against the open catalog. Lookups are
+// cached and budgeted per request; every failure is best-effort.
+type MusicBrainzLookups struct {
+	cache Cache
+}
+
+// NewMusicBrainz builds the resolver over an MBID lookup cache (nil
+// disables caching).
+func NewMusicBrainz(cache Cache) *MusicBrainzLookups {
+	return &MusicBrainzLookups{cache: cache}
+}
+
 type mbSearchResult struct {
 	// Artists / Recordings / ReleaseGroups share id/name/score shape.
 	Artists       []mbHit `json:"artists"`
@@ -45,20 +56,20 @@ type mbHit struct {
 	Score int    `json:"score"`
 }
 
-func artistMBIDCacheKey(name string) string {
-	return "mbid:artist:" + kinds.NormalizeIdentityKey(name)
+func ArtistMBIDCacheKey(name string) string {
+	return "mbid:artist:" + NormalizeIdentityKey(name)
 }
 
-func recordingMBIDCacheKey(title, artist string) string {
-	return "mbid:rec:" + kinds.NormalizeIdentityKey(title) + "|" + kinds.NormalizeIdentityKey(artist)
+func RecordingMBIDCacheKey(title, artist string) string {
+	return "mbid:rec:" + NormalizeIdentityKey(title) + "|" + NormalizeIdentityKey(artist)
 }
 
-func releaseGroupMBIDCacheKey(title, artist string) string {
-	return "mbid:rg:" + kinds.NormalizeIdentityKey(title) + "|" + kinds.NormalizeIdentityKey(artist)
+func ReleaseGroupMBIDCacheKey(title, artist string) string {
+	return "mbid:rg:" + NormalizeIdentityKey(title) + "|" + NormalizeIdentityKey(artist)
 }
 
 // mbGetJSON performs a MusicBrainz search and returns the raw body.
-func (s *Server) mbGetJSON(ctx context.Context, path, query string) ([]byte, bool) {
+func (m *MusicBrainzLookups) mbGetJSON(ctx context.Context, path, query string) ([]byte, bool) {
 	u := fmt.Sprintf("%s/%s?query=%s&fmt=json&limit=5",
 		strings.TrimRight(mbLookupBase, "/"),
 		path,
@@ -89,7 +100,7 @@ func (s *Server) mbGetJSON(ctx context.Context, path, query string) ([]byte, boo
 
 // mbPickHit returns the first high-confidence hit whose name matches want.
 func mbPickHit(hits []mbHit, want string) string {
-	wantKey := kinds.NormalizeIdentityKey(want)
+	wantKey := NormalizeIdentityKey(want)
 	if wantKey == "" {
 		return ""
 	}
@@ -97,24 +108,24 @@ func mbPickHit(hits []mbHit, want string) string {
 		if hit.Score < mbMinScore || hit.ID == "" {
 			continue
 		}
-		if kinds.NormalizeIdentityKey(hit.Name) == wantKey {
+		if NormalizeIdentityKey(hit.Name) == wantKey {
 			return hit.ID
 		}
 	}
 	return ""
 }
 
-func (s *Server) cacheMBID(key, value string) string {
+func (m *MusicBrainzLookups) cacheMBID(key, value string) string {
 	if value == "" {
-		s.mbCache.Set(key, "-", mbNegTTL)
+		m.cache.Set(key, "-", mbNegTTL)
 		return ""
 	}
-	s.mbCache.Set(key, value, mbCacheTTL)
+	m.cache.Set(key, value, mbCacheTTL)
 	return value
 }
 
-func (s *Server) cachedMBID(key string) (string, bool) {
-	v, ok := s.mbCache.Get(key)
+func (m *MusicBrainzLookups) cachedMBID(key string) (string, bool) {
+	v, ok := m.cache.Get(key)
 	if !ok {
 		return "", false
 	}
@@ -125,7 +136,7 @@ func (s *Server) cachedMBID(key string) (string, bool) {
 }
 
 // lookupArtistMBID queries MusicBrainz for a high-confidence artist MBID.
-func (s *Server) lookupArtistMBID(ctx context.Context, name string) string {
+func (m *MusicBrainzLookups) lookupArtistMBID(ctx context.Context, name string) string {
 	query := strings.TrimSpace(name)
 	if query == "" {
 		return ""
@@ -136,12 +147,12 @@ func (s *Server) lookupArtistMBID(ctx context.Context, name string) string {
 		return ""
 	}
 
-	key := artistMBIDCacheKey(query)
-	if cached, ok := s.cachedMBID(key); ok {
+	key := ArtistMBIDCacheKey(query)
+	if cached, ok := m.cachedMBID(key); ok {
 		return cached
 	}
 
-	data, ok := s.mbGetJSON(ctx, "artist", "artist:"+query)
+	data, ok := m.mbGetJSON(ctx, "artist", "artist:"+query)
 	if !ok {
 		return ""
 	}
@@ -149,24 +160,24 @@ func (s *Server) lookupArtistMBID(ctx context.Context, name string) string {
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return ""
 	}
-	return s.cacheMBID(key, mbPickHit(parsed.Artists, query))
+	return m.cacheMBID(key, mbPickHit(parsed.Artists, query))
 }
 
 // lookupRecordingMBID finds a MusicBrainz recording for title + artist.
-func (s *Server) lookupRecordingMBID(ctx context.Context, title, artist string) string {
+func (m *MusicBrainzLookups) lookupRecordingMBID(ctx context.Context, title, artist string) string {
 	title = strings.TrimSpace(title)
 	artist = strings.TrimSuffix(strings.TrimSpace(artist), " - Topic")
 	if title == "" || artist == "" {
 		return ""
 	}
-	key := recordingMBIDCacheKey(title, artist)
-	if cached, ok := s.cachedMBID(key); ok {
+	key := RecordingMBIDCacheKey(title, artist)
+	if cached, ok := m.cachedMBID(key); ok {
 		return cached
 	}
 
 	q := fmt.Sprintf(`recording:%s AND artist:%s`,
 		quoteMBField(title), quoteMBField(artist))
-	data, ok := s.mbGetJSON(ctx, "recording", q)
+	data, ok := m.mbGetJSON(ctx, "recording", q)
 	if !ok {
 		return ""
 	}
@@ -174,24 +185,24 @@ func (s *Server) lookupRecordingMBID(ctx context.Context, title, artist string) 
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return ""
 	}
-	return s.cacheMBID(key, mbPickHit(parsed.Recordings, title))
+	return m.cacheMBID(key, mbPickHit(parsed.Recordings, title))
 }
 
 // lookupReleaseGroupMBID finds a MusicBrainz release-group for title + artist.
-func (s *Server) lookupReleaseGroupMBID(ctx context.Context, title, artist string) string {
+func (m *MusicBrainzLookups) lookupReleaseGroupMBID(ctx context.Context, title, artist string) string {
 	title = strings.TrimSpace(title)
 	artist = strings.TrimSuffix(strings.TrimSpace(artist), " - Topic")
 	if title == "" || artist == "" {
 		return ""
 	}
-	key := releaseGroupMBIDCacheKey(title, artist)
-	if cached, ok := s.cachedMBID(key); ok {
+	key := ReleaseGroupMBIDCacheKey(title, artist)
+	if cached, ok := m.cachedMBID(key); ok {
 		return cached
 	}
 
 	q := fmt.Sprintf(`releasegroup:%s AND artist:%s`,
 		quoteMBField(title), quoteMBField(artist))
-	data, ok := s.mbGetJSON(ctx, "release-group", q)
+	data, ok := m.mbGetJSON(ctx, "release-group", q)
 	if !ok {
 		return ""
 	}
@@ -199,7 +210,7 @@ func (s *Server) lookupReleaseGroupMBID(ctx context.Context, title, artist strin
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return ""
 	}
-	return s.cacheMBID(key, mbPickHit(parsed.ReleaseGroups, title))
+	return m.cacheMBID(key, mbPickHit(parsed.ReleaseGroups, title))
 }
 
 // quoteMBField wraps a Lucene field value in double quotes (escaping quotes).
@@ -208,7 +219,7 @@ func quoteMBField(s string) string {
 	return `"` + s + `"`
 }
 
-func primaryArtistName(artists []kinds.Artist) string {
+func primaryArtistName(artists []Artist) string {
 	if len(artists) == 0 {
 		return ""
 	}
@@ -217,8 +228,8 @@ func primaryArtistName(artists []kinds.Artist) string {
 
 // resolveArtistEntities attaches MusicBrainz MBIDs to artists that lack an
 // EntityID. Failures are ignored — name matching remains the fallback.
-func (s *Server) resolveArtistEntities(ctx context.Context, artists []kinds.Artist) {
-	if s == nil || len(artists) == 0 {
+func (m *MusicBrainzLookups) ResolveArtists(ctx context.Context, artists []Artist) {
+	if m == nil || len(artists) == 0 {
 		return
 	}
 	lookups := 0
@@ -231,26 +242,26 @@ func (s *Server) resolveArtistEntities(ctx context.Context, artists []kinds.Arti
 			continue
 		}
 		q := strings.TrimSuffix(strings.TrimSpace(name), " - Topic")
-		if kinds.NormalizeIdentityKey(q) == "" {
+		if NormalizeIdentityKey(q) == "" {
 			continue
 		}
 		if lookups >= mbLookupBudget {
 			break
 		}
-		if _, ok := s.mbCache.Get(artistMBIDCacheKey(q)); !ok {
+		if _, ok := m.cache.Get(ArtistMBIDCacheKey(q)); !ok {
 			lookups++
 		}
-		if mbid := s.lookupArtistMBID(ctx, name); mbid != "" {
+		if mbid := m.lookupArtistMBID(ctx, name); mbid != "" {
 			artists[i].EntityID = mbid
 		}
 	}
 }
 
 // resolveTrackEntities attaches MusicBrainz recording MBIDs to tracks that
-// lack EntityID (no ISRC). Used before kinds.MergeTracksSync so YouTube-only or
+// lack EntityID (no ISRC). Used before MergeTracksSync so YouTube-only or
 // ISRC-less catalog tracks can still join durable identity groups.
-func (s *Server) resolveTrackEntities(ctx context.Context, tracks []kinds.Track) {
-	if s == nil || len(tracks) == 0 {
+func (m *MusicBrainzLookups) ResolveTracks(ctx context.Context, tracks []Track) {
+	if m == nil || len(tracks) == 0 {
 		return
 	}
 	lookups := 0
@@ -260,17 +271,17 @@ func (s *Server) resolveTrackEntities(ctx context.Context, tracks []kinds.Track)
 		}
 		title := tracks[i].Name
 		artist := primaryArtistName(tracks[i].Artists)
-		if kinds.NormalizeIdentityKey(title) == "" || kinds.NormalizeIdentityKey(artist) == "" {
+		if NormalizeIdentityKey(title) == "" || NormalizeIdentityKey(artist) == "" {
 			continue
 		}
-		key := recordingMBIDCacheKey(title, artist)
-		if _, ok := s.mbCache.Get(key); !ok {
+		key := RecordingMBIDCacheKey(title, artist)
+		if _, ok := m.cache.Get(key); !ok {
 			if lookups >= mbLookupBudget {
 				break
 			}
 			lookups++
 		}
-		if mbid := s.lookupRecordingMBID(ctx, title, artist); mbid != "" {
+		if mbid := m.lookupRecordingMBID(ctx, title, artist); mbid != "" {
 			tracks[i].EntityID = mbid
 		}
 	}
@@ -278,8 +289,8 @@ func (s *Server) resolveTrackEntities(ctx context.Context, tracks []kinds.Track)
 
 // resolveAlbumEntities attaches MusicBrainz release-group MBIDs to albums
 // that lack EntityID (no UPC).
-func (s *Server) resolveAlbumEntities(ctx context.Context, albums []kinds.Album) {
-	if s == nil || len(albums) == 0 {
+func (m *MusicBrainzLookups) ResolveAlbums(ctx context.Context, albums []Album) {
+	if m == nil || len(albums) == 0 {
 		return
 	}
 	lookups := 0
@@ -289,17 +300,17 @@ func (s *Server) resolveAlbumEntities(ctx context.Context, albums []kinds.Album)
 		}
 		title := albums[i].Name
 		artist := primaryArtistName(albums[i].Artists)
-		if kinds.NormalizeIdentityKey(title) == "" || kinds.NormalizeIdentityKey(artist) == "" {
+		if NormalizeIdentityKey(title) == "" || NormalizeIdentityKey(artist) == "" {
 			continue
 		}
-		key := releaseGroupMBIDCacheKey(title, artist)
-		if _, ok := s.mbCache.Get(key); !ok {
+		key := ReleaseGroupMBIDCacheKey(title, artist)
+		if _, ok := m.cache.Get(key); !ok {
 			if lookups >= mbLookupBudget {
 				break
 			}
 			lookups++
 		}
-		if mbid := s.lookupReleaseGroupMBID(ctx, title, artist); mbid != "" {
+		if mbid := m.lookupReleaseGroupMBID(ctx, title, artist); mbid != "" {
 			albums[i].EntityID = mbid
 		}
 	}

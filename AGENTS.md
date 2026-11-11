@@ -123,7 +123,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points) | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; `internal/library` owns the fixed cross-kind routes, kind composition, and agent-facing copy; admin writes stay admin-side |
 | Agent data plane | `internal/library` (+ `library/links`, `library/search`) | Fixed `/v1/library/*` write/maintenance routes, `/v1/services` content transport, kind registry composition, agent-facing instruction copy. The hub constructs `library.Handlers`, mounts its route map behind auth, and implements its `kinds.Host` seam |
 | Management surface | `internal/admin` (+ `admin/apps`, `admin/scopes`) | `/v1/admin/*`, the admin UI shell, setup flows, admin-owned writes (data grants, apps, data scopes, UDK overlay, connections, ownership), and the admin read models. The hub constructs `admin.Handlers`, mounts its routes behind the admin perimeter, and implements its `admin.Host` seam; the surfaces never import each other |
-| Merge / entity IDs | `internal/kinds` (merge), `internal/core/links/` (entity-link store) | ISRC/UPC/MBID preferred over name |
+| Merge / entity IDs | `internal/kinds` (merge + MBID lookup), `internal/library/links` (entity-link store) | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors` (one file per named service; local import stores share the surface) | Register in the hub's ordered `srv.connectors` list; stores use a local-transport constructor (design: `docs/local-import-stores.md`) |
 | Location history (places) | `internal/connectors` (timeline, owntracks), the places kind | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `internal/admin/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265). Brand/demo assets stay in `internal/core/web/` |
@@ -234,16 +234,14 @@ logging. Startup logs the resolved directory and `/v1/admin/summary` exposes
 Principles, not a closed package list. `import_boundary_test.go` and
 `churn_guardrails_test.go` enforce these; this section explains them.
 
-> **Layout transition (issue #358).** This section states the **target**
-> dependency direction; the tree is mid-move toward it (P1–P4 landed:
-> shared seam vocabulary, `internal/library`, and `internal/admin`). The
-> per-package import
-> table in `churn_guardrails_test.go` is the ratchet and keeps matching the
-> current tree — each move PR updates the table in the same commit as the
-> move. The frozen file → package map, move phases, and settled placement
-> calls live in [`docs/restructure-packaging.md`](docs/restructure-packaging.md).
-> Do not re-open a settled home mid-campaign; record new questions in that
-> design record instead.
+> **Layout (issue #358) — restructure landed.** The tree matches the target
+> above: shared seam vocabulary, `internal/library`, `internal/admin`, and
+> `internal/syncjobs` are in place. The frozen file → package map, the
+> settled placement calls, and the recorded amendments live in
+> [`docs/restructure-packaging.md`](docs/restructure-packaging.md), and the
+> per-package import table in `churn_guardrails_test.go` remains the
+> ratchet. Do not re-open a settled home lightly; record new layout
+> questions in that design record first.
 
 1. **Dependency direction.** Layers, bottom to top: `internal/shared` →
    `internal/kinds` → `internal/connectors` → `internal/library` →
@@ -501,7 +499,7 @@ scope runs everything.
 |------|------------|
 | New library kind | `docs/adding-kinds.md` (checklist), `kinds.BuiltinLibraryKinds`, `internal/kinds/<kind>.go`, one line in `kinds.Builtin()` |
 | Hook behavior / system instructions | the `internal/core` hub (pre-request hook), connector `SystemInstructions` |
-| Proxy + cache + token injection | `internal/core` hub (proxy/cache/token injection), `internal/connectors` (upstream transport), `internal/shared` (HTTP client) |
+| Proxy + cache + token injection | `internal/library` (content transport handler), `internal/core` hub (`GetValidToken` — the credential seam), `internal/connectors` (upstream transport), `internal/shared` (HTTP client, response cache) |
 | Config schema / service matching | `internal/core` hub (`Config`), `aegis.example.json`, README “Configuration” |
 | Admin data-grant writes | `internal/admin` (handlers), `internal/core/policy` (resolution + overlay persistence), `docs/configuration.md` “Data grants” |
 | OAuth / connections / refresh | `internal/core` hub (flows), `internal/core/tokens/` (store) |

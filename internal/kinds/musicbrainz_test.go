@@ -1,4 +1,4 @@
-package core
+package kinds
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
+	"time"
 )
 
 func TestLookupArtistMBID_ConfidentHit(t *testing.T) {
@@ -29,7 +29,7 @@ func TestLookupArtistMBID_ConfidentHit(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://aegis.example.com")
+	g := NewMusicBrainz(shared.NewCache())
 	mbid := g.lookupArtistMBID(context.Background(), "Miles Davis")
 	if mbid != "b975d5a2-2c3b-4b1e-9f0a-0c0e0e0e0e0e" {
 		t.Fatalf("mbid = %q", mbid)
@@ -52,7 +52,7 @@ func TestLookupArtistMBID_RejectsLowScoreAndNameMismatch(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://aegis.example.com")
+	g := NewMusicBrainz(shared.NewCache())
 	if got := g.lookupArtistMBID(context.Background(), "Miles Davis"); got != "" {
 		t.Fatalf("expected empty, got %q", got)
 	}
@@ -69,7 +69,7 @@ func TestLookupArtistMBID_StripsTopicSuffix(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://aegis.example.com")
+	g := NewMusicBrainz(shared.NewCache())
 	if mbid := g.lookupArtistMBID(context.Background(), "Miles Davis - Topic"); mbid != "mb1" {
 		t.Fatalf("mbid = %q", mbid)
 	}
@@ -87,12 +87,12 @@ func TestResolveArtistEntities_BudgetAndAttach(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://aegis.example.com")
-	artists := []kinds.Artist{
+	g := NewMusicBrainz(shared.NewCache())
+	artists := []Artist{
 		{Name: "Known Artist"},
 		{Name: "Already Has ID", EntityID: "keep-me"},
 	}
-	g.resolveArtistEntities(context.Background(), artists)
+	g.ResolveArtists(context.Background(), artists)
 	if artists[0].EntityID != "mb-hit" {
 		t.Fatalf("resolved = %+v", artists[0])
 	}
@@ -102,22 +102,22 @@ func TestResolveArtistEntities_BudgetAndAttach(t *testing.T) {
 }
 
 func TestMergeArtistLibrary_MBIDFirst(t *testing.T) {
-	merged := kinds.MergeArtistLibrary([]kinds.Artist{
+	merged := MergeArtistLibrary([]Artist{
 		{
 			Name:     "Miles Davis",
 			EntityID: "mbid-1",
-			Sources:  []kinds.ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
+			Sources:  []ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
 		},
 		{
 			Name:     "Miles  Davis",
 			EntityID: "MBID-1",
-			Sources:  []kinds.ArtistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "ch1"}},
+			Sources:  []ArtistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "ch1"}},
 		},
 	})
 	if len(merged) != 1 {
 		t.Fatalf("shared MBID should merge: %+v", merged)
 	}
-	if merged[0].Match != kinds.ArtistMatchMBID {
+	if merged[0].Match != ArtistMatchMBID {
 		t.Fatalf("match = %q", merged[0].Match)
 	}
 	if len(merged[0].Sources) != 2 {
@@ -125,20 +125,20 @@ func TestMergeArtistLibrary_MBIDFirst(t *testing.T) {
 	}
 
 	// Distinct MBIDs with same display name stay separate.
-	merged = kinds.MergeArtistLibrary([]kinds.Artist{
-		{Name: "John Smith", EntityID: "a", Sources: []kinds.ArtistSource{{Service: "spotify", ID: "1"}}},
-		{Name: "John Smith", EntityID: "b", Sources: []kinds.ArtistSource{{Service: "spotify", ID: "2"}}},
+	merged = MergeArtistLibrary([]Artist{
+		{Name: "John Smith", EntityID: "a", Sources: []ArtistSource{{Service: "spotify", ID: "1"}}},
+		{Name: "John Smith", EntityID: "b", Sources: []ArtistSource{{Service: "spotify", ID: "2"}}},
 	})
 	if len(merged) != 2 {
 		t.Fatalf("distinct MBIDs must not merge: %+v", merged)
 	}
 
 	// Name-only absorbs into MBID group.
-	merged = kinds.MergeArtistLibrary([]kinds.Artist{
-		{Name: "Miles Davis", EntityID: "mbid-1", Sources: []kinds.ArtistSource{{Service: "spotify", ID: "1"}}},
-		{Name: "miles davis", Sources: []kinds.ArtistSource{{Service: "youtube-music", ID: "2"}}},
+	merged = MergeArtistLibrary([]Artist{
+		{Name: "Miles Davis", EntityID: "mbid-1", Sources: []ArtistSource{{Service: "spotify", ID: "1"}}},
+		{Name: "miles davis", Sources: []ArtistSource{{Service: "youtube-music", ID: "2"}}},
 	})
-	if len(merged) != 1 || merged[0].Match != kinds.ArtistMatchMBID {
+	if len(merged) != 1 || merged[0].Match != ArtistMatchMBID {
 		t.Fatalf("name fallback should join MBID group: %+v", merged)
 	}
 }
@@ -152,18 +152,18 @@ func TestMBIDCacheNegative(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://aegis.example.com")
+	g := NewMusicBrainz(shared.NewCache())
 	if got := g.lookupArtistMBID(context.Background(), "Nobody"); got != "" {
 		t.Fatalf("got %q", got)
 	}
 	// Negative cache stores "-"
-	if v, ok := g.mbCache.Get(artistMBIDCacheKey("Nobody")); !ok || v != "-" {
+	if v, ok := g.cache.Get(ArtistMBIDCacheKey("Nobody")); !ok || v != "-" {
 		t.Fatalf("neg cache = %q ok=%v", v, ok)
 	}
 	// Short TTL sanity
-	g.mbCache.Set("x", "y", 10*time.Millisecond)
+	g.cache.Set("x", "y", 10*time.Millisecond)
 	time.Sleep(20 * time.Millisecond)
-	if _, ok := g.mbCache.Get("x"); ok {
+	if _, ok := g.cache.Get("x"); ok {
 		t.Fatal("expected expiry")
 	}
 }
@@ -183,7 +183,7 @@ func TestLookupRecordingMBID(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://aegis.example.com")
+	g := NewMusicBrainz(shared.NewCache())
 	if mbid := g.lookupRecordingMBID(context.Background(), "So What", "Miles Davis - Topic"); mbid != "rec-1" {
 		t.Fatalf("mbid = %q", mbid)
 	}
@@ -198,12 +198,12 @@ func TestResolveTrackEntities_KeepsISRC(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://aegis.example.com")
-	tracks := []kinds.Track{
-		{Name: "Blue", Artists: []kinds.Artist{{Name: "Joni Mitchell"}}},
-		{Name: "Blue", Artists: []kinds.Artist{{Name: "Joni Mitchell"}}, EntityID: "USRC123"},
+	g := NewMusicBrainz(shared.NewCache())
+	tracks := []Track{
+		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}},
+		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}, EntityID: "USRC123"},
 	}
-	g.resolveTrackEntities(context.Background(), tracks)
+	g.ResolveTracks(context.Background(), tracks)
 	if tracks[0].EntityID != "rec-1" {
 		t.Fatalf("resolved = %+v", tracks[0])
 	}
@@ -224,7 +224,7 @@ func TestLookupReleaseGroupMBID(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://aegis.example.com")
+	g := NewMusicBrainz(shared.NewCache())
 	if mbid := g.lookupReleaseGroupMBID(context.Background(), "Kind of Blue", "Miles Davis"); mbid != "rg-1" {
 		t.Fatalf("mbid = %q", mbid)
 	}
@@ -239,12 +239,12 @@ func TestResolveAlbumEntities_KeepsUPC(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://aegis.example.com")
-	albums := []kinds.Album{
-		{Name: "Blue", Artists: []kinds.Artist{{Name: "Joni Mitchell"}}},
-		{Name: "Blue", Artists: []kinds.Artist{{Name: "Joni Mitchell"}}, EntityID: "00123456789012"},
+	g := NewMusicBrainz(shared.NewCache())
+	albums := []Album{
+		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}},
+		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}, EntityID: "00123456789012"},
 	}
-	g.resolveAlbumEntities(context.Background(), albums)
+	g.ResolveAlbums(context.Background(), albums)
 	if albums[0].EntityID != "rg-1" {
 		t.Fatalf("resolved = %+v", albums[0])
 	}

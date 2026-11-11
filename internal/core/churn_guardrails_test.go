@@ -110,6 +110,16 @@ var allowedImports = map[string][]string{
 	"internal/library/search": {
 		"github.com/fudomunro/aegis/internal/shared",
 	},
+	// the operator subcommands the aegis binary exposes through flags
+	// (seed, import, rekey): one-shot data tooling over explicit paths.
+	"internal/cli": {
+		"github.com/fudomunro/aegis/internal/shared",
+		"github.com/fudomunro/aegis/internal/connectors",
+		"github.com/fudomunro/aegis/internal/core/copies",
+		"github.com/fudomunro/aegis/internal/core/mail",
+		"github.com/fudomunro/aegis/internal/core/sampledata",
+		"github.com/fudomunro/aegis/internal/core/tokens",
+	},
 	// the management surface: admin API and UI, setup flows, admin-owned
 	// writes. It reads the data plane's kind catalog and the sync domain's
 	// capture surface through narrow interfaces the hub wires — the two

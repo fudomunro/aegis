@@ -1,4 +1,4 @@
-package core
+package cli
 
 import (
 	"path/filepath"
@@ -24,14 +24,14 @@ func TestRunTokenRekeyCLI(t *testing.T) {
 	}
 
 	// Wrong current passphrase must fail and leave the file alone.
-	if code := runTokenRekeyCLI(path, "wrong", "new-pass"); code == 0 {
+	if code := TokenRekey(path, "wrong", "new-pass"); code == 0 {
 		t.Fatal("rekey with wrong current passphrase should fail")
 	}
 	if _, err := tokens.NewStoreWithIterations(path, "old-pass", 1_000); err != nil {
 		t.Fatalf("token file must survive failed rekey: %v", err)
 	}
 
-	if code := runTokenRekeyCLI(path, "old-pass", "new-pass"); code != 0 {
+	if code := TokenRekey(path, "old-pass", "new-pass"); code != 0 {
 		t.Fatal("rekey should succeed")
 	}
 	if _, err := tokens.NewStoreWithIterations(path, "old-pass", 1_000); err == nil {
@@ -45,13 +45,13 @@ func TestRunTokenRekeyCLI(t *testing.T) {
 		t.Fatalf("token after CLI rekey = %+v", got)
 	}
 
-	if code := runTokenRekeyCLI("", "old", "new"); code == 0 {
+	if code := TokenRekey("", "old", "new"); code == 0 {
 		t.Fatal("missing path should fail")
 	}
-	if code := runTokenRekeyCLI(path, "", "new"); code == 0 {
+	if code := TokenRekey(path, "", "new"); code == 0 {
 		t.Fatal("missing current passphrase should fail")
 	}
-	if code := runTokenRekeyCLI(path, "new-pass", "  "); code == 0 {
+	if code := TokenRekey(path, "new-pass", "  "); code == 0 {
 		t.Fatal("blank new passphrase should fail")
 	}
 }
