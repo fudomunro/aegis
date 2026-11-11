@@ -20,6 +20,20 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **CI runs only the jobs a change can reach (issue #355).** A scope job
+  classifies the diff once, and the heavy jobs then run only when the
+  change can reach them: Test skips structurally inert diffs (binary blobs,
+  non-workflow `.github` metadata), Lint and Build run on Go changes, and
+  each fuzz group runs when the code its targets exercise changed. The
+  fuzz pass is split into three parallel jobs (inject, core, connectors)
+  so the wall clock is the longest group instead of the sum; branch
+  protection requires each of those three names in place of one `Fuzz`
+  check. Nothing is taken
+  on faith — unknown scope, an empty diff, an undecidable base, or a
+  workflow-file edit all run the full battery, and whenever the Test job
+  runs it is still the full suite with the 80% coverage floor.
+  `TestCIFuzzScope` keeps the hand-listed fuzz targets and watch paths in
+  sync with the sources.
 - **Authorization is one lookup over one grant map (issue #347).** Every
   recognized key — agent key, invite token, app token — carries one
   kind → access-level map, and every request resolves through a single

@@ -8,9 +8,157 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same PR supersedes the run in flight; a merge to main
+# is never cancelled mid-verification.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Classify the diff once so the heavy jobs run only when the change can
+  # reach them (issue #355). Unknown or undecidable scope keeps the
+  # all-true defaults: a narrower run is never taken on faith.
+  changes:
+    name: Scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.classify.outputs.go }}
+      test: ${{ steps.classify.outputs.test }}
+      fuzz_inject: ${{ steps.classify.outputs.fuzz_inject }}
+      fuzz_core: ${{ steps.classify.outputs.fuzz_core }}
+      fuzz_connectors: ${{ steps.classify.outputs.fuzz_connectors }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: classify
+        name: Classify changed files
+        run: |
+          set -uo pipefail
+
+          head_sha="${{ github.sha }}"
+          case "${{ github.event_name }}" in
+            pull_request) base_sha="${{ github.event.pull_request.base.sha }}" ;;
+            push)         base_sha="${{ github.event.before }}" ;;
+            *)            base_sha="" ;;
+          esac
+
+          # Watch sets for the three fuzz groups (issue #355): each group
+          # reruns only when the code its targets exercise changes — the
+          # group's own package plus the internal packages its Fuzz bodies
+          # call into. Keep these in sync with the target lists in the Fuzz
+          # jobs and the imports of each *_fuzz_test.go; TestCIFuzzScope in
+          # internal enforces the sync.
+          fuzz_inject_watch='internal/core/inject/*|internal/shared/*|testdata/*'
+          fuzz_core_watch='internal/kinds/*|internal/core/links/*|internal/shared/*|internal/core/match_fuzz_test.go|internal/core/testdata/*'
+          fuzz_connectors_watch='internal/connectors/*|internal/kinds/*|internal/shared/*'
+
+          # 'true' means "run this job". Defaults run everything so a
+          # missing base, an empty diff, or a script failure cannot skip
+          # verification; only a trustworthy diff narrows them.
+          go=true
+          test=true
+          fuzz_inject=true
+          fuzz_core=true
+          fuzz_connectors=true
+
+          diff_lines=""
+          if [ -n "$base_sha" ] && [ "$base_sha" != "0000000000000000000000000000000000000000" ] \
+              && git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+            diff_base="$base_sha"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              mb=$(git merge-base "$base_sha" "$head_sha" 2>/dev/null) || mb=""
+              if [ -n "$mb" ]; then
+                diff_base="$mb"
+              fi
+            fi
+            # --no-renames so a rename reports both paths; --name-status so a
+            # deletion is visible (it can break //go:embed or a file-reading
+            # test even when the path itself looks inert).
+            diff_lines=$(git diff --name-status --no-renames "$diff_base" "$head_sha" 2>/dev/null) || diff_lines=""
+          fi
+
+          watch_match() {
+            local path=$1 pat=$2 p
+            local IFS='|'
+            # Patterns are data, not globs: stop bash from expanding them
+            # against the worktree before case matches them.
+            set -f
+            for p in $pat; do
+              case "$path" in
+                $p)
+                  set +f
+                  return 0
+                  ;;
+              esac
+            done
+            set +f
+            return 1
+          }
+
+          if [ -n "$diff_lines" ]; then
+            go=false
+            test=false
+            fuzz_inject=false
+            fuzz_core=false
+            fuzz_connectors=false
+
+            while IFS=$'\t' read -r status f; do
+              if [ -z "${f:-}" ]; then
+                continue
+              fi
+
+              case "$status" in
+                D*) go=true; test=true ;;
+              esac
+
+              case "$f" in
+                *.go|go.mod|go.sum) go=true ;;
+              esac
+
+              # The Test job is broad on purpose: public hygiene walks every
+              # text file in the tree, so anything that is not structurally
+              # invisible to it can break tests. Only binary blobs and
+              # non-workflow .github metadata are inert. Workflow files are
+              # the opposite of inert — editing CI must still see the full
+              # battery run against the new configuration.
+              case "$f" in
+                .github/workflows/*)
+                  go=true; test=true
+                  fuzz_inject=true; fuzz_core=true; fuzz_connectors=true
+                  ;;
+                .github/*) ;;
+                *.png|*.jpg|*.jpeg|*.webp|*.gif|*.ico|*.woff|*.woff2|*.ttf|*.db|*.out|*.bundle) ;;
+                *) test=true ;;
+              esac
+
+              case "$f" in
+                go.mod|go.sum)
+                  fuzz_inject=true; fuzz_core=true; fuzz_connectors=true
+                  ;;
+                *)
+                  if watch_match "$f" "$fuzz_inject_watch"; then fuzz_inject=true; fi
+                  if watch_match "$f" "$fuzz_core_watch"; then fuzz_core=true; fi
+                  if watch_match "$f" "$fuzz_connectors_watch"; then fuzz_connectors=true; fi
+                  ;;
+              esac
+            done <<< "$diff_lines"
+          fi
+
+          {
+            echo "go=$go"
+            echo "test=$test"
+            echo "fuzz_inject=$fuzz_inject"
+            echo "fuzz_core=$fuzz_core"
+            echo "fuzz_connectors=$fuzz_connectors"
+          } >> "$GITHUB_OUTPUT"
+
   test:
     name: Test
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.test != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +203,8 @@ jobs:
 
   lint:
     name: Lint
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,9 +222,23 @@ jobs:
       - name: Staticcheck
         run: '"$(go env GOPATH)/bin/staticcheck" ./...'
 
-  fuzz:
-    name: Fuzz
+  # Short CI fuzz runs over the hostile-input parsers (issue #107). Seeds in
+  # f.Add / testdata/fuzz always run as ordinary tests in the Test job; these
+  # jobs spend a bounded budget mutating them. Each group runs only when the
+  # scope job says its code changed (issue #355), and the three groups are
+  # separate jobs so they run in parallel rather than serially.
+  #
+  # Targets live in ./internal/core, ./internal/core/inject and
+  # ./internal/connectors — the repo root package has no test files, so
+  # fuzzing `.` exits 0 with "[no test files]" and mutates nothing. Keep each
+  # list in sync with `go test -run='^$' -list='^Fuzz'` on that package
+  # (TestCIFuzzScope in internal/core enforces the sync).
+  fuzz-inject:
+    name: Fuzz (inject)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.fuzz_inject != 'false' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -83,15 +247,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      # Short CI fuzz runs over the hostile-input parsers (issue #107).
-      # Seeds in f.Add / testdata/fuzz always run as ordinary tests in the
-      # Test job; this job spends a bounded budget mutating them.
-      # Targets live in ./internal/core, ./internal/core/inject and
-      # ./internal/connectors — the repo root package has no test files, so
-      # fuzzing `.` exits 0 with "[no test files]" and mutates nothing. Keep
-      # these lists in sync with
-      # `go test -run='^$' -list='^Fuzz' ./internal/core ./internal/core/inject ./internal/connectors`.
-      - name: Fuzz parsers
+      - name: Fuzz inject parsers
         run: |
           set -euo pipefail
           inject_targets=(
@@ -102,6 +258,24 @@ jobs:
             echo "==> ${t}"
             go test -run='^$' -fuzz="^${t}$" -fuzztime=30s ./internal/core/inject
           done
+
+  fuzz-core:
+    name: Fuzz (core)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.fuzz_core != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Fuzz core parsers
+        run: |
+          set -euo pipefail
           core_targets=(
             FuzzNormalizeIdentityKey
             FuzzCleanYouTubeTitle
@@ -115,6 +289,24 @@ jobs:
             echo "==> ${t}"
             go test -run='^$' -fuzz="^${t}$" -fuzztime=30s ./internal/core
           done
+
+  fuzz-connectors:
+    name: Fuzz (connectors)
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.fuzz_connectors != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Fuzz connector parsers
+        run: |
+          set -euo pipefail
           connectors_targets=(
             FuzzParseTakeoutMessage
             FuzzWalkMboxFrom
@@ -128,6 +320,8 @@ jobs:
 
   build:
     name: Build
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.go != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
