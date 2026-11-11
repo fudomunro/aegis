@@ -44,6 +44,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Mirror** | Explicit copy of a playlist/liked tracks to another service | Not automatic write sync; eventual successor: **sync relationship** |
 | **Sync relationship** | Per-(connection, Kind) pairing established when data is connected; sync jobs keep that Kind's members consistent with its **canonical home** | Not a **sync job** (queue unit) or **sync maintenance** (connector-reliability loop); see the sync-word table below |
 | **Sync group** | All sync relationships for one library Kind — the connected sources that provide it | One member is the **canonical home**; a local file import is a read-only member |
+| **Convergence** | The sync job that moves a kind's data from its **canonical home** out to the group's other write-capable members | Job type `converge`. Fan-out only — never deletes on a member; placement conflicts are reported, not overwritten. Not **mirror** (explicit one-shot copy) |
 | **Content transport** | `/v1/services/{id}/…` for bytes and local import only | Avoid “ingest transport”; error text may say “content/ingest only” once |
 | **User-defined kind (UDK)** | Schema pack under `user-kinds/` | The extension mechanism, in plain English — it publishes a **library kind**, which stays the registry axis. **Schema pack** is the on-disk artifact (file/dir). Retired: “user-defined type”, “UDT”, “type pack” |
 | **Access level** | See **Data grants** | Strength of a data grant |

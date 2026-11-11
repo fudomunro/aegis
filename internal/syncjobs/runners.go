@@ -18,6 +18,10 @@ type Host interface {
 	// ServiceBlocked reports whether a configured service is missing or
 	// blocked. Ingest-only sync locations are not services and report false.
 	ServiceBlocked(serviceID string) bool
+	// SyncGroup resolves one kind's sync group: the designated canonical
+	// home and the service IDs of every member row (issue #365). Empty hub
+	// means no member is designated. Members are in configuration order.
+	SyncGroup(kind string) (hub string, members []string)
 }
 
 // Runners owns the background-consistency execution: the mail ingest walks,
@@ -61,4 +65,5 @@ func (r *Runners) Register(reg *RunnerRegistry) {
 	registerMirrorRunners(reg, r)
 	registerCanaryRunners(reg, r)
 	registerFreshnessRunners(reg, r)
+	registerConvergeRunners(reg, r)
 }

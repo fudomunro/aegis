@@ -111,8 +111,16 @@ func TestHandleAdminSync_GetStatus(t *testing.T) {
 	if got.ByJobType["ingest"].Queued != 1 {
 		t.Fatalf("by_job_type = %v, want ingest/queued", got.ByJobType)
 	}
-	if len(got.Kinds) == 0 || got.Kinds[0] != "messages" {
-		t.Fatalf("kinds = %v, want [messages]", got.Kinds)
+	// The registry serves every runner kind the build registers; the status
+	// list must contain the kind this job runs under.
+	hasMessages := false
+	for _, k := range got.Kinds {
+		if k == "messages" {
+			hasMessages = true
+		}
+	}
+	if len(got.Kinds) == 0 || !hasMessages {
+		t.Fatalf("kinds = %v, want messages among the registered kinds", got.Kinds)
 	}
 }
 

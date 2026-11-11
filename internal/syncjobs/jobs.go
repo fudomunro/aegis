@@ -47,6 +47,7 @@ const (
 	SyncJobTypeFreshness = "freshness_check"
 	SyncJobTypeRepair    = "repair"
 	SyncJobTypeCanary    = "canary"
+	SyncJobTypeConverge  = "converge"
 )
 
 // Error classes recorded on a failed step (last_error_class).

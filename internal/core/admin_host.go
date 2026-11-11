@@ -316,6 +316,26 @@ func (s *Server) ServiceBlocked(serviceID string) bool {
 	return svc == nil || svc.Action == "block"
 }
 
+// SyncGroup implements syncjobs.Host (issue #365): one kind's sync group —
+// its designated canonical home and every member row, in configuration
+// order. An empty hub means no member is designated.
+func (s *Server) SyncGroup(kind string) (string, []string) {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	hub := ""
+	var members []string
+	for _, svc := range s.config.ServiceSnapshots() {
+		flag, ok := svc.SyncRelationships[kind]
+		if !ok {
+			continue
+		}
+		members = append(members, svc.ID)
+		if flag {
+			hub = svc.ID
+		}
+	}
+	return hub, members
+}
+
 // RunMailIngest implements admin.Host — one ingest walk shared with the sync
 // queue runner (issue #227).
 func (s *Server) RunMailIngest(ctx context.Context, service string, opts shared.MailIngestOptions) (shared.MailIngestResult, error) {

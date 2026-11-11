@@ -7,6 +7,20 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Outbound convergence (issue #365, Phase 2).** The `converge` sync job
+  type moves a kind's data from its **canonical home** out to the group's
+  other write-capable members — contacts and events first (playlists follow
+  once placement preserves item order and renames). One job chains through
+  the group's members, one per step, seeded as a daily **Daily outbound
+  convergence** schedule per kind beside the freshness checks. Convergence
+  is fan-out only: placement creates and updates, never deletes on a member,
+  so member-only records survive untouched. Placement conflicts (a member
+  record changed underfoot) are counted and reported, never overwritten and
+  never retried in place. Successful placements stamp per-item watermark
+  rows and one copy row per member, so the freshness pass sees converged
+  copies like mirrored ones. Read-only members (local file imports) and
+  members that cannot receive the kind are never targeted; a group with no
+  canonical home or no write-capable member completes as a no-op.
 - **Sync relationships (issue #365, Phase 1).** Connecting a source — OAuth,
   static credentials, or a local file import — establishes a sync
   relationship for each sync-participating library kind it provides
