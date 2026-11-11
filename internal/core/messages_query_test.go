@@ -233,7 +233,7 @@ func TestMessagesFetch_LiveFallback(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/messages/google-gmail/live-9", strings.NewReader(""))
 	req.Header.Set("Authorization", "Bearer test-key")
 	rec := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/messages/{service}/{id}"))(rec, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/messages/{service}/{id}"))(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("post fetch code = %d", rec.Code)
 	}

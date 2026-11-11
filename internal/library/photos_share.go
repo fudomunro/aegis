@@ -1,4 +1,4 @@
-package core
+package library
 
 import (
 	"crypto/sha256"
@@ -39,7 +39,7 @@ type PhotoShareRequest struct {
 // only, hashes it, publishes, and drops the buffer.
 //
 // POST /v1/library/photos/share
-func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -73,22 +73,22 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger := withPeerLog(slog.With("handler", "photo_share",
+	logger := h.Host.Logger(r, "photo_share").With(
 		"source_service", req.SourceService,
 		"source_id", req.SourceID,
 		"target", req.TargetService,
-		"dry_run", req.DryRun), r)
+		"dry_run", req.DryRun)
 
-	if err := s.requireMirrorReadable(s.requestGrants(r), req.SourceService, "photos"); err != nil {
+	if err := h.RequireMirrorReadable(h.requestGrants(r), req.SourceService, "photos"); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	if err := s.requireMirrorWritable(s.requestGrants(r), req.TargetService, "photos"); err != nil {
+	if err := h.RequireMirrorWritable(h.requestGrants(r), req.TargetService, "photos"); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
-	src, ok := s.connectors[req.SourceService]
+	src, ok := h.Connectors[req.SourceService]
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q is not connected", req.SourceService))
 		return
@@ -97,10 +97,10 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest,
 			fmt.Sprintf("service %q cannot fetch photo bytes for share yet (supported: %s)",
-				req.SourceService, connectorIDsProviding[kinds.PhotoBytesProvider](s.connectors)))
+				req.SourceService, connectorIDsProviding[kinds.PhotoBytesProvider](h.Connectors)))
 		return
 	}
-	dst, ok := s.connectors[req.TargetService]
+	dst, ok := h.Connectors[req.TargetService]
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q is not connected", req.TargetService))
 		return
@@ -109,13 +109,13 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest,
 			fmt.Sprintf("service %q cannot accept photo shares yet (supported: %s)",
-				req.TargetService, connectorIDsProviding[kinds.PhotoShareTarget](s.connectors)))
+				req.TargetService, connectorIDsProviding[kinds.PhotoShareTarget](h.Connectors)))
 		return
 	}
 
 	data, mime, err := bytesProvider.FetchPhotoBytes(r.Context(), req.SourceID)
 	if err != nil {
-		s.writePhotoShareUpstreamError(w, logger, req.SourceService, err)
+		h.WritePhotoShareUpstreamError(w, logger, req.SourceService, err)
 		return
 	}
 	if len(data) == 0 {
@@ -146,7 +146,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		ContentSHA256: sha,
 	})
 	if err != nil {
-		s.writePhotoShareUpstreamError(w, logger, req.TargetService, err)
+		h.WritePhotoShareUpstreamError(w, logger, req.TargetService, err)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		Note: "PoC ownership claim: content hash of the shared bytes plus a " +
 			"public post locator. Not a cryptographic proof (no signature or trusted timestamp).",
 	}
-	s.recordPhotoShareCopy(
+	h.RecordPhotoShareCopy(
 		req.SourceService, req.SourceID, req.TargetService,
 		result.PostID, result.PostURI, result.PostURL, sha, claim.Note)
 	logger.Info("photo shared", "post_uri", result.PostURI, "post_url", result.PostURL)
@@ -183,7 +183,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) writePhotoShareUpstreamError(w http.ResponseWriter, logger *slog.Logger, serviceID string, err error) {
+func (h *Handlers) WritePhotoShareUpstreamError(w http.ResponseWriter, logger *slog.Logger, serviceID string, err error) {
 	if errors.Is(err, kinds.ErrUnauthorized) || strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
 		logger.Warn("photo share unauthorized upstream", "service", serviceID, "error", err)
 		shared.WriteJSONError(w, http.StatusUnauthorized, fmt.Sprintf("%s rejected the request — check its credentials", serviceID))

@@ -12,6 +12,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -69,7 +70,7 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -111,7 +112,7 @@ func TestHandleLibraryContacts_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404; body = %s", w.Code, w.Body.String())
@@ -141,7 +142,7 @@ func TestHandleLibraryContacts_DeniedByPermission(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body = %s", w.Code, w.Body.String())
@@ -168,7 +169,7 @@ func TestHandleLibraryContacts_UnauthorizedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -197,7 +198,7 @@ func TestHandleLibraryContacts_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
@@ -219,7 +220,7 @@ func TestHandleLibraryContacts_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", w.Code)
 	}
@@ -233,7 +234,7 @@ func TestMentionsContacts(t *testing.T) {
 		"list my contacts",
 	}
 	for _, msg := range yes {
-		if !LibraryKindByID("contacts").Mentions(msg) {
+		if !library.LibraryKindByID("contacts").Mentions(msg) {
 			t.Errorf("Mentions(%q) = false, want true", msg)
 		}
 	}
@@ -244,7 +245,7 @@ func TestMentionsContacts(t *testing.T) {
 		"contact the support team", // "contact" alone is not enough
 	}
 	for _, msg := range no {
-		if LibraryKindByID("contacts").Mentions(msg) {
+		if library.LibraryKindByID("contacts").Mentions(msg) {
 			t.Errorf("Mentions(%q) = true, want false", msg)
 		}
 	}
@@ -293,11 +294,11 @@ func TestPreRequest_ContactsWithoutServiceName(t *testing.T) {
 func TestHasContactProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{}
-	if kindHasProviders("contacts", srv) {
+	if library.KindHasProviders("contacts", srv.library()) {
 		t.Fatal("empty connectors should have no contact providers")
 	}
 	srv.connectors["google"] = &fakeContactProvider{}
-	if !kindHasProviders("contacts", srv) {
+	if !library.KindHasProviders("contacts", srv.library()) {
 		t.Fatal("fake provider should register as contact provider")
 	}
 }

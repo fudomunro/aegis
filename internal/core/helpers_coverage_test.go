@@ -72,7 +72,7 @@ func TestGetConnection(t *testing.T) {
 
 func TestLibraryRouteHandlers_Registry(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	routes := srv.libraryRouteHandlers()
+	routes := srv.library().RouteHandlers()
 	want := []string{
 		"/v1/library/playlists",
 		"/v1/library/tracks",
@@ -197,7 +197,7 @@ func TestScopesSatisfy_CoverageHelpers(t *testing.T) {
 func TestHandleAdminRoutesStillRegistered(t *testing.T) {
 	// Smoke: library route handlers are wired and method-checked.
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	handler := srv.libraryRouteHandlers()["/v1/library/review"]
+	handler := srv.library().RouteHandlers()["/v1/library/review"]
 	req := httptest.NewRequest(http.MethodHead, "/v1/library/review", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)

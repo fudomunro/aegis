@@ -9,9 +9,9 @@
 > mid-campaign; append questions here instead. Precedent for a record like
 > this: [`restructure-core-types-connectors.md`](restructure-core-types-connectors.md).
 
-Status: **in progress** — Phase 0 (rules + this record) and P1 (seam
-vocabulary into `internal/shared`; `internal/kinds` imports `shared` only)
-are landed. P2–P5 pending.
+Status: **in progress** — Phase 0 (rules + this record), P1 (seam
+vocabulary into `internal/shared`), and P2 (`internal/library` + engines)
+are landed. P3–P5 pending.
 
 Related issues: **#358** (this restructure), **#346** (hookhealth/inject
 extraction — their final homes are settled here), **#325** (dissolution of
@@ -75,7 +75,7 @@ The three packages follow **audiences**, matching the listener split and
 | Package | Absorbs from the hub root | Engines it owns |
 |---------|---------------------------|-----------------|
 | `internal/admin` — management surface | `admin.go`, `apps_admin.go`, `apps_grant.go`, `datascope_admin.go`, `flow.go`, `import_admin.go`, `mail_archive_http.go` (admin half), `onboarding.go`, `ownership.go` (handlers), `permissions_overview.go`, `quicken_admin.go`, `searchindex.go` (rename → `searchindex_admin.go`; it is admin status only), `signal_admin.go`, `syncjobs_admin.go`, `timeline_admin.go`, `udk_admin.go` | `core/apps`, `core/udk`, `core/scopes` (store half) |
-| `internal/library` — agent data plane | `agentpaths.go`, `cache.go` (invalidation half), `canonical.go` (write-policy notices), `copy_ledger.go` (`copyInfoFor`), `copy_ledger_http.go`, `entity_links_handlers.go`, `grants.go`, `kinds_host.go`, `librarykind.go`, `mirror.go`, `mirror_entity.go`, `pathclass.go`, `photos_share.go`, `proxy.go`, `udk_handlers.go` | `core/search`, `core/links` |
+| `internal/library` — agent data plane | `agentpaths.go`, `pathclass.go`, `librarykind.go`, `udk_handlers.go`, `canonical.go` (notices half), `grants.go` (enforcement + agent copy), `copy_ledger.go` (record half), `copy_ledger_http.go`, `entity_links_handlers.go`, `mirror.go`, `mirror_entity.go`, `photos_share.go`, `proxy.go` (handler half) + kind composition (see amendments) | `core/search` → `library/search`, `core/links` → `library/links` |
 | `internal/syncjobs` — background consistency | `syncfreshness.go`, `syncfreshness_runner.go`, `syncrunner_canary.go`, `syncrunner_mail.go`, `syncrunner_mirror.go`, `maintenance.go` (collector half), `copy_ledger.go` (`recordTakeoutSnapshot`) | `core/syncjobs` (promoted), `core/copies` |
 
 `internal/syncjobs` serves no HTTP routes; its admin read model lives in
@@ -134,8 +134,8 @@ and is dropped).
 | File | Split |
 |------|-------|
 | `handler.go` | `AuthMiddleware` (`internal/core/handler.go:253`) and `AdminMiddleware` (`internal/core/handler.go:367`) stay in the hub as `auth.go`; `HandlePreRequest` (`internal/core/handler.go:721`) stays in the hub as `hook.go`. Both halves are perimeter — neither joins a surface package |
-| `cache.go` | Generic TTL cache → `internal/shared`; library invalidation (`invalidateLibrary`) → `internal/library` |
-| `copy_ledger.go` | `copyInfoFor` (library response stamps) → `internal/library`; `recordTakeoutSnapshot` (sync bookkeeping) → `internal/syncjobs` |
+| `cache.go` | Generic TTL cache → `internal/shared` (**landed P2**); the invalidation helpers stay in the hub — every caller (admin, OAuth, onboarding, sync) is hub-side and they only work the shared cache |
+| `copy_ledger.go` | `copyInfoFor` stays in the hub — it is the body of `kinds.Host.CopyInfo` (amendment below); `recordMirrorCopy` / `recordPhotoShareCopy` + `mirrorEntityKey` → `internal/library`; `recordTakeoutSnapshot` (sync bookkeeping) → `internal/syncjobs` |
 | `mail_archive_http.go` | Admin status/sync/import handlers → `internal/admin`; `mailReadable*` grant gate and `mailArchiveHints` hook hints → `internal/library` |
 | `maintenance.go` | Signal collector / bundle writer → `internal/syncjobs`; `HandleAdminMaintenanceSignals` → `internal/admin` |
 | `metrics.go` | Access-event feeding stays hub wiring; `HandleMetrics` (admin-scoped) → `internal/admin` |
@@ -175,6 +175,30 @@ These are decided; changing one re-opens the freeze.
    credential perimeter — "Aegis owns OAuth"). Admin owns only the UI that
    drives them.
 
+## Implementation amendments (P2)
+
+Recorded at implementation time; the homes above stand, these refine the
+file-level rows:
+
+1. **`kinds_host.go` splits, it does not move wholesale.** The
+   `kinds.Host` implementation (plus `ownerGrants`, `requestGrants`,
+   `copyInfoFor`, and the `mailArchive` adapter) stays in the hub —
+   Package boundaries #4 assigns Host implementations to the hub, and a
+   second seam under the adapter would be indirection for no gain. The
+   *composition* half (kind registry wiring, engine accessor, route
+   resolution, `userDefinedDeps`) moves to `internal/library/registry.go`.
+2. **`copyInfoFor` stays hub-side** — it is the body of `Host.CopyInfo`.
+3. **Cache invalidation stays hub-side** — every caller is admin/oauth/
+   onboarding/sync, and the helpers only operate the shared cache.
+4. **`proxy.go` splits**: the content-transport handler moves to
+   `internal/library`; `GetValidToken` stays — it implements
+   `connectors.Host` (the credential seam).
+5. **`kinds.ServiceView` gains `Description`** — the content transport's
+   block-deny copy needs it; one neutral string field on the existing view.
+6. The `handler.go` split (into `auth.go` + `hook.go`) is **P5**, as its
+   own row says — P2 needed no part of it; the hook simply calls the copy
+   builders `internal/library` exports.
+
 ## Move phases
 
 Each phase is one `refactor/…` branch and PR; tests move with the code; the
@@ -184,7 +208,7 @@ guardrails table updates in the same commit; the 80% floor never bends.
 |-------|-------|-------------------|
 | **P0** | This record, `AGENTS.md` package boundaries, [`glossary.md`](glossary.md) | none (docs only) |
 | **P1** | Seam vocabulary → `internal/shared`; `internal/kinds` drops `core/policy`, `core/scopes`, `core/audit`, `core/search` imports; `SearchIndex` interface lands in kinds — **landed** | `internal/kinds` row shrinks to `{shared}`; connectors row drops `core/policy` |
-| **P2** | `internal/library` + `core/search`, `core/links`; splits of `cache.go`, `copy_ledger.go`, `canonical.go`, `handler.go` | add `internal/library` row |
+| **P2** | `internal/library` + `core/search`, `core/links`; splits of `cache.go`, `copy_ledger.go`, `canonical.go` — **landed** (the `handler.go` split is P5; see amendments) | `internal/library` row added |
 | **P3** | `internal/admin` + `core/apps`, `core/udk`, scopes store; `searchindex.go` rename | add `internal/admin` row |
 | **P4** | `internal/syncjobs` (promote `core/syncjobs`) + runners, freshness, maintenance, `core/copies` | add `internal/syncjobs` row; drop `core/syncjobs` |
 | **P5** | Hub cleanup: `run.go` CLI → `cmd/`, `musicbrainz.go`, `maturity.go`, `fakeupstream.go`, `httpclient.go`, `handler.go` → `auth.go` + `hook.go` | table shrinkage |

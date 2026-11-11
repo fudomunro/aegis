@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library/links"
 )
 
 // Fuzz targets for merge/matching heuristics (issue #107). These run on

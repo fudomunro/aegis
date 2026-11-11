@@ -12,6 +12,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -53,7 +54,7 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -96,7 +97,7 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -114,7 +115,7 @@ func TestHandleLibraryMessages_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -137,7 +138,7 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -152,7 +153,7 @@ func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -174,7 +175,7 @@ func TestHandleLibraryMessages_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -192,14 +193,14 @@ func TestHandleLibraryMessages_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/messages", strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d", w.Code)
 	}
 }
 
 func TestLibraryKindMessages_Registered(t *testing.T) {
-	k := LibraryKindByID("messages")
+	k := library.LibraryKindByID("messages")
 	if k == nil {
 		t.Fatal("messages library kind not registered")
 	}
@@ -209,7 +210,7 @@ func TestLibraryKindMessages_Registered(t *testing.T) {
 	if !k.Mentions("check my email") {
 		t.Fatal("expected messages keyword match")
 	}
-	handlers := (&Server{}).libraryRouteHandlers()
+	handlers := (&Server{}).library().RouteHandlers()
 	if _, ok := handlers["/v1/library/messages"]; !ok {
 		t.Fatal("messages route not registered")
 	}
@@ -217,7 +218,7 @@ func TestLibraryKindMessages_Registered(t *testing.T) {
 
 func TestLibraryMessagesInstructions_MentionEndpoint(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryInstructionsFor("messages")
+	instr := srv.library().LibraryInstructionsFor("messages")
 	for _, want := range []string{
 		"/v1/library/messages",
 		"messages",
@@ -264,10 +265,10 @@ func TestStampMessageCanonical_OnlyWhenConfigured(t *testing.T) {
 }
 
 func TestMentionsMessages_Keyword(t *testing.T) {
-	if !LibraryKindByID("messages").Mentions("what emails have I received?") {
+	if !library.LibraryKindByID("messages").Mentions("what emails have I received?") {
 		t.Fatal("expected email keyword match")
 	}
-	if LibraryKindByID("messages").Mentions("play some jazz") {
+	if library.LibraryKindByID("messages").Mentions("play some jazz") {
 		t.Fatal("unexpected match")
 	}
 }
@@ -277,10 +278,10 @@ func TestHasMessageProviders_UsesRegistry(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{},
 	}
-	if !kindHasProviders("messages", srv) {
+	if !library.KindHasProviders("messages", srv.library()) {
 		t.Fatal("expected message provider")
 	}
-	if !kindReadable("messages", srv) {
+	if !library.KindReadable("messages", srv.library()) {
 		t.Fatal("expected readable")
 	}
 }

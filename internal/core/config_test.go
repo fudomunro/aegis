@@ -308,9 +308,9 @@ func TestConfig_ConcurrentSetDataGrantsAndReads(t *testing.T) {
 			for _, svc := range cfg.ServiceSnapshots() {
 				_ = svc.IsCanonicalFor("playlists")
 			}
-			_ = srv.libraryReadableFor("tracks")
-			_ = srv.canonicalServiceName("playlists")
-			_ = srv.defaultMirrorSource("playlists")
+			_ = srv.library().LibraryReadableFor("tracks")
+			_ = srv.library().CanonicalServiceName("playlists")
+			_ = srv.library().DefaultMirrorSource("playlists")
 		}
 	}()
 

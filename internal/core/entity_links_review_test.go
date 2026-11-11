@@ -12,8 +12,9 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
+	"github.com/fudomunro/aegis/internal/library/links"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -52,7 +53,7 @@ func TestListProvidersParallel_MergesAndSkipsErrors(t *testing.T) {
 		{ID: "c", List: func(context.Context) ([]int, bool, error) { return []int{3}, false, nil }},
 		{ID: "d", List: func(context.Context) ([]int, bool, error) { return []int{}, false, nil }},
 	}
-	got := listProvidersParallel[int](context.Background(), providers)
+	got := library.ListProvidersParallel[int](context.Background(), providers)
 	if len(got) != 3 {
 		t.Fatalf("got %v", got)
 	}
@@ -64,7 +65,7 @@ func TestListProvidersParallel_MergesAndSkipsErrors(t *testing.T) {
 		t.Fatalf("sum = %d got=%v", sum, got)
 	}
 
-	if listProvidersParallel[int](context.Background(), nil) != nil {
+	if library.ListProvidersParallel[int](context.Background(), nil) != nil {
 		t.Fatal("empty providers should return nil")
 	}
 }
@@ -75,19 +76,19 @@ func TestSourceRefHelpers(t *testing.T) {
 	ar := kinds.Artist{Sources: []kinds.ArtistSource{{Service: "google", ID: "p1"}, {Service: "spotify", ID: "p2"}}}
 	pl := kinds.Playlist{Sources: []kinds.PlaylistSource{{Service: "youtube-music", ID: "PL"}}}
 
-	if got := trackSourceRefs(tr); len(got) != 2 || got[0] != "spotify:t1" || got[1] != "youtube-music:t2" {
+	if got := library.TrackSourceRefs(tr); len(got) != 2 || got[0] != "spotify:t1" || got[1] != "youtube-music:t2" {
 		t.Fatalf("trackSourceRefs = %v", got)
 	}
-	if got := albumSourceRefs(al); len(got) != 1 || got[0] != "spotify:a1" {
+	if got := library.AlbumSourceRefs(al); len(got) != 1 || got[0] != "spotify:a1" {
 		t.Fatalf("albumSourceRefs = %v", got)
 	}
-	if got := artistSourceRefs(ar); len(got) != 2 || got[0] != "google:p1" {
+	if got := library.ArtistSourceRefs(ar); len(got) != 2 || got[0] != "google:p1" {
 		t.Fatalf("artistSourceRefs = %v", got)
 	}
-	if got := playlistSourceRefs(pl); len(got) != 1 || got[0] != "youtube-music:PL" {
+	if got := library.PlaylistSourceRefs(pl); len(got) != 1 || got[0] != "youtube-music:PL" {
 		t.Fatalf("playlistSourceRefs = %v", got)
 	}
-	if got := trackSourceRefs(kinds.Track{}); len(got) != 0 {
+	if got := library.TrackSourceRefs(kinds.Track{}); len(got) != 0 {
 		t.Fatalf("empty track refs = %v", got)
 	}
 }
@@ -96,7 +97,7 @@ func TestHandleMergeReview_MethodNotAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest(http.MethodPost, "/v1/library/review", nil)
 	w := httptest.NewRecorder()
-	srv.HandleMergeReview(w, req)
+	srv.library().HandleMergeReview(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -169,12 +170,12 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/review", nil)
 	w := httptest.NewRecorder()
-	srv.HandleMergeReview(w, req)
+	srv.library().HandleMergeReview(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp MergeReviewResponse
+	var resp library.MergeReviewResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -182,7 +183,7 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 		t.Fatalf("resp = %+v", resp)
 	}
 
-	byKind := map[string][]MergeReviewItem{}
+	byKind := map[string][]library.MergeReviewItem{}
 	for _, item := range resp.Items {
 		byKind[item.Kind] = append(byKind[item.Kind], item)
 		if item.Match != kinds.TrackMatchName && item.Match != kinds.PlaylistMatchName {
@@ -205,7 +206,7 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 	}
 
 	// Name-only playlist join should mention the links endpoint.
-	var plItem MergeReviewItem
+	var plItem library.MergeReviewItem
 	for _, item := range byKind["playlist"] {
 		if strings.EqualFold(item.Name, "Road Trip") || strings.EqualFold(item.Name, "road trip") {
 			plItem = item
@@ -231,11 +232,11 @@ func TestHandleMergeReview_ProviderErrorsStillReturn200(t *testing.T) {
 	}
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/review", nil)
 	w := httptest.NewRecorder()
-	srv.HandleMergeReview(w, req)
+	srv.library().HandleMergeReview(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp MergeReviewResponse
+	var resp library.MergeReviewResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -257,7 +258,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	srv2 := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/links", nil)
 	w := httptest.NewRecorder()
-	srv2.HandleEntityLinks(w, req)
+	srv2.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unconfigured status = %d", w.Code)
 	}
@@ -265,7 +266,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	// Method not allowed
 	req = httptest.NewRequest(http.MethodPut, "/v1/library/links", nil)
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("method status = %d", w.Code)
 	}
@@ -273,7 +274,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	// Invalid JSON
 	req = httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader("{"))
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("bad json status = %d", w.Code)
 	}
@@ -282,7 +283,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/v1/library/links",
 		strings.NewReader(`{"kind":"playlist","sources":[{"service":"spotify","id":"only"}]}`))
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("one source status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -290,7 +291,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	// GET missing id
 	req = httptest.NewRequest(http.MethodGet, "/v1/library/links/nope", nil)
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("missing get status = %d", w.Code)
 	}
@@ -298,7 +299,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	// DELETE missing id
 	req = httptest.NewRequest(http.MethodDelete, "/v1/library/links/nope", nil)
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("missing delete status = %d", w.Code)
 	}
@@ -307,7 +308,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	body := `{"kind":"playlist","sources":[{"service":"spotify","id":"p1"},{"service":"youtube-music","id":"P1"}]}`
 	req = httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -317,7 +318,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	}
 	req = httptest.NewRequest(http.MethodGet, "/v1/library/links/"+created.ID, nil)
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("get status = %d", w.Code)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -52,6 +53,7 @@ func serviceViewOf(svc Service) kinds.ServiceView {
 		ID:           svc.ID,
 		Name:         svc.Name,
 		Action:       svc.Action,
+		Description:  svc.Description,
 		Dataset:      svc.Dataset,
 		CanonicalFor: svc.CanonicalFor,
 	}
@@ -125,121 +127,6 @@ func (s *Server) CopyInfo(kind, serviceID, externalID string) *kinds.CopyInfo {
 }
 
 var _ kinds.Host = (*Server)(nil)
-
-// builtinKinds returns the wired built-in kinds (issue #312). Built lazily
-// so &Server{} fixtures fail open.
-func (s *Server) builtinKinds() []kinds.Kind {
-	s.builtinKindsOnce.Do(func() {
-		s.kindList = kinds.Builtin(s, s.libraryEngine(), kinds.Deps{
-			PlaylistLinkKey: s.links.PlaylistLinkKey,
-			ResolveTracks:   s.resolveTrackEntities,
-			ResolveAlbums:   s.resolveAlbumEntities,
-			ResolveArtists:  s.resolveArtistEntities,
-			PlacesLocalSource: func() bool {
-				return s.timeline != nil && s.timeline.Enabled()
-			},
-			MailArchive: mailArchive{s},
-		})
-	})
-	return s.kindList
-}
-
-// kindRegistry returns the composed kind registry: the wired built-ins
-// plus any loaded user-defined kinds, with the shadow check applied
-// (issue #312). UDK kinds are composed per call so fixtures that load
-// packs late still see them, matching the old per-request route merge.
-func (s *Server) kindRegistry() []kinds.Kind {
-	builtin := s.builtinKinds()
-	if s == nil || s.udks == nil {
-		return builtin
-	}
-	schemas := s.udks.All()
-	udks := make([]kinds.Kind, 0, len(schemas))
-	for _, schema := range schemas {
-		udks = append(udks, kinds.UserDefined(s, s.libraryEngine(), schema, s.userDefinedDeps()))
-	}
-	merged, _ := kinds.MergeUserDefined(builtin, udks)
-	return merged
-}
-
-// registryKind returns the registered kind for id (issue #312).
-func (s *Server) registryKind(id string) (kinds.Kind, bool) {
-	for _, k := range s.kindRegistry() {
-		if k.Def().ID == id {
-			return k, true
-		}
-	}
-	return nil, false
-}
-
-// listHandler resolves a kind's list-route handler (its Def().Path route).
-func listHandler(k kinds.Kind) http.HandlerFunc {
-	for _, route := range k.Routes() {
-		if route.Pattern == k.Def().Path {
-			return route.Handler
-		}
-	}
-	return nil
-}
-
-// userDefinedDeps wires the user-defined kind constructor args (issue
-// #15): overlay-resolved schemas, pack directories, and the data-grant
-// gate.
-func (s *Server) userDefinedDeps() kinds.UserDefinedDeps {
-	return kinds.UserDefinedDeps{
-		Schema: func(id string) kinds.UserDefinedKindSchema {
-			if s.udks == nil {
-				return kinds.UserDefinedKindSchema{}
-			}
-			return s.udks.SchemaWithOverlay(id)
-		},
-		BaseDir: func(id string) string {
-			if s.udks == nil {
-				return ""
-			}
-			return s.udks.DirFor(id)
-		},
-		Readable: s.userDefinedReadable,
-	}
-}
-
-// libraryHandler resolves a kind's list handler through the route
-// registry — the reach-through for tests and admin dispatch (issue #312).
-func (s *Server) libraryHandler(kindID string) http.HandlerFunc {
-	k := LibraryKindByID(kindID)
-	if k == nil {
-		return nil
-	}
-	return s.libraryRouteHandlers()[k.Path]
-}
-
-// routeHandler resolves any registered library route pattern, including
-// kind subroutes (issue #312 reach-through for tests).
-func (s *Server) routeHandler(pattern string) http.HandlerFunc {
-	return s.libraryRouteHandlers()[pattern]
-}
-
-// libraryEngine returns the aggregate pipeline engine. Fixtures that skip
-// engine wiring get one lazily so &Server{} tests fail open instead of
-// panicking (issue #312).
-func (s *Server) libraryEngine() *kinds.Engine {
-	s.kindEngineOnce.Do(func() {
-		if s.kindEngine == nil {
-			cache := s.cache
-			if cache == nil {
-				cache = NewCache()
-			}
-			s.kindEngine = kinds.NewEngine(cache, s.search)
-		}
-	})
-	return s.kindEngine
-}
-
-// waitIndex blocks until scheduled search-index write-behind work finishes
-// (issue #312: the WaitGroup lives on the kinds engine now).
-func (s *Server) waitIndex() {
-	s.libraryEngine().WaitIndex()
-}
 
 // mailArchive adapts the hub's compressed mail archive onto
 // kinds.MailArchive (issue #312). Every method reads s.mail live so
@@ -349,4 +236,50 @@ func (a mailArchive) SourceLastSynced(id string) (string, bool) {
 // the ingest (issue #286).
 func (a mailArchive) Parent(id string) string {
 	return connectors.MailSourceFor(id).Parent
+}
+
+// library returns the agent data plane, built lazily so &Server{} fixtures
+// fail open. Production wires it at startup (after user-defined kinds load)
+// so the UDK registry is captured.
+func (s *Server) library() *library.Handlers {
+	s.libraryOnce.Do(func() {
+		if s.lib == nil {
+			s.lib = &library.Handlers{
+				Host:       s,
+				Deps:       s.libraryDeps(),
+				Cache:      s.cache,
+				Search:     s.search,
+				Links:      s.links,
+				Copies:     s.copyLedger,
+				UDKs:       s.udks,
+				Connectors: s.connectors,
+				BaseURL:    s.baseURL,
+			}
+		}
+	})
+	return s.lib
+}
+
+// libraryDeps wires the kind-constructor args (issue #312): entity-link
+// keys, MBID resolvers, local-source probes, and the mail archive adapter.
+func (s *Server) libraryDeps() kinds.Deps {
+	return kinds.Deps{
+		PlaylistLinkKey: s.links.PlaylistLinkKey,
+		ResolveTracks:   s.resolveTrackEntities,
+		ResolveAlbums:   s.resolveAlbumEntities,
+		ResolveArtists:  s.resolveArtistEntities,
+		PlacesLocalSource: func() bool {
+			return s.timeline != nil && s.timeline.Enabled()
+		},
+		MailArchive: mailArchive{s},
+	}
+}
+
+// serviceViewsOf converts config service rows to the neutral view slice.
+func serviceViewsOf(services []Service) []kinds.ServiceView {
+	views := make([]kinds.ServiceView, 0, len(services))
+	for _, svc := range services {
+		views = append(views, serviceViewOf(svc))
+	}
+	return views
 }

@@ -19,17 +19,16 @@ import (
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/hookhealth"
-	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/core/scopes"
-	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/core/udk"
-	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library/links"
+	"github.com/fudomunro/aegis/internal/library/search"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -449,8 +448,8 @@ func Run() {
 		baseURL:       *baseURL,
 		dataDir:       paths.Dir,
 		config:        cfg,
-		cache:         NewCache(),
-		mbCache:       NewCache(),
+		cache:         shared.NewCache(),
+		mbCache:       shared.NewCache(),
 		tokens:        tokens,
 		oauthStates:   shared.NewStateStore(),
 		rl:            newRateLimiter(),
@@ -477,13 +476,9 @@ func Run() {
 		apertureURL:   *apertureURL,
 	}
 
-	// The kinds aggregate engine owns fetch coalescing and search
-	// write-behind over the shared cache and index (issue #312).
-	srv.kindEngine = kinds.NewEngine(srv.cache, srv.search)
-
 	// Drain async search-index write-behind before searchIndex.Close (its
 	// defer runs later) — registered after the store's defer on purpose.
-	defer srv.waitIndex()
+	defer func() { srv.library().WaitIndex() }()
 
 	// User-defined kinds (issue #15): load schema packs from the user-kinds
 	// directory (default <data-dir>/user-kinds). Fail-open — a bad schema is
@@ -494,7 +489,7 @@ func Run() {
 	}
 	udkReg, udkLoaded := udk.LoadUserDefinedKinds(userKindsDir, udk.DefaultOverlayPath(paths.Config), slog.Default())
 	srv.udks = udkReg
-	srv.registerUserDefinedKinds()
+	srv.library().RegisterUserDefinedKinds()
 	if len(udkLoaded) > 0 {
 		slog.Info("user-defined kinds ready", "dir", userKindsDir, "count", len(udkLoaded))
 	}

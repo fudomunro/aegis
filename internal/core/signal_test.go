@@ -10,14 +10,15 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestSignalLibraryKindRegistered(t *testing.T) {
-	if LibraryKindByID("messages") == nil {
+	if library.LibraryKindByID("messages") == nil {
 		t.Fatal("messages kind missing")
 	}
-	if LibraryKindByID("contacts") == nil {
+	if library.LibraryKindByID("contacts") == nil {
 		t.Fatal("contacts kind missing")
 	}
 }
@@ -102,10 +103,10 @@ func TestPermissionsOverview_SignalImport(t *testing.T) {
 	}
 
 	// Signal connector feeds both library kinds.
-	if !kindHasProviders("messages", srv) {
+	if !library.KindHasProviders("messages", srv.library()) {
 		t.Fatal("messages should have providers when Signal is mounted")
 	}
-	if !kindHasProviders("contacts", srv) {
+	if !library.KindHasProviders("contacts", srv.library()) {
 		t.Fatal("contacts should have providers when Signal is mounted")
 	}
 }
@@ -146,8 +147,8 @@ func TestHandleAdminSignal(t *testing.T) {
 	defer store.Close()
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.signal = store
-	srv.cache = NewCache()
-	srv.mbCache = NewCache()
+	srv.cache = shared.NewCache()
+	srv.mbCache = shared.NewCache()
 
 	// Status
 	req := httptest.NewRequest("GET", "/v1/admin/signal/status", nil)
@@ -193,8 +194,8 @@ func TestHandleAdminSignal(t *testing.T) {
 
 	// Disabled store import
 	srv2 := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv2.cache = NewCache()
-	srv2.mbCache = NewCache()
+	srv2.cache = shared.NewCache()
+	srv2.mbCache = shared.NewCache()
 	w6 := httptest.NewRecorder()
 	srv2.HandleAdminSignal(w6, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{"path":"/tmp/x"}`)))
 	if w6.Code != http.StatusBadRequest {

@@ -9,6 +9,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 )
 
 func TestServer_RecordMirrorCopyAndStamp(t *testing.T) {
@@ -16,7 +17,7 @@ func TestServer_RecordMirrorCopyAndStamp(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.copyLedger = c
 
-	srv.recordMirrorCopy(MirrorKindPlaylists, "spotify", "abc", "youtube-music", "xyz", "Road Trip", 3, "snap1")
+	srv.library().RecordMirrorCopy(library.MirrorKindPlaylists, "spotify", "abc", "youtube-music", "xyz", "Road Trip", 3, "snap1")
 	info := srv.copyInfoFor("playlists", "youtube-music", "xyz")
 	if info == nil {
 		t.Fatal("expected copy stamp")
@@ -76,10 +77,10 @@ func TestServer_RecordTakeoutSnapshot(t *testing.T) {
 }
 
 func TestMirrorEntityKey(t *testing.T) {
-	if got := mirrorEntityKey(MirrorKindTracks, "spotify", ""); got != "liked:spotify" {
+	if got := library.MirrorEntityKey(library.MirrorKindTracks, "spotify", ""); got != "liked:spotify" {
 		t.Fatalf("tracks key = %q", got)
 	}
-	if got := mirrorEntityKey(MirrorKindPlaylists, "spotify", "abc"); got != "playlists:spotify:abc" {
+	if got := library.MirrorEntityKey(library.MirrorKindPlaylists, "spotify", "abc"); got != "playlists:spotify:abc" {
 		t.Fatalf("playlist key = %q", got)
 	}
 }
@@ -107,11 +108,11 @@ func TestHandleLibraryCopies_ListAndFilter(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/copies", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryCopies)(w, req)
+	srv.AuthMiddleware(srv.library().HandleLibraryCopies)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp CopyListResponse
+	var resp library.CopyListResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
@@ -128,8 +129,8 @@ func TestHandleLibraryCopies_ListAndFilter(t *testing.T) {
 	req2 := httptest.NewRequest(http.MethodGet, "/v1/library/copies?kind=playlists", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryCopies)(w2, req2)
-	var filtered CopyListResponse
+	srv.AuthMiddleware(srv.library().HandleLibraryCopies)(w2, req2)
+	var filtered library.CopyListResponse
 	if err := json.Unmarshal(w2.Body.Bytes(), &filtered); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +144,7 @@ func TestHandleLibraryCopies_MethodAndDisabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/library/copies", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryCopies)(w, req)
+	srv.AuthMiddleware(srv.library().HandleLibraryCopies)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -151,11 +152,11 @@ func TestHandleLibraryCopies_MethodAndDisabled(t *testing.T) {
 	req2 := httptest.NewRequest(http.MethodGet, "/v1/library/copies", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryCopies)(w2, req2)
+	srv.AuthMiddleware(srv.library().HandleLibraryCopies)(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("disabled status = %d", w2.Code)
 	}
-	var resp CopyListResponse
+	var resp library.CopyListResponse
 	if err := json.Unmarshal(w2.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}

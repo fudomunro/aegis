@@ -49,19 +49,19 @@ func registerRoutes(mux *http.ServeMux, srv *Server, fakeUpstream *connectors.Fa
 	mux.HandleFunc("POST /v1/apps/token", srv.rateLimitAuth(withBodyLimit(maxAdminBodyBytes, srv.HandleAppToken)))
 	mux.HandleFunc("POST /v1/apps/revoke", srv.rateLimitAuth(withBodyLimit(maxAdminBodyBytes, srv.HandleAppRevoke)))
 
-	for path, handler := range srv.libraryRouteHandlers() {
+	for path, handler := range srv.library().RouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}
 	// Library writes are authorized by the request key's data grant (a
 	// write level unlocks them); the admin credential stays reserved for
 	// policy edits, OAuth, and app registration.
-	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleLibraryMirror)))
+	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.library().HandleLibraryMirror)))
 	// Photo share / ownership-claim PoC (issue #20).
-	mux.HandleFunc("POST /v1/library/photos/share", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandlePhotoShare)))
-	mux.HandleFunc("POST /v1/library/links", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
-	mux.HandleFunc("DELETE /v1/library/links/", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
+	mux.HandleFunc("POST /v1/library/photos/share", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.library().HandlePhotoShare)))
+	mux.HandleFunc("POST /v1/library/links", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.library().HandleEntityLinks)))
+	mux.HandleFunc("DELETE /v1/library/links/", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.library().HandleEntityLinks)))
 
-	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.HandleServiceProxy)))
+	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.library().HandleServiceProxy)))
 
 	registerAuthRoutes(mux, srv)
 	registerAdminRoutes(mux, srv)

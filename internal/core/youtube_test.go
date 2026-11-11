@@ -28,7 +28,7 @@ func TestYouTubeMusicConnector_HandleProxy_NoToken(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", w.Code)
@@ -238,7 +238,7 @@ func TestYouTubeMusicConnector_Playlists_GetByID(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
@@ -323,7 +323,7 @@ func TestYouTubeMusicConnector_Playlists_ReadItems(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())

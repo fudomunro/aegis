@@ -15,6 +15,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -171,7 +172,7 @@ func TestMailSources_LibraryIncludesArchiveCollection(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -207,7 +208,7 @@ func TestMailSources_HasProvidersArchiveOnly(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
 	srv.connectors = map[string]connectors.ServiceConnector{}
-	if !kindHasProviders("messages", srv) {
+	if !library.KindHasProviders("messages", srv.library()) {
 		t.Fatal("expected archive-only HasProviders")
 	}
 	if err := a.Upsert(sampleMailRecord("a1", "Archive only", "hello")); err != nil {

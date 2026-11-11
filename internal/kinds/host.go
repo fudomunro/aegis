@@ -35,6 +35,7 @@ type ServiceView struct {
 	ID           string
 	Name         string
 	Action       string // "inject" or "block"
+	Description  string // block/explain copy shown in deny messages
 	Dataset      string
 	CanonicalFor []string
 }

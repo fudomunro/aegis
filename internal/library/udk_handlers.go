@@ -1,4 +1,4 @@
-package core
+package library
 
 import (
 	"fmt"
@@ -10,11 +10,11 @@ import (
 
 // userDefinedReadable reports whether the owner data grant allows GET on a
 // UDK kind.
-func (s *Server) userDefinedReadable(permType string) bool {
-	if s == nil || s.config == nil {
+func (h *Handlers) UserDefinedReadable(permType string) bool {
+	if h == nil {
 		return false
 	}
-	return s.ownerGrants().AllowsKindMethod(permType, http.MethodGet)
+	return h.Host.OwnerGrants().AllowsKindMethod(permType, http.MethodGet)
 }
 
 // registerUserDefinedKinds prepares loaded UDK kinds for serving.
@@ -23,8 +23,8 @@ func (s *Server) userDefinedReadable(permType string) bool {
 // (shared.MarkKindDefaultNone at load) until an admin data grant names the
 // kind (issue #15 review — packs must not self-enable, including
 // default_access). Schema default_access is informational only.
-func (s *Server) registerUserDefinedKinds() {
-	if s == nil || s.udks == nil {
+func (h *Handlers) RegisterUserDefinedKinds() {
+	if h == nil || h.UDKs == nil {
 		return
 	}
 	// Intentionally no SeedDataGrant: default_access cannot grant access.
@@ -33,10 +33,10 @@ func (s *Server) registerUserDefinedKinds() {
 
 // userDefinedHint returns pre-request instructions for one UDK kind,
 // including the schema-declared field list so agents know the shape.
-func (s *Server) userDefinedHint(schema kinds.UserDefinedKindSchema) string {
+func (h *Handlers) UserDefinedHint(schema kinds.UserDefinedKindSchema) string {
 	kind := schema.LibraryKind()
-	text := kind.Instructions(s.baseURL)
-	if name := s.canonicalServiceName(kind.ID); name != "" {
+	text := kind.Instructions(h.BaseURL)
+	if name := h.CanonicalServiceName(kind.ID); name != "" {
 		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the canonical home.", kind.Label, name)
 	}
 	text += "\nSchema-declared fields for this user-defined kind:"

@@ -11,6 +11,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 )
 
 // davWriteMock is a CardDAV PUT sink for mirror tests (issue #146).
@@ -68,8 +69,8 @@ func TestRecordMirrorItemCopy_StoresETagWatermark(t *testing.T) {
 	}
 	defer ledger.Close()
 	s := &Server{copyLedger: ledger}
-	s.recordMirrorItemCopy(MirrorKindContacts, "Ada Lovelace", "dav-contacts", "ada.vcf", "Ada Lovelace", `"etag-1"`)
-	recs := ledger.List(copies.Filter{Kind: MirrorKindContacts})
+	s.library().RecordMirrorItemCopy(library.MirrorKindContacts, "Ada Lovelace", "dav-contacts", "ada.vcf", "Ada Lovelace", `"etag-1"`)
+	recs := ledger.List(copies.Filter{Kind: library.MirrorKindContacts})
 	if len(recs) != 1 {
 		t.Fatalf("got %d records", len(recs))
 	}
@@ -85,22 +86,22 @@ func TestEntityMirrorLookup_KnownAndUnknown(t *testing.T) {
 	srv.connectors[connectors.CalDAVServiceID] = connectors.NewCalDAVConnector(srv)
 	srv.connectors[connectors.GoogleCalendarServiceID] = connectors.NewGoogleCalendarConnector(srv)
 
-	if _, err := mirrorOpFor[kinds.ContactProvider](srv, connectors.CardDAVServiceID, "contact mirror source"); err != nil {
+	if _, err := library.MirrorOpFor[kinds.ContactProvider](srv.library(), connectors.CardDAVServiceID, "contact mirror source"); err != nil {
 		t.Fatalf("carddav source: %v", err)
 	}
-	if _, err := mirrorOpFor[kinds.ContactWriteProvider](srv, connectors.GoogleContactsServiceID, "contact mirror target"); err != nil {
+	if _, err := library.MirrorOpFor[kinds.ContactWriteProvider](srv.library(), connectors.GoogleContactsServiceID, "contact mirror target"); err != nil {
 		t.Fatalf("google contacts target: %v", err)
 	}
-	if _, err := mirrorOpFor[kinds.CalendarEventProvider](srv, connectors.CalDAVServiceID, "event mirror source"); err != nil {
+	if _, err := library.MirrorOpFor[kinds.CalendarEventProvider](srv.library(), connectors.CalDAVServiceID, "event mirror source"); err != nil {
 		t.Fatalf("caldav source: %v", err)
 	}
-	if _, err := mirrorOpFor[kinds.CalendarEventWriteProvider](srv, connectors.GoogleCalendarServiceID, "event mirror target"); err != nil {
+	if _, err := library.MirrorOpFor[kinds.CalendarEventWriteProvider](srv.library(), connectors.GoogleCalendarServiceID, "event mirror target"); err != nil {
 		t.Fatalf("google calendar target: %v", err)
 	}
-	if _, err := mirrorOpFor[kinds.ContactProvider](srv, "nope", "contact mirror source"); err == nil {
+	if _, err := library.MirrorOpFor[kinds.ContactProvider](srv.library(), "nope", "contact mirror source"); err == nil {
 		t.Fatal("expected unknown source error")
 	}
-	if _, err := mirrorOpFor[kinds.CalendarEventWriteProvider](srv, "nope", "event mirror target"); err == nil {
+	if _, err := library.MirrorOpFor[kinds.CalendarEventWriteProvider](srv.library(), "nope", "event mirror target"); err == nil {
 		t.Fatal("expected unknown target error")
 	}
 }
@@ -130,11 +131,11 @@ func TestHandleEntityMirror_ContactsDryRun(t *testing.T) {
 	srv.tokens.Save("google", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.CacheSet("carddav:collection", ts.URL+"/remote.php/dav/addressbooks/alice/default/", time.Hour)
 
-	req := MirrorRequest{Kind: MirrorKindContacts, SourceService: connectors.CardDAVServiceID,
+	req := library.MirrorRequest{Kind: library.MirrorKindContacts, SourceService: connectors.CardDAVServiceID,
 		TargetService: "google", DryRun: true}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/v1/library/mirror", strings.NewReader(`{}`))
-	srv.handleEntityMirror(w, r, req)
+	srv.library().HandleEntityMirror(w, r, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("code = %d body = %s", w.Code, w.Body.String())
 	}

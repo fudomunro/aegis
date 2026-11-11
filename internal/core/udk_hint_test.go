@@ -28,7 +28,7 @@ func TestUserDefinedHint_ListsSortedFieldsAndCanonical(t *testing.T) {
 		},
 	}
 
-	hint := srv.userDefinedHint(schema)
+	hint := srv.library().UserDefinedHint(schema)
 	for _, want := range []string{
 		"/v1/library/reading-list",
 		"Notion Export",

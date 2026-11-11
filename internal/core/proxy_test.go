@@ -14,6 +14,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -57,7 +58,7 @@ func TestHandleServiceProxy_RejectsNonContentPaths(t *testing.T) {
 		req := httptest.NewRequest("GET", path, nil)
 		req.Header.Set("Authorization", "Bearer test-key")
 		w := httptest.NewRecorder()
-		srv.HandleServiceProxy(w, req)
+		srv.library().HandleServiceProxy(w, req)
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("%s: status = %d, want 404, body=%s", path, w.Code, w.Body.String())
 		}
@@ -80,7 +81,7 @@ func TestHandleServiceProxy_ContentPathDelegatesToConnector(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/services/immich/assets/a1/original", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
@@ -104,7 +105,7 @@ func TestHandleServiceProxy_ContentPathWithoutConnector(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/services/ghost/messages/m1", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 (no generic pass-through)", w.Code)
@@ -118,7 +119,7 @@ func TestHandleServiceProxy_UnknownService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/services/nope/import/status", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
@@ -139,7 +140,7 @@ func TestHandleServiceProxy_BlockedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/services/spotify/playlists/pl1", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
@@ -164,7 +165,7 @@ func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/services/spotify/playlists/pl1", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body=%s", w.Code, w.Body.String())
@@ -188,7 +189,7 @@ func TestHandleServiceProxy_ContentPathAllowedByPermission(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/services/gmail/messages/m1?format=full", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
@@ -216,7 +217,7 @@ func TestHandleServiceProxy_NonCanonicalPath(t *testing.T) {
 		req := httptest.NewRequest("GET", path, nil)
 		req.Header.Set("Authorization", "Bearer test-key")
 		w := httptest.NewRecorder()
-		srv.HandleServiceProxy(w, req)
+		srv.library().HandleServiceProxy(w, req)
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("%s: status = %d, want 400", path, w.Code)
 		}
@@ -236,7 +237,7 @@ func TestHandleServiceProxy_ImportStatusAllowed(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/services/signal/import/status", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -259,7 +260,7 @@ func TestHandleServiceProxy_PickerAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/services/google-photos/picker/sessions", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -280,7 +281,7 @@ func TestHandleServiceProxy_RecordsAccessOnReject(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/services/spotify/me/player", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.HandleServiceProxy(w, req)
+	srv.library().HandleServiceProxy(w, req)
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
@@ -292,10 +293,10 @@ func TestHandleServiceProxy_RecordsAccessOnReject(t *testing.T) {
 
 func TestIsAgentContentPath_EndToEndClassification(t *testing.T) {
 	// Ensure library list paths and content paths stay distinct at the HTTP edge.
-	if IsAgentContentPath("/me/tracks") {
+	if library.IsAgentContentPath("/me/tracks") {
 		t.Fatal("/me/tracks must not be content")
 	}
-	if !IsAgentContentPath("/playlists/pl1/items") {
+	if !library.IsAgentContentPath("/playlists/pl1/items") {
 		t.Fatal("/playlists/pl1/items must be content")
 	}
 	var _ = json.Marshal
@@ -311,8 +312,8 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		authMode:    AuthModeAPIKey,
 		baseURL:     baseURL,
 		config:      cfg,
-		cache:       NewCache(),
-		mbCache:     NewCache(),
+		cache:       shared.NewCache(),
+		mbCache:     shared.NewCache(),
 		tokens:      &tokens.TokenStore{Tokens: make(map[string]*tokens.OAuthToken), Secrets: make(map[string]string)},
 		oauthStates: shared.NewStateStore(),
 		connectors:  make(map[string]connectors.ServiceConnector),

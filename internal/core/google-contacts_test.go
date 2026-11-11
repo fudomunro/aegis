@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/library"
 )
 
 func TestHasContactProviders_GoogleContacts(t *testing.T) {
@@ -11,7 +12,7 @@ func TestHasContactProviders_GoogleContacts(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		connectors.GoogleContactsServiceID: connectors.NewGoogleContactsConnector(srv),
 	}
-	if !kindHasProviders("contacts", srv) {
+	if !library.KindHasProviders("contacts", srv.library()) {
 		t.Fatal("Google Contacts connector should register as ContactProvider")
 	}
 }

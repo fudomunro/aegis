@@ -20,6 +20,24 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **The agent data plane leaves the hub (issue #358, P2).** `internal/library`
+  now owns everything about serving library data to agents: the fixed
+  `/v1/library/*` write and maintenance routes (mirror, photo share, entity
+  links, merge review, copy ledger reads), the `/v1/services` content
+  transport handler, the kind-registry composition behind those routes, and
+  the agent-facing library copy (kind instructions, UDK hints, write-policy
+  notices, data-grant notices — the pre-request hook calls into the package
+  for that copy). The local search index and entity-link store move under
+  the package (`library/search`, `library/links`); the generic response
+  cache lands in `internal/shared`. The hub keeps the perimeter: the
+  `kinds.Host` implementation, `GetValidToken` (the `connectors.Host`
+  credential seam), OAuth, auth middleware, and the hook's JSON surgery.
+  `kinds.ServiceView` gains `Description` so the content transport's
+  block-deny copy stays intact. Mixed-file splits and the two recorded
+  refinements (Host composition vs implementation; cache invalidation
+  staying hub-side) are in `docs/restructure-packaging.md`. No product
+  behavior change.
+
 - **Seam vocabulary moves to `internal/shared` (issue #358, P1).** The
   shapes the kinds pipeline exchanges with the hub leave `internal/core`
   sub-packages so `internal/kinds` imports `internal/shared` only. Grant

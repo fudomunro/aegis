@@ -1,4 +1,4 @@
-package core
+package library
 
 import (
 	"net/http"
@@ -20,7 +20,7 @@ type CopyListResponse struct {
 // HandleLibraryCopies lists durable copy-ledger rows (issue #76).
 //
 // GET /v1/library/copies?kind=&service=&status=&entity_key=
-func (s *Server) HandleLibraryCopies(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleLibraryCopies(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -33,8 +33,8 @@ func (s *Server) HandleLibraryCopies(w http.ResponseWriter, r *http.Request) {
 		EntityKey: strings.TrimSpace(q.Get("entity_key")),
 	}
 	var rows []copies.Record
-	if s != nil && s.copyLedger != nil {
-		rows = s.copyLedger.List(filter)
+	if h != nil && h.Copies != nil {
+		rows = h.Copies.List(filter)
 	}
 	resp := CopyListResponse{
 		Copies:    rows,

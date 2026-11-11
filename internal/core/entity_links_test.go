@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library/links"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -63,7 +63,7 @@ func TestHandleEntityLinks_HTTP(t *testing.T) {
 	body := `{"kind":"playlist","sources":[{"service":"spotify","id":"p1"},{"service":"youtube-music","id":"P1"}],"note":"n"}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
 	w := httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -75,7 +75,7 @@ func TestHandleEntityLinks_HTTP(t *testing.T) {
 	// List
 	req = httptest.NewRequest(http.MethodGet, "/v1/library/links", nil)
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("list status = %d", w.Code)
 	}
@@ -83,7 +83,7 @@ func TestHandleEntityLinks_HTTP(t *testing.T) {
 	// Delete
 	req = httptest.NewRequest(http.MethodDelete, "/v1/library/links/"+created.ID, nil)
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("delete status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -105,7 +105,7 @@ func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
 	body := `{"kind":"playlist","sources":[{"service":"spotify","id":"p1"},{"service":"youtube-music","id":"P1"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
 	w := httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("read-only grant must deny link create: status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -113,7 +113,7 @@ func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
 	cfg.typePolicies = policy.DataGrants{"playlists": {Default: shared.AccessFull}}
 	req = httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("write grant must allow link create: status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -126,7 +126,7 @@ func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
 	cfg.typePolicies = policy.DataGrants{"playlists": {Default: shared.AccessRead}}
 	req = httptest.NewRequest(http.MethodDelete, "/v1/library/links/"+created.ID, nil)
 	w = httptest.NewRecorder()
-	srv.HandleEntityLinks(w, req)
+	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("read-only grant must deny link delete: status = %d body=%s", w.Code, w.Body.String())
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -77,7 +78,7 @@ func TestHandleLibraryMirror_RejectsBadInput(t *testing.T) {
 			req := httptest.NewRequest("POST", "/v1/library/mirror", bytes.NewReader(body))
 			req.Header.Set("Authorization", "Bearer test-key")
 			w := httptest.NewRecorder()
-			srv.AuthMiddleware(srv.HandleLibraryMirror)(w, req)
+			srv.AuthMiddleware(srv.library().HandleLibraryMirror)(w, req)
 			if w.Code != tc.want {
 				t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 			}
@@ -93,7 +94,7 @@ func TestHandleLibraryMirror_DeniesReadOnlyTarget(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/mirror", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMirror)(w, req)
+	srv.AuthMiddleware(srv.library().HandleLibraryMirror)(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -141,11 +142,11 @@ func TestHandleLibraryMirror_DryRunDoesNotWrite(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/mirror", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMirror)(w, req)
+	srv.AuthMiddleware(srv.library().HandleLibraryMirror)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var res MirrorResult
+	var res library.MirrorResult
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -216,11 +217,11 @@ func TestHandleLibraryMirror_SpotifyToYouTubePlaylist(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/mirror", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMirror)(w, req)
+	srv.AuthMiddleware(srv.library().HandleLibraryMirror)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var res MirrorResult
+	var res library.MirrorResult
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -272,11 +273,11 @@ func TestHandleLibraryMirror_DefaultsSourceToCanonical(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/mirror", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMirror)(w, req)
+	srv.AuthMiddleware(srv.library().HandleLibraryMirror)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var res MirrorResult
+	var res library.MirrorResult
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -287,7 +288,7 @@ func TestHandleLibraryMirror_DefaultsSourceToCanonical(t *testing.T) {
 
 func TestLibraryInstructions_MentionMirrorEndpoint(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryInstructionsFor("playlists")
+	instr := srv.library().LibraryInstructionsFor("playlists")
 	if !strings.Contains(instr, "/v1/library/mirror") {
 		t.Fatalf("instructions should mention mirror endpoint: %s", instr)
 	}

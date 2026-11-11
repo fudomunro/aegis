@@ -46,7 +46,7 @@ func TestLoadUserDefinedKinds_FromExamplePack(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/reading-list"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/reading-list"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -111,12 +111,12 @@ func TestServer_UDKRouteAndAggregate(t *testing.T) {
 	}
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udks = reg
-	srv.registerUserDefinedKinds()
+	srv.library().RegisterUserDefinedKinds()
 	// Packs cannot self-enable; an admin data grant must name the kind.
 	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: shared.AccessRead})
 
 	schema, _ := reg.Get("reading-list")
-	handler := srv.routeHandler(schema.Path)
+	handler := srv.library().RouteHandler(schema.Path)
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -137,11 +137,11 @@ func TestServer_UDKRouteAndAggregate(t *testing.T) {
 		t.Errorf("schema_id = %q", list.SchemaID)
 	}
 
-	handlers := srv.libraryRouteHandlers()
+	handlers := srv.library().RouteHandlers()
 	if _, ok := handlers["/v1/library/reading-list"]; !ok {
 		t.Error("UDK route not registered in libraryRouteHandlers")
 	}
-	kinds := srv.allLibraryKinds()
+	kinds := srv.library().AllLibraryKinds()
 	found := false
 	for _, k := range kinds {
 		if k.ID == "reading-list" {
@@ -166,9 +166,9 @@ func TestServer_UDKDeniedWhenNotEnabled(t *testing.T) {
 	reg, _ := udk.LoadUserDefinedKinds(dir, "", nil)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udks = reg
-	srv.registerUserDefinedKinds()
+	srv.library().RegisterUserDefinedKinds()
 	schema, _ := reg.Get("secret-log")
-	handler := srv.routeHandler(schema.Path)
+	handler := srv.library().RouteHandler(schema.Path)
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/secret-log", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()

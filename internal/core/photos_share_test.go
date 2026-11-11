@@ -99,7 +99,7 @@ func postPhotoShare(t *testing.T, srv *Server, body map[string]any) *httptest.Re
 	req := httptest.NewRequest("POST", "/v1/library/photos/share", bytes.NewReader(raw))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandlePhotoShare)(w, req)
+	srv.AuthMiddleware(srv.library().HandlePhotoShare)(w, req)
 	return w
 }
 
@@ -212,7 +212,7 @@ func TestHandlePhotoShare_RejectsBadInput(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos/share", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandlePhotoShare)(w, req)
+	srv.AuthMiddleware(srv.library().HandlePhotoShare)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status = %d", w.Code)
 	}

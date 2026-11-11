@@ -9,6 +9,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -117,13 +118,13 @@ func TestCanonicalProxyPath(t *testing.T) {
 		"///a//b/":    "/a/b",
 	}
 	for in, want := range ok {
-		got, err := CanonicalProxyPath(in)
+		got, err := library.CanonicalProxyPath(in)
 		if err != nil {
-			t.Errorf("CanonicalProxyPath(%q) error: %v", in, err)
+			t.Errorf("library.CanonicalProxyPath(%q) error: %v", in, err)
 			continue
 		}
 		if got != want {
-			t.Errorf("CanonicalProxyPath(%q) = %q, want %q", in, got, want)
+			t.Errorf("library.CanonicalProxyPath(%q) = %q, want %q", in, got, want)
 		}
 	}
 
@@ -138,8 +139,8 @@ func TestCanonicalProxyPath(t *testing.T) {
 		"/me\x00player",
 	}
 	for _, in := range bad {
-		if got, err := CanonicalProxyPath(in); err == nil {
-			t.Errorf("CanonicalProxyPath(%q) = %q, want error", in, got)
+		if got, err := library.CanonicalProxyPath(in); err == nil {
+			t.Errorf("library.CanonicalProxyPath(%q) = %q, want error", in, got)
 		}
 	}
 }
@@ -157,7 +158,7 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/v1/services/spotify/me/tracks", nil)
 	w := httptest.NewRecorder()
-	if srv.AllowDataPermission(w, req, svc, "/me/tracks") {
+	if srv.library().AllowDataPermission(w, req, serviceViewOf(*svc), "/me/tracks") {
 		t.Fatal("expected POST /me/tracks denied under default read")
 	}
 	if w.Code != http.StatusForbidden {
@@ -169,19 +170,19 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 
 	req = httptest.NewRequest("GET", "/v1/services/spotify/me/playlists", nil)
 	w = httptest.NewRecorder()
-	if !srv.AllowDataPermission(w, req, svc, "/me/playlists") {
+	if !srv.library().AllowDataPermission(w, req, serviceViewOf(*svc), "/me/playlists") {
 		t.Fatal("expected GET playlists allowed")
 	}
 }
 
 func TestAllDataDenied(t *testing.T) {
-	if !allDataDenied(nil) {
+	if !library.AllDataDenied(nil) {
 		t.Fatal("nil grants deny everything")
 	}
-	if allDataDenied(shared.GrantMap{"default": shared.AccessRead, "player": shared.AccessNone}) {
+	if library.AllDataDenied(shared.GrantMap{"default": shared.AccessRead, "player": shared.AccessNone}) {
 		t.Fatal("default read should not be all-denied")
 	}
-	if !allDataDenied(shared.GrantMap{"default": shared.AccessNone, "player": shared.AccessNone, "tracks": "deny"}) {
+	if !library.AllDataDenied(shared.GrantMap{"default": shared.AccessNone, "player": shared.AccessNone, "tracks": "deny"}) {
 		t.Fatal("all none should be all-denied")
 	}
 }
@@ -202,7 +203,7 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/services/spotify/me/tracks", nil)
 	w := httptest.NewRecorder()
-	if srv.AllowDataPermission(w, req, svc, "/me/tracks") {
+	if srv.library().AllowDataPermission(w, req, serviceViewOf(*svc), "/me/tracks") {
 		t.Fatal("POST tracks should be denied: connector has no write ops for tracks")
 	}
 	if w.Code != http.StatusForbidden {
@@ -214,7 +215,7 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 
 	req = httptest.NewRequest(http.MethodGet, "/v1/services/spotify/me/tracks", nil)
 	w = httptest.NewRecorder()
-	if !srv.AllowDataPermission(w, req, svc, "/me/tracks") {
+	if !srv.library().AllowDataPermission(w, req, serviceViewOf(*svc), "/me/tracks") {
 		t.Fatal("GET tracks should be allowed under read-write permission")
 	}
 }
@@ -230,7 +231,7 @@ func TestPermissionNotice_DerivesFromGrantMap(t *testing.T) {
 		"player":          shared.AccessNone,
 		"freebusy":        shared.AccessRead,
 	}
-	notice := permissionNotice(open)
+	notice := library.PermissionNotice(open)
 	if !strings.Contains(notice, "player") || !strings.Contains(notice, "not available") {
 		t.Fatalf("negative mode should list denials: %s", notice)
 	}
@@ -244,7 +245,7 @@ func TestPermissionNotice_DerivesFromGrantMap(t *testing.T) {
 		"playlists":           shared.AccessFull,
 		"transactions/totals": shared.AccessRead,
 	}
-	notice = permissionNotice(closed)
+	notice = library.PermissionNotice(closed)
 	if !strings.Contains(notice, "only these library routes are available") {
 		t.Fatalf("positive mode missing: %s", notice)
 	}
@@ -257,7 +258,7 @@ func TestPermissionNotice_DerivesFromGrantMap(t *testing.T) {
 		t.Fatalf("totals note missing: %s", notice)
 	}
 
-	if permissionNotice(nil) != "" {
+	if library.PermissionNotice(nil) != "" {
 		t.Fatal("nil map should produce no notice")
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -119,7 +120,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/v1/library/transactions", nil)
 	w := httptest.NewRecorder()
-	srv.libraryHandler("transactions")(w, req)
+	srv.library().LibraryHandler("transactions")(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -138,7 +139,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 	req2 := httptest.NewRequest("GET", "/v1/library/transactions/totals", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/transactions/totals"))(w2, req2)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/transactions/totals"))(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -169,7 +170,7 @@ func TestHandleLibraryTransactions_Filters(t *testing.T) {
 	}
 	req := httptest.NewRequest("GET", "/v1/library/transactions?after=2024-03-08", nil)
 	w := httptest.NewRecorder()
-	srv.libraryHandler("transactions")(w, req)
+	srv.library().LibraryHandler("transactions")(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -347,7 +348,7 @@ func TestGenerateSampleLibrary_TransactionsMerge(t *testing.T) {
 }
 
 func TestLibraryKindTransactions_Registered(t *testing.T) {
-	k := LibraryKindByID("transactions")
+	k := library.LibraryKindByID("transactions")
 	if k == nil {
 		t.Fatal("transactions kind not registered")
 	}

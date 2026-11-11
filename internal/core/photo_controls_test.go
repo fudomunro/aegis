@@ -9,6 +9,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 )
 
 func preRequestWithMessage(t *testing.T, srv *Server, userMessage string) GuardrailResponse {
@@ -187,7 +188,7 @@ func TestImmichSetup_DefaultAliasesMatchPhotoQuestions(t *testing.T) {
 }
 
 func TestLibraryKind_PhotosMentionsSingularForms(t *testing.T) {
-	k := LibraryKindByID("photos")
+	k := library.LibraryKindByID("photos")
 	if k == nil {
 		t.Fatal("photos kind not registered")
 	}

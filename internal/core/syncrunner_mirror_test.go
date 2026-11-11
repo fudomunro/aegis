@@ -14,6 +14,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -100,7 +101,7 @@ func (s *stubMirrorSource) ListUserLikedTracksPage(ctx context.Context, cursor s
 
 // mirrorStubServer builds a Server whose mirror adapters are stubs and whose
 // whose owner data grants are read-write, so the real permission checks pass.
-func mirrorStubServer(t *testing.T, src mirrorSource, dst mirrorTarget) *Server {
+func mirrorStubServer(t *testing.T, src library.MirrorSource, dst library.MirrorTarget) *Server {
 	t.Helper()
 	grants := policy.DataGrants{
 		"playlists": {Default: shared.AccessFull},
@@ -117,14 +118,14 @@ func mirrorStubServer(t *testing.T, src mirrorSource, dst mirrorTarget) *Server 
 	t.Cleanup(func() { _ = ledger.Close() })
 	srv.copyLedger = ledger
 	if src != nil {
-		srv.mirrorSourceFn = func(serviceID, kind string) (mirrorSource, error) { return src, nil }
+		srv.library().MirrorSourceFn = func(serviceID, kind string) (library.MirrorSource, error) { return src, nil }
 	}
-	srv.mirrorTargetFn = func(serviceID, kind string) (mirrorTarget, error) { return dst, nil }
+	srv.library().MirrorTargetFn = func(serviceID, kind string) (library.MirrorTarget, error) { return dst, nil }
 	return srv
 }
 
 // mirrorTestServer swaps in stub adapters and a fresh ledger/job store.
-func mirrorTestServer(t *testing.T, src mirrorSource, dst mirrorTarget) (*Server, *syncjobs.JobStore, *syncjobs.SyncWorker) {
+func mirrorTestServer(t *testing.T, src library.MirrorSource, dst library.MirrorTarget) (*Server, *syncjobs.JobStore, *syncjobs.SyncWorker) {
 	t.Helper()
 	srv := mirrorStubServer(t, src, dst)
 	store := testJobStore(t)
@@ -145,7 +146,7 @@ func TestMirrorRunner_ChainsIntoOneTargetPlaylist(t *testing.T) {
 	srv, store, w := mirrorTestServer(t, src, dst)
 
 	mustEnqueue(t, store, syncjobs.SyncEnqueue{
-		Kind: MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeMirror, Service: "youtube-music",
+		Kind: library.MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeMirror, Service: "youtube-music",
 		Payload: map[string]any{
 			"kind": "playlists", "source_service": "spotify", "source_id": "src1",
 			"target_service": "youtube-music", "cursor": "", "limit": 2,
@@ -170,7 +171,7 @@ func TestMirrorRunner_ChainsIntoOneTargetPlaylist(t *testing.T) {
 	}
 
 	// The copy ledger row is stamped once, pointing at the single target.
-	rec, ok := srv.copyLedger.Get(MirrorKindPlaylists, "youtube-music", dst.lastID)
+	rec, ok := srv.copyLedger.Get(library.MirrorKindPlaylists, "youtube-music", dst.lastID)
 	if !ok {
 		t.Fatalf("copy row missing for target %q", dst.lastID)
 	}
@@ -189,7 +190,7 @@ func TestMirrorRunner_LikedTracksChainAndStamp(t *testing.T) {
 	srv, store, w := mirrorTestServer(t, src, dst)
 
 	mustEnqueue(t, store, syncjobs.SyncEnqueue{
-		Kind: MirrorKindTracks, JobType: syncjobs.SyncJobTypeMirror, Service: "spotify",
+		Kind: library.MirrorKindTracks, JobType: syncjobs.SyncJobTypeMirror, Service: "spotify",
 		Payload: map[string]any{
 			"kind": "tracks", "source_service": "spotify",
 			"target_service": "youtube-music", "limit": 2,
@@ -204,7 +205,7 @@ func TestMirrorRunner_LikedTracksChainAndStamp(t *testing.T) {
 	if dst.copied != 3 {
 		t.Fatalf("copied = %d, want 3", dst.copied)
 	}
-	if _, ok := srv.copyLedger.Get(MirrorKindTracks, "youtube-music", ""); !ok {
+	if _, ok := srv.copyLedger.Get(library.MirrorKindTracks, "youtube-music", ""); !ok {
 		t.Fatal("liked-tracks copy row must be stamped")
 	}
 }
@@ -222,7 +223,7 @@ func TestMirrorRunner_RepairSkipsWhatTheTargetHolds(t *testing.T) {
 	}
 	dst := &recordingMirrorTarget{}
 	srv := mirrorStubServer(t, nil, dst)
-	srv.mirrorSourceFn = func(serviceID, kind string) (mirrorSource, error) {
+	srv.library().MirrorSourceFn = func(serviceID, kind string) (library.MirrorSource, error) {
 		if serviceID == "youtube-music" {
 			return target, nil
 		}
@@ -234,7 +235,7 @@ func TestMirrorRunner_RepairSkipsWhatTheTargetHolds(t *testing.T) {
 	w := syncjobs.NewSyncWorker(store, reg, syncjobs.SyncWorkerOptions{Workers: 1})
 
 	mustEnqueue(t, store, syncjobs.SyncEnqueue{
-		Kind: MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeRepair, Service: "youtube-music",
+		Kind: library.MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeRepair, Service: "youtube-music",
 		Payload: map[string]any{
 			"kind": "playlists", "source_service": "spotify", "source_id": "src1",
 			"target_service": "youtube-music", "target_id": "PL-existing", "force": true,
@@ -272,7 +273,7 @@ func TestMirrorRunner_TerminalValidation(t *testing.T) {
 	} {
 		b, _ := json.Marshal(payload)
 		mustEnqueue(t, store, syncjobs.SyncEnqueue{
-			Kind: MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeMirror,
+			Kind: library.MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeMirror,
 			EntityKey: fmt.Sprint("bad-", i), Payload: payload,
 		})
 		// Force the payload onto the queued job by re-enqueueing with the id.
@@ -290,7 +291,7 @@ func TestMirrorRunner_DryRunPlacesNothing(t *testing.T) {
 	dst := &recordingMirrorTarget{}
 	srv, store, w := mirrorTestServer(t, src, dst)
 	mustEnqueue(t, store, syncjobs.SyncEnqueue{
-		Kind: MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeMirror, Service: "youtube-music",
+		Kind: library.MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeMirror, Service: "youtube-music",
 		Payload: map[string]any{
 			"kind": "playlists", "source_service": "spotify", "source_id": "s",
 			"target_service": "youtube-music", "dry_run": true,
@@ -306,7 +307,7 @@ func TestMirrorRunner_DryRunPlacesNothing(t *testing.T) {
 	if job.State != syncjobs.SyncJobSucceeded {
 		t.Fatalf("job state = %s, want succeeded", job.State)
 	}
-	if _, ok := srv.copyLedger.Get(MirrorKindPlaylists, "youtube-music", "s"); ok {
+	if _, ok := srv.copyLedger.Get(library.MirrorKindPlaylists, "youtube-music", "s"); ok {
 		t.Fatal("dry-run must not stamp a copy row")
 	}
 }
@@ -316,7 +317,7 @@ func TestMirrorRunner_RetriesUpstreamError(t *testing.T) {
 	dst := &recordingMirrorTarget{failOnce: true}
 	_, store, w := mirrorTestServer(t, src, dst)
 	mustEnqueue(t, store, syncjobs.SyncEnqueue{
-		Kind: MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeMirror, Service: "youtube-music",
+		Kind: library.MirrorKindPlaylists, JobType: syncjobs.SyncJobTypeMirror, Service: "youtube-music",
 		MaxAttempts: 3,
 		Payload: map[string]any{
 			"kind": "playlists", "source_service": "spotify", "source_id": "s",

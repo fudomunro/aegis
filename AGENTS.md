@@ -111,7 +111,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Pre-request injection | `internal/core/inject` (engine: wire-shape detection + JSON surgery), `internal/core` hub (`handler.go` hook) | `allow` / `block` / `modify`; structured `Operation` contract |
 | Hook-health engine | `internal/core/hookhealth/` (engine), `internal/core` hub (`hookhealth.go` wrapper, admin handlers) | Ring of redacted hook observations + Aperture config checks (`/v1/admin/hook-health`); `hook_skip.go` stays in the hub |
 | ServiceConnector interface | `internal/connectors/host.go` | `Capabilities` + `SystemInstructions` + `HandleProxy`; the hub wires the registry |
-| Generic/shared content transport | `internal/connectors` (upstream transport), `internal/core` hub (token injection/cache), `internal/shared` (HTTP client) | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
+| Generic/shared content transport | `internal/library` (`proxy.go` handler), `internal/connectors` (upstream transport), `internal/core` hub (`GetValidToken` — the `connectors.Host` credential seam), `internal/shared` (HTTP client) | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths. Tokens never leave the hub |
 | Shared plumbing + seam vocabulary (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table, body-shape tokens; capability/onboarding/mail-ingest/ownership seam shapes) | `internal/shared` | Stdlib-only imports. One owner: plumbing and the shapes two internal packages exchange to agree on a contract — shapes and trivial pure constructors/accessors/predicates over them (the `kindrules.go` table), no state, no I/O, no configuration resolution, no `Host`, no service registries, no provider paths (issue #280, amended #325). Do not re-grow twins in `core` or `connectors` |
 | Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared` (state store), `internal/core` hub (flows) | AES-256-GCM + PBKDF2; refresh singleflight |
 | Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go` runners) | Durable SQLite-backed jobs (issue #227). The engine takes a `SyncMetrics` seam; hub wiring and runners stay in core |
@@ -120,7 +120,8 @@ Agent → Aegis library / content transport / admin → provider APIs
 | UDK registry + admin overlay | `internal/core/udk/` (registry/loader + `user_kinds.json` overlay), `internal/core` hub (`udk_admin.go`, `udk_handlers.go`) | User-defined kinds (issue #15). Schema packs under `user-kinds/` load into the same pipeline; the hub owns the admin handlers |
 | Apps registry + consent grants | `internal/core/apps/` (store + grant codes), `internal/core` hub (`apps_grant.go` handlers, `apps_admin.go`) | Third-party app tokens (issue #131). The store mints/verifies tokens; the hub owns the authorize/token/revoke HTTP surface |
 | Neutral models + kind data | `internal/kinds` | Models, merge, and kind registry metadata; authorization vocabulary is `internal/shared` and stored grant resolution is `internal/core/policy` — never here |
-| Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points) | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; the hub keeps the fixed cross-kind routes and admin writes |
+| Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points) | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; `internal/library` owns the fixed cross-kind routes, kind composition, and agent-facing copy; admin writes stay admin-side |
+| Agent data plane | `internal/library` (+ `library/links`, `library/search`) | Fixed `/v1/library/*` write/maintenance routes, `/v1/services` content transport, kind registry composition, agent-facing instruction copy. The hub constructs `library.Handlers`, mounts its route map behind auth, and implements its `kinds.Host` seam |
 | Merge / entity IDs | `internal/kinds` (merge), `internal/core/links/` (entity-link store) | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors` (one file per named service; local import stores share the surface) | Register in the hub's ordered `srv.connectors` list; stores use a local-transport constructor (design: `docs/local-import-stores.md`) |
 | Location history (places) | `internal/connectors` (timeline, owntracks), the places kind | Visits/trips, city/read/precise redaction (issue #142); default `none` |
@@ -233,7 +234,8 @@ Principles, not a closed package list. `import_boundary_test.go` and
 `churn_guardrails_test.go` enforce these; this section explains them.
 
 > **Layout transition (issue #358).** This section states the **target**
-> dependency direction; the tree is mid-move toward it. The per-package import
+> dependency direction; the tree is mid-move toward it (P1 seam vocabulary
+> and P2 `internal/library` are landed). The per-package import
 > table in `churn_guardrails_test.go` is the ratchet and keeps matching the
 > current tree — each move PR updates the table in the same commit as the
 > move. The frozen file → package map, move phases, and settled placement

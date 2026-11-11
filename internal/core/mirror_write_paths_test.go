@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 )
 
 func writeMirrorJSON(w http.ResponseWriter, v any) {
@@ -23,7 +24,7 @@ func TestWriteMirrorUpstreamError_AndUnauthorized(t *testing.T) {
 
 	t.Run("unauthorized sentinel", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		srv.writeMirrorUpstreamError(w, logger, "spotify", kinds.ErrUnauthorized)
+		srv.library().WriteMirrorUpstreamError(w, logger, "spotify", kinds.ErrUnauthorized)
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("code = %d body=%s", w.Code, w.Body.String())
 		}
@@ -34,7 +35,7 @@ func TestWriteMirrorUpstreamError_AndUnauthorized(t *testing.T) {
 
 	t.Run("string unauthorized", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		srv.writeMirrorUpstreamError(w, logger, "youtube-music", errUnauthorizedString())
+		srv.library().WriteMirrorUpstreamError(w, logger, "youtube-music", errUnauthorizedString())
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("code = %d", w.Code)
 		}
@@ -42,7 +43,7 @@ func TestWriteMirrorUpstreamError_AndUnauthorized(t *testing.T) {
 
 	t.Run("generic upstream failure", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		srv.writeMirrorUpstreamError(w, logger, "spotify", errBoom())
+		srv.library().WriteMirrorUpstreamError(w, logger, "spotify", errBoom())
 		if w.Code != http.StatusBadGateway {
 			t.Fatalf("code = %d body=%s", w.Code, w.Body.String())
 		}
@@ -53,13 +54,13 @@ func TestWriteMirrorUpstreamError_AndUnauthorized(t *testing.T) {
 }
 
 func TestErrorsIsUnauthorized(t *testing.T) {
-	if !errorsIsUnauthorized(kinds.ErrUnauthorized) {
+	if !library.ErrorsIsUnauthorized(kinds.ErrUnauthorized) {
 		t.Fatal("sentinel should match")
 	}
-	if !errorsIsUnauthorized(errUnauthorizedString()) {
+	if !library.ErrorsIsUnauthorized(errUnauthorizedString()) {
 		t.Fatal("string unauthorized should match")
 	}
-	if errorsIsUnauthorized(nil) || errorsIsUnauthorized(errBoom()) {
+	if library.ErrorsIsUnauthorized(nil) || library.ErrorsIsUnauthorized(errBoom()) {
 		t.Fatal("nil/generic should not match")
 	}
 }
@@ -103,11 +104,11 @@ func TestHandleLibraryMirror_TracksKindWrites(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/mirror", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMirror)(w, req)
+	srv.AuthMiddleware(srv.library().HandleLibraryMirror)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var res MirrorResult
+	var res library.MirrorResult
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -133,7 +134,7 @@ func TestHandleLibraryMirror_SourceUpstreamUnauthorized(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/mirror", strings.NewReader(string(body)))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMirror)(w, req)
+	srv.AuthMiddleware(srv.library().HandleLibraryMirror)(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}

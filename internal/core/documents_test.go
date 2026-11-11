@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -73,7 +74,7 @@ func TestHandleLibraryDocuments_AggregatesAndFilters(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/documents?q=lease", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("documents"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -112,7 +113,7 @@ func TestHandleLibraryDocuments_MetadataRouteStripsExcerpt(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("documents"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("documents status = %d body=%s, want 403", w.Code, w.Body.String())
 	}
@@ -120,7 +121,7 @@ func TestHandleLibraryDocuments_MetadataRouteStripsExcerpt(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/documents/metadata", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/metadata"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/metadata"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -156,7 +157,7 @@ func TestHandleLibraryDocuments_DeniedByPermission(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("documents"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403: %s", w.Code, w.Body.String())
 	}
@@ -177,7 +178,7 @@ func TestHandleLibraryDocuments_UnauthorizedAndError(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("documents"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -193,7 +194,7 @@ func TestHandleLibraryDocuments_UnauthorizedAndError(t *testing.T) {
 	w2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest("GET", "/v1/library/documents", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w2, req2)
+	srv.AuthMiddleware(srv.library().LibraryHandler("documents"))(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -213,7 +214,7 @@ func TestHandleLibraryDocuments_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/documents", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("documents"))(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", w.Code)
 	}
@@ -239,7 +240,7 @@ func TestHandleLibraryDocumentText_RouteGate(t *testing.T) {
 	req.SetPathValue("service", "paperless")
 	req.SetPathValue("id", "1")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/{service}/{id}/text"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/{service}/{id}/text"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("metadata-only key must not read text: status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -254,7 +255,7 @@ func TestHandleLibraryDocumentText_RouteGate(t *testing.T) {
 	req2.SetPathValue("service", "paperless")
 	req2.SetPathValue("id", "1")
 	w2 := httptest.NewRecorder()
-	srv2.AuthMiddleware(srv2.routeHandler("/v1/library/documents/{service}/{id}/text"))(w2, req2)
+	srv2.AuthMiddleware(srv2.library().RouteHandler("/v1/library/documents/{service}/{id}/text"))(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("documents key should fetch text: status = %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -279,7 +280,7 @@ func TestHandleLibraryDocumentText_UnknownServiceAndErrors(t *testing.T) {
 	req.SetPathValue("service", "nope")
 	req.SetPathValue("id", "1")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/{service}/{id}/text"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/{service}/{id}/text"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown service status = %d", w.Code)
 	}
@@ -289,7 +290,7 @@ func TestHandleLibraryDocumentText_UnknownServiceAndErrors(t *testing.T) {
 	req2.SetPathValue("service", "paperless")
 	req2.SetPathValue("id", "1")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/{service}/{id}/text"))(w2, req2)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/{service}/{id}/text"))(w2, req2)
 	if w2.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthorized status = %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -300,14 +301,14 @@ func TestHandleLibraryDocumentText_UnknownServiceAndErrors(t *testing.T) {
 	req3.SetPathValue("service", "paperless")
 	req3.SetPathValue("id", "1")
 	w3 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/{service}/{id}/text"))(w3, req3)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/{service}/{id}/text"))(w3, req3)
 	if w3.Code != http.StatusBadGateway {
 		t.Fatalf("upstream error status = %d", w3.Code)
 	}
 }
 
 func TestLibraryKindDocuments_Registered(t *testing.T) {
-	k := LibraryKindByID("documents")
+	k := library.LibraryKindByID("documents")
 	if k == nil {
 		t.Fatal("documents kind missing")
 	}
@@ -320,7 +321,7 @@ func TestLibraryKindDocuments_Registered(t *testing.T) {
 	if !k.Mentions("find my warranty") || !k.Mentions("my receipts") {
 		t.Fatal("keywords should catch paperwork questions")
 	}
-	if _, ok := testServerWithBase(&Config{}, "https://aegis.example.com").registryKind("documents"); !ok {
+	if _, ok := testServerWithBase(&Config{}, "https://aegis.example.com").library().RegistryKind("documents"); !ok {
 		t.Fatal("documents kind missing from kinds.Builtin()")
 	}
 }

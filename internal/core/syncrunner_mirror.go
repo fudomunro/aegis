@@ -9,6 +9,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -67,7 +68,7 @@ func (r *mirrorRunner) Kind() string { return r.kind }
 // mirrorKinds are the kinds a mirror runner is registered for. Contacts and
 // events mirror as one entity-level call (handleEntityMirror) and do not
 // chain, so they are not registered here yet.
-var mirrorKinds = []string{MirrorKindPlaylists, MirrorKindTracks}
+var mirrorKinds = []string{library.MirrorKindPlaylists, library.MirrorKindTracks}
 
 // Run executes one bounded mirror step and chains until the source list is
 // exhausted.
@@ -88,11 +89,11 @@ func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.
 	if p.TargetService == "" {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: target_service is required", syncjobs.ErrSyncTerminal)
 	}
-	if p.Kind == MirrorKindPlaylists && p.SourceID == "" {
+	if p.Kind == library.MirrorKindPlaylists && p.SourceID == "" {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: source_id is required for kind=playlists", syncjobs.ErrSyncTerminal)
 	}
 	if p.SourceService == "" {
-		p.SourceService = s.defaultMirrorSource(p.Kind)
+		p.SourceService = s.library().DefaultMirrorSource(p.Kind)
 	}
 	if p.SourceService == "" {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: source_service is required (no canonical home configured)", syncjobs.ErrSyncTerminal)
@@ -101,43 +102,43 @@ func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: source_service and target_service must differ", syncjobs.ErrSyncTerminal)
 	}
 	// Background sync runs at owner tier: no request key is in play.
-	if err := s.requireMirrorWritable(s.ownerGrants(), p.TargetService, p.Kind); err != nil {
+	if err := s.library().RequireMirrorWritable(s.ownerGrants(), p.TargetService, p.Kind); err != nil {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
 	}
-	if err := s.requireMirrorReadable(s.ownerGrants(), p.SourceService, p.Kind); err != nil {
+	if err := s.library().RequireMirrorReadable(s.ownerGrants(), p.SourceService, p.Kind); err != nil {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
 	}
-	src, err := s.mirrorSourceFor(p.SourceService, p.Kind)
+	src, err := s.library().MirrorSourceFor(p.SourceService, p.Kind)
 	if err != nil {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
 	}
-	dst, err := s.mirrorTargetFor(p.TargetService, p.Kind)
+	dst, err := s.library().MirrorTargetFor(p.TargetService, p.Kind)
 	if err != nil {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
 	}
 
 	pageLimit := p.Limit
-	if pageLimit <= 0 || pageLimit > mirrorTrackCap {
-		pageLimit = mirrorTrackCap
+	if pageLimit <= 0 || pageLimit > library.MirrorTrackCap {
+		pageLimit = library.MirrorTrackCap
 	}
 	var (
 		tracks []kinds.Track
 		total  int
 		next   string
-		srcRef MirrorRef
+		srcRef library.MirrorRef
 	)
 	switch p.Kind {
-	case MirrorKindPlaylists:
+	case library.MirrorKindPlaylists:
 		var ref kinds.Playlist
 		var page kinds.TrackPage
 		ref, page, err = src.ListPlaylistItems(ctx, p.SourceID, p.Cursor, pageLimit)
 		tracks, total, next = page.Tracks, page.Total, page.Next
-		srcRef = mirrorRefFromPlaylist(p.SourceService, ref, total)
-	case MirrorKindTracks:
+		srcRef = library.MirrorRefFromPlaylist(p.SourceService, ref, total)
+	case library.MirrorKindTracks:
 		var page kinds.TrackPage
 		page, err = src.ListUserLikedTracksPage(ctx, p.Cursor, pageLimit)
 		tracks, total, next = page.Tracks, page.Total, page.Next
-		srcRef = MirrorRef{Service: p.SourceService, Name: "liked/saved tracks", Count: total}
+		srcRef = library.MirrorRef{Service: p.SourceService, Name: "liked/saved tracks", Count: total}
 	default:
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: kind %q is not a mirrorable list", syncjobs.ErrSyncTerminal, p.Kind)
 	}
@@ -176,7 +177,7 @@ func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.
 	p.Planned += pageSize
 
 	name := strings.TrimSpace(p.Name)
-	if name == "" && p.Kind == MirrorKindPlaylists {
+	if name == "" && p.Kind == library.MirrorKindPlaylists {
 		name = srcRef.Name
 	}
 	if name == "" {
@@ -185,7 +186,7 @@ func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.
 
 	if !p.DryRun && len(tracks) > 0 {
 		switch p.Kind {
-		case MirrorKindPlaylists:
+		case library.MirrorKindPlaylists:
 			res, perr := dst.PlacePlaylistItems(ctx, p.TargetID, name, tracks)
 			p.Skipped += len(res.Skips)
 			if res.PlaylistID != "" {
@@ -195,7 +196,7 @@ func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.
 			if perr != nil {
 				return r.step(p, false), perr
 			}
-		case MirrorKindTracks:
+		case library.MirrorKindTracks:
 			res, perr := dst.SaveLikedTracks(ctx, tracks)
 			p.Skipped += len(res.Skips)
 			p.Copied += res.Copied
@@ -213,11 +214,11 @@ func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.
 	// Source exhausted: stamp the copy ledger with the finished placement.
 	if !p.DryRun {
 		switch p.Kind {
-		case MirrorKindPlaylists:
-			s.recordMirrorCopy(MirrorKindPlaylists, p.SourceService, p.SourceID,
+		case library.MirrorKindPlaylists:
+			s.library().RecordMirrorCopy(library.MirrorKindPlaylists, p.SourceService, p.SourceID,
 				p.TargetService, p.TargetID, name, p.Copied, "")
-		case MirrorKindTracks:
-			s.recordMirrorCopy(MirrorKindTracks, p.SourceService, "",
+		case library.MirrorKindTracks:
+			s.library().RecordMirrorCopy(library.MirrorKindTracks, p.SourceService, "",
 				p.TargetService, "", "liked/saved tracks", p.Copied, "")
 		}
 	}
@@ -253,7 +254,7 @@ func (r *mirrorRunner) step(p mirrorJobPayload, done bool) syncjobs.SyncStep {
 
 // defaultMirrorName is the fallback playlist title when the source has none.
 func defaultMirrorName(kind string) string {
-	if kind == MirrorKindTracks {
+	if kind == library.MirrorKindTracks {
 		return "Aegis liked tracks backup"
 	}
 	return "Aegis mirror"
@@ -276,7 +277,7 @@ func repairIdentityKey(t kinds.Track) string {
 // can skip those items. It reuses the items operation on the target service,
 // so no extra adapter method is needed.
 func loadTargetIdentities(ctx context.Context, s *Server, targetService, targetID string) (map[string]bool, error) {
-	src, err := s.mirrorSourceFor(targetService, MirrorKindPlaylists)
+	src, err := s.library().MirrorSourceFor(targetService, library.MirrorKindPlaylists)
 	if err != nil {
 		return nil, err
 	}

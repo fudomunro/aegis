@@ -15,6 +15,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -53,7 +54,7 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -78,7 +79,7 @@ func TestHandleLibraryPhotos_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
 	}
@@ -101,7 +102,7 @@ func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403: %s", w.Code, w.Body.String())
 	}
@@ -122,7 +123,7 @@ func TestHandleLibraryPhotos_UnauthorizedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -150,7 +151,7 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -173,14 +174,14 @@ func TestHandleLibraryPhotos_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", w.Code)
 	}
 }
 
 func TestPhotoKeywordsMatch(t *testing.T) {
-	kind := LibraryKindByID("photos")
+	kind := library.LibraryKindByID("photos")
 	if kind == nil {
 		t.Fatal("photos kind not registered")
 	}
@@ -240,11 +241,11 @@ func TestPreRequest_InjectsPhotoLibraryHint(t *testing.T) {
 
 func TestHasPhotoProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	if kindHasProviders("photos", srv) {
+	if library.KindHasProviders("photos", srv.library()) {
 		t.Fatal("expected no photo providers")
 	}
 	srv.connectors["google-photos"] = &fakePhotoProvider{}
-	if !kindHasProviders("photos", srv) {
+	if !library.KindHasProviders("photos", srv.library()) {
 		t.Fatal("expected photo provider after registration")
 	}
 }

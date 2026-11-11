@@ -26,7 +26,10 @@ import (
 //     no Host. `internal/kinds` imports `internal/shared` only;
 //     authorization vocabulary is shared, stored grant resolution is
 //     `internal/core/policy`; and connectors depend on `Host` — not the
-//     core hub.
+//     core hub. Surface packages follow audiences (#358): `internal/library`
+//     is the agent data plane, `internal/admin` the management surface,
+//     `internal/syncjobs` background consistency — see
+//     docs/restructure-packaging.md for the frozen map.
 //  2. Outbound HTTP has one owner (`shared.HTTPClient`); `http.DefaultClient`
 //     and the `http.Get`/`http.Post`/`http.PostForm` helpers have no timeout.
 
@@ -86,6 +89,26 @@ var allowedImports = map[string][]string{
 	"internal/connectors": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/kinds",
+	},
+	// the agent data plane: fixed library routes, content transport, kind
+	// composition, and agent-facing copy. Stores it drives are constructor
+	// deps; the kinds.Host seam covers request identity/authorization.
+	"internal/library": {
+		"github.com/fudomunro/aegis/internal/shared",
+		"github.com/fudomunro/aegis/internal/kinds",
+		"github.com/fudomunro/aegis/internal/connectors",
+		"github.com/fudomunro/aegis/internal/core/copies",
+		"github.com/fudomunro/aegis/internal/core/udk",
+		"github.com/fudomunro/aegis/internal/library/links",
+	},
+	// user-confirmed entity links (issue #4) — library-owned store.
+	"internal/library/links": {
+		"github.com/fudomunro/aegis/internal/shared",
+		"github.com/fudomunro/aegis/internal/kinds",
+	},
+	// the local full-text index behind kind search (issue #178).
+	"internal/library/search": {
+		"github.com/fudomunro/aegis/internal/shared",
 	},
 }
 

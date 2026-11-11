@@ -9,12 +9,12 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/hookhealth"
-	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library/links"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -30,8 +30,8 @@ func mailTestServer(t *testing.T, archive *mail.Archive) *Server {
 		adminAPIKey: "test-key",
 		authMode:    AuthModeAPIKey,
 		config:      cfg,
-		cache:       NewCache(),
-		mbCache:     NewCache(),
+		cache:       shared.NewCache(),
+		mbCache:     shared.NewCache(),
 		tokens:      mustTokens(t),
 		oauthStates: shared.NewStateStore(),
 		connectors:  make(map[string]connectors.ServiceConnector),
@@ -89,7 +89,7 @@ func doMessagesReq(t *testing.T, srv *Server, method, path, body string) *httpte
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	return w
 }
 
@@ -101,7 +101,7 @@ func doMessagesFetchReq(t *testing.T, srv *Server, service, id string) *httptest
 	req.SetPathValue("id", id)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/messages/{service}/{id}"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/messages/{service}/{id}"))(w, req)
 	return w
 }
 
@@ -110,7 +110,7 @@ func TestMailHTTPRequiresAuth(t *testing.T) {
 	srv := mailTestServer(t, a)
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("code = %d", w.Code)
 	}

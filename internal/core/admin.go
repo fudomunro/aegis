@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -100,12 +101,12 @@ func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return
 	}
-	k, ok := s.registryKind(kindID)
+	k, ok := s.library().RegistryKind(kindID)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return
 	}
-	handler := listHandler(k)
+	handler := library.ListHandler(k)
 	if handler == nil {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return
@@ -278,7 +279,7 @@ func (s *Server) HandleAdminCache(w http.ResponseWriter, r *http.Request) {
 
 	items := s.cacheSnapshot()
 	if items == nil {
-		items = []CacheItem{}
+		items = []shared.CacheItem{}
 	}
 	live, total, bytes := s.cacheStats()
 

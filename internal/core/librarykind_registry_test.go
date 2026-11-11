@@ -12,7 +12,7 @@ import (
 // library set.
 func TestLibraryKinds_RegistryConsistency(t *testing.T) {
 	srv := &Server{}
-	handlers := srv.libraryRouteHandlers()
+	handlers := srv.library().RouteHandlers()
 
 	for _, k := range kinds.BuiltinLibraryKinds {
 		if !kinds.IsReservedUserDefinedID(k.ID) {

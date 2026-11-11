@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -333,7 +334,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 
 	// Library kinds this server can aggregate, with which services feed them.
 	libraryProviders := make(map[string][]string)
-	for _, kind := range s.allLibraryKinds() {
+	for _, kind := range s.library().AllLibraryKinds() {
 		libraryProviders[kind.ID] = nil
 	}
 
@@ -365,7 +366,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			}
 			node.Kinds = kindList
 
-			for _, kind := range s.allLibraryKinds() {
+			for _, kind := range s.library().AllLibraryKinds() {
 				if s.flowProvidesKind(connector, kind.ID) {
 					node.Providers = append(node.Providers, kind.ID)
 					if !strings.EqualFold(svc.Action, "block") {
@@ -413,7 +414,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 				if !s.ownerGrants().AllowsRead(kindID) {
 					continue
 				}
-				kind := LibraryKindByID(kindID)
+				kind := library.LibraryKindByID(kindID)
 				if kind == nil {
 					continue
 				}
@@ -447,12 +448,12 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		return edges[i].Label < edges[j].Label
 	})
 
-	kindList := s.allLibraryKinds()
+	kindList := s.library().AllLibraryKinds()
 	libraries := make([]FlowLibrary, 0, len(kindList))
 	for _, kind := range kindList {
 		providers := append([]string(nil), libraryProviders[kind.ID]...)
 		// User-defined kinds are fed by schema sources, not OAuth connectors.
-		if schema, ok := s.udkSchemaForKind(kind.ID); ok && len(providers) == 0 {
+		if schema, ok := s.library().UDKSchemaForKind(kind.ID); ok && len(providers) == 0 {
 			for _, src := range schema.Sources {
 				providers = append(providers, src.ID)
 			}
@@ -537,7 +538,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			Label:     lib.Label,
 			Path:      lib.Path,
 			Kind:      "library",
-			Readable:  len(lib.Providers) > 0 && s.libraryReadableFor(lib.ID),
+			Readable:  len(lib.Providers) > 0 && s.library().LibraryReadableFor(lib.ID),
 			Providers: lib.Providers,
 		})
 	}
@@ -711,7 +712,7 @@ func staticCredentialLabel(svc Service) string {
 // kind. Dispatch is registry-driven so a new kind cannot silently drop out
 // of the flow map (issue #254).
 func (s *Server) flowProvidesKind(connector connectors.ServiceConnector, kindID string) bool {
-	if k, ok := s.registryKind(kindID); ok {
+	if k, ok := s.library().RegistryKind(kindID); ok {
 		return k.Provides(connector)
 	}
 	return false

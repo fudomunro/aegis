@@ -14,19 +14,20 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	for _, h := range []http.HandlerFunc{
-		srv.libraryHandler("tracks"),
-		srv.libraryHandler("albums"),
-		srv.libraryHandler("artists"),
-		srv.libraryHandler("playlists"),
-		srv.libraryHandler("contacts"),
-		srv.libraryHandler("photos"),
-		srv.libraryHandler("events"),
+		srv.library().LibraryHandler("tracks"),
+		srv.library().LibraryHandler("albums"),
+		srv.library().LibraryHandler("artists"),
+		srv.library().LibraryHandler("playlists"),
+		srv.library().LibraryHandler("contacts"),
+		srv.library().LibraryHandler("photos"),
+		srv.library().LibraryHandler("events"),
 	} {
 		req := httptest.NewRequest("POST", "/v1/library/x", nil)
 		w := httptest.NewRecorder()
@@ -59,7 +60,7 @@ func TestLibraryTracks_CacheHit(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
@@ -82,7 +83,7 @@ func TestLibraryTracks_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
 
 	var resp kinds.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -104,7 +105,7 @@ func TestLibraryTracks_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
 	}
@@ -126,7 +127,7 @@ func TestLibraryAlbums_UnauthorizedAndError(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
@@ -151,7 +152,7 @@ func TestLibraryAlbums_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
 	}
@@ -173,7 +174,7 @@ func TestLibraryAlbums_SkipsBlockedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
 
 	var resp kinds.AlbumList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -197,7 +198,7 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -213,7 +214,7 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 	// recovers, the next request re-fetches instead of replaying unauthorized.
 	srv.connectors["spotify"] = &fakeArtistProvider{artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "1", "X")}}
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("artists"))(w2, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w2, req)
 	if w2.Header().Get("X-Aegis-Cache") != "miss" {
 		t.Fatalf("expected cache miss after recovery, got %q", w2.Header().Get("X-Aegis-Cache"))
 	}
@@ -227,7 +228,7 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 
 	// Healthy aggregate is cached.
 	w3 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("artists"))(w3, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w3, req)
 	if w3.Header().Get("X-Aegis-Cache") != "hit" {
 		t.Fatalf("expected cache hit on healthy aggregate, got %q", w3.Header().Get("X-Aegis-Cache"))
 	}
@@ -243,7 +244,7 @@ func TestLibraryArtists_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
 
 	var resp kinds.ArtistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -273,7 +274,7 @@ func TestLibraryArtists_PermissionDenied(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}
@@ -284,7 +285,7 @@ func TestLibraryArtists_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
 	}
@@ -298,11 +299,11 @@ func TestLibraryReadableHelpers(t *testing.T) {
 		},
 	}, "https://aegis.example.com")
 
-	if !kindReadable("tracks", srv) {
+	if !library.KindReadable("tracks", srv.library()) {
 		t.Fatal("service a should allow tracks read")
 	}
-	if !kindReadable("albums", srv) || !kindReadable("artists", srv) || !kindReadable("playlists", srv) ||
-		!kindReadable("contacts", srv) || !kindReadable("photos", srv) {
+	if !library.KindReadable("albums", srv.library()) || !library.KindReadable("artists", srv.library()) || !library.KindReadable("playlists", srv.library()) ||
+		!library.KindReadable("contacts", srv.library()) || !library.KindReadable("photos", srv.library()) {
 		t.Fatal("service a should allow all library reads")
 	}
 
@@ -314,22 +315,22 @@ func TestLibraryReadableHelpers(t *testing.T) {
 			{ID: "c", Name: "C", Action: "inject"},
 		},
 	}, "https://aegis.example.com")
-	if kindReadable("tracks", srv2) || kindReadable("albums", srv2) || kindReadable("artists", srv2) ||
-		kindReadable("playlists", srv2) || kindReadable("contacts", srv2) || kindReadable("photos", srv2) {
+	if library.KindReadable("tracks", srv2.library()) || library.KindReadable("albums", srv2.library()) || library.KindReadable("artists", srv2.library()) ||
+		library.KindReadable("playlists", srv2.library()) || library.KindReadable("contacts", srv2.library()) || library.KindReadable("photos", srv2.library()) {
 		t.Fatal("expected no readable library types")
 	}
 }
 
 func TestHasLibraryProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	if kindHasProviders("playlists", srv) || kindHasProviders("tracks", srv) || kindHasProviders("albums", srv) ||
-		kindHasProviders("artists", srv) || kindHasProviders("contacts", srv) || kindHasProviders("photos", srv) {
+	if library.KindHasProviders("playlists", srv.library()) || library.KindHasProviders("tracks", srv.library()) || library.KindHasProviders("albums", srv.library()) ||
+		library.KindHasProviders("artists", srv.library()) || library.KindHasProviders("contacts", srv.library()) || library.KindHasProviders("photos", srv.library()) {
 		t.Fatal("empty connectors should report no providers")
 	}
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": connectors.NewSpotifyConnector(srv),
 	}
-	if !kindHasProviders("playlists", srv) || !kindHasProviders("tracks", srv) || !kindHasProviders("albums", srv) || !kindHasProviders("artists", srv) {
+	if !library.KindHasProviders("playlists", srv.library()) || !library.KindHasProviders("tracks", srv.library()) || !library.KindHasProviders("albums", srv.library()) || !library.KindHasProviders("artists", srv.library()) {
 		t.Fatal("spotify connector implements playlist/track/album/artist providers")
 	}
 }
@@ -337,20 +338,20 @@ func TestHasLibraryProviders(t *testing.T) {
 func TestLibrarySystemInstructions_ContainEndpoints(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	for _, s := range []string{
-		srv.libraryInstructionsFor("playlists"),
-		srv.libraryInstructionsFor("tracks"),
-		srv.libraryInstructionsFor("albums"),
-		srv.libraryInstructionsFor("artists"),
-		srv.libraryInstructionsFor("contacts"),
+		srv.library().LibraryInstructionsFor("playlists"),
+		srv.library().LibraryInstructionsFor("tracks"),
+		srv.library().LibraryInstructionsFor("albums"),
+		srv.library().LibraryInstructionsFor("artists"),
+		srv.library().LibraryInstructionsFor("contacts"),
 	} {
 		if !strings.Contains(s, "https://aegis.example.com/v1/library/") {
 			t.Fatalf("instructions missing base library path: %s", s)
 		}
 	}
-	if !strings.Contains(srv.libraryInstructionsFor("artists"), "/v1/library/artists") {
+	if !strings.Contains(srv.library().LibraryInstructionsFor("artists"), "/v1/library/artists") {
 		t.Fatal("artists instructions missing endpoint")
 	}
-	if !strings.Contains(srv.libraryInstructionsFor("albums"), "/v1/library/albums") {
+	if !strings.Contains(srv.library().LibraryInstructionsFor("albums"), "/v1/library/albums") {
 		t.Fatal("albums instructions missing endpoint")
 	}
 }
@@ -534,9 +535,9 @@ func TestHandleAdminCache_ListsEntries(t *testing.T) {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
 	var payload struct {
-		Live    int         `json:"live"`
-		Total   int         `json:"total"`
-		Entries []CacheItem `json:"entries"`
+		Live    int                `json:"live"`
+		Total   int                `json:"total"`
+		Entries []shared.CacheItem `json:"entries"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -722,7 +723,7 @@ func TestLibraryAlbums_CacheHit(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
 	if w.Header().Get("X-Aegis-Cache") != "hit" {
 		t.Fatalf("cache header = %q", w.Header().Get("X-Aegis-Cache"))
 	}
@@ -749,15 +750,15 @@ func TestMentionsAlbumsAndArtists_Keywords(t *testing.T) {
 		"top artists this year":     true,
 	}
 	for msg, want := range cases {
-		got := LibraryKindByID("albums").Mentions(msg) || LibraryKindByID("artists").Mentions(msg) || LibraryKindByID("playlists").Mentions(msg) || LibraryKindByID("tracks").Mentions(msg)
+		got := library.LibraryKindByID("albums").Mentions(msg) || library.LibraryKindByID("artists").Mentions(msg) || library.LibraryKindByID("playlists").Mentions(msg) || library.LibraryKindByID("tracks").Mentions(msg)
 		if got != want {
 			t.Fatalf("%q got %v want %v", msg, got, want)
 		}
 	}
-	if !LibraryKindByID("albums").Mentions("favorite album right now") {
+	if !library.LibraryKindByID("albums").Mentions("favorite album right now") {
 		t.Fatal("favorite album")
 	}
-	if !LibraryKindByID("artists").Mentions("favorite artist") {
+	if !library.LibraryKindByID("artists").Mentions("favorite artist") {
 		t.Fatal("favorite artist")
 	}
 }
@@ -774,7 +775,7 @@ func TestAllowDataPermission_FollowingUsesArtists(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/me/following?type=artist", nil)
 	w := httptest.NewRecorder()
-	if srv.AllowDataPermission(w, req, svc, "/me/following") {
+	if srv.library().AllowDataPermission(w, req, serviceViewOf(*svc), "/me/following") {
 		t.Fatal("artists:none should deny /me/following")
 	}
 	if w.Code != http.StatusForbidden {
@@ -783,7 +784,7 @@ func TestAllowDataPermission_FollowingUsesArtists(t *testing.T) {
 
 	req = httptest.NewRequest("GET", "/v1/services/youtube-music/me/subscriptions", nil)
 	w = httptest.NewRecorder()
-	if srv.AllowDataPermission(w, req, svc, "/me/subscriptions") {
+	if srv.library().AllowDataPermission(w, req, serviceViewOf(*svc), "/me/subscriptions") {
 		t.Fatal("artists:none should deny /me/subscriptions")
 	}
 }
@@ -823,7 +824,7 @@ func TestHandleLibraryArtists_ProviderPanicDoesNotKillProcess(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
@@ -847,7 +848,7 @@ func TestLibraryTracks_TruncatedFlag(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
 
 	var resp kinds.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -863,7 +864,7 @@ func TestLibraryTracks_TruncatedFlag(t *testing.T) {
 
 func TestLibrarySystemInstructions_MentionTruncated(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryInstructionsFor("tracks")
+	instr := srv.library().LibraryInstructionsFor("tracks")
 	if !strings.Contains(instr, "truncated") {
 		t.Fatalf("tracks instructions should tell agents to check truncated: %s", instr)
 	}

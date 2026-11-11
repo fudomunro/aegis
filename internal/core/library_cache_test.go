@@ -66,7 +66,7 @@ func getTracksPage(t *testing.T, srv *Server, path string) (kinds.TrackList, *ht
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET %s status = %d body=%s", path, w.Code, w.Body.String())
 	}
@@ -150,7 +150,7 @@ func TestLibraryAggregate_SingleflightParallel(t *testing.T) {
 			req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 			req.Header.Set("Authorization", "Bearer test-key")
 			w := httptest.NewRecorder()
-			srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
+			srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
 			if w.Code != http.StatusOK {
 				errs <- fmt.Errorf("status = %d body=%s", w.Code, w.Body.String())
 			}
@@ -266,7 +266,7 @@ func TestHandleAdminCacheClear_FlushesBothCaches(t *testing.T) {
 
 // ClearPrefix is the targeted-invalidation primitive behind invalidate*.
 func TestCache_ClearPrefix(t *testing.T) {
-	c := NewCache()
+	c := shared.NewCache()
 	c.Set("library:tracks|agg", "a", time.Minute)
 	c.Set("library:albums|agg", "b", time.Minute)
 	c.Set("spotify:/me", "c", time.Minute)

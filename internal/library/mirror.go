@@ -1,4 +1,4 @@
-package core
+package library
 
 import (
 	"context"
@@ -22,9 +22,9 @@ const (
 	MirrorKindEvents    = "events"
 )
 
-// mirrorTrackCap bounds a single mirror call so a huge library cannot
+// MirrorTrackCap bounds a single mirror call so a huge library cannot
 // turn into an unbounded write storm. Callers can re-run for the rest.
-const mirrorTrackCap = 200
+const MirrorTrackCap = 200
 
 // MirrorRequest is the agent-facing body for POST /v1/library/mirror.
 type MirrorRequest struct {
@@ -91,7 +91,7 @@ type MirrorResult struct {
 // placement and report per-item skips.
 //
 // POST /v1/library/mirror
-func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -126,21 +126,21 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Kind == MirrorKindContacts || req.Kind == MirrorKindEvents {
-		s.handleEntityMirror(w, r, req)
+		h.HandleEntityMirror(w, r, req)
 		return
 	}
 
-	logger := withPeerLog(slog.With("handler", "library_mirror",
-		"kind", req.Kind, "target", req.TargetService, "dry_run", req.DryRun), r)
+	logger := h.Host.Logger(r, "library_mirror").With(
+		"kind", req.Kind, "target", req.TargetService, "dry_run", req.DryRun)
 
-	if err := s.requireMirrorWritable(s.requestGrants(r), req.TargetService, req.Kind); err != nil {
+	if err := h.RequireMirrorWritable(h.requestGrants(r), req.TargetService, req.Kind); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
 	sourceService := req.SourceService
 	if sourceService == "" {
-		sourceService = s.defaultMirrorSource(req.Kind)
+		sourceService = h.DefaultMirrorSource(req.Kind)
 	}
 	if sourceService == "" {
 		shared.WriteJSONError(w, http.StatusBadRequest, "source_service is required (no canonical home configured)")
@@ -150,17 +150,17 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
 		return
 	}
-	if err := s.requireMirrorReadable(s.requestGrants(r), sourceService, req.Kind); err != nil {
+	if err := h.RequireMirrorReadable(h.requestGrants(r), sourceService, req.Kind); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
-	src, err := s.mirrorSourceFor(sourceService, req.Kind)
+	src, err := h.MirrorSourceFor(sourceService, req.Kind)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	dst, err := s.mirrorTargetFor(req.TargetService, req.Kind)
+	dst, err := h.MirrorTargetFor(req.TargetService, req.Kind)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
@@ -175,16 +175,16 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	case MirrorKindPlaylists:
 		ref, items, tr, err := loadMirrorPlaylistItems(ctx, src, req.SourceID)
 		if err != nil {
-			s.writeMirrorUpstreamError(w, logger, sourceService, err)
+			h.WriteMirrorUpstreamError(w, logger, sourceService, err)
 			return
 		}
 		truncated = tr
 		tracks = items
-		srcRef = mirrorRefFromPlaylist(sourceService, ref, len(items))
+		srcRef = MirrorRefFromPlaylist(sourceService, ref, len(items))
 	case MirrorKindTracks:
 		items, tr, err := src.ListUserLikedTracks(ctx)
 		if err != nil {
-			s.writeMirrorUpstreamError(w, logger, sourceService, err)
+			h.WriteMirrorUpstreamError(w, logger, sourceService, err)
 			return
 		}
 		truncated = tr
@@ -192,8 +192,8 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		srcRef = MirrorRef{Service: sourceService, Name: "liked/saved tracks", Count: len(items)}
 	}
 
-	if len(tracks) > mirrorTrackCap {
-		tracks = tracks[:mirrorTrackCap]
+	if len(tracks) > MirrorTrackCap {
+		tracks = tracks[:MirrorTrackCap]
 		truncated = true
 		srcRef.Count = len(tracks)
 	}
@@ -237,23 +237,23 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	case MirrorKindPlaylists:
 		res, err := dst.PlacePlaylistItems(ctx, "", name, tracks)
 		if err != nil {
-			s.writeMirrorUpstreamError(w, logger, req.TargetService, err)
+			h.WriteMirrorUpstreamError(w, logger, req.TargetService, err)
 			return
 		}
 		result.Target = MirrorRef{Service: req.TargetService, ID: res.PlaylistID, Name: name, URL: res.URL, Count: res.Copied}
 		result.Copied = res.Copied
 		skips = res.Skips
-		s.recordMirrorCopy(MirrorKindPlaylists, sourceService, req.SourceID, req.TargetService, res.PlaylistID, name, res.Copied, "")
+		h.RecordMirrorCopy(MirrorKindPlaylists, sourceService, req.SourceID, req.TargetService, res.PlaylistID, name, res.Copied, "")
 	case MirrorKindTracks:
 		res, err := dst.SaveLikedTracks(ctx, tracks)
 		if err != nil {
-			s.writeMirrorUpstreamError(w, logger, req.TargetService, err)
+			h.WriteMirrorUpstreamError(w, logger, req.TargetService, err)
 			return
 		}
 		result.Target = MirrorRef{Service: req.TargetService, Name: "liked/saved tracks", Count: res.Copied}
 		result.Copied = res.Copied
 		skips = res.Skips
-		s.recordMirrorCopy(MirrorKindTracks, sourceService, "", req.TargetService, "", "liked/saved tracks", res.Copied, "")
+		h.RecordMirrorCopy(MirrorKindTracks, sourceService, "", req.TargetService, "", "liked/saved tracks", res.Copied, "")
 	}
 	result.Skips = toMirrorSkips(skips)
 	result.Skipped = len(skips)
@@ -264,9 +264,9 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	shared.WriteJSON(w, result)
 }
 
-func (s *Server) writeMirrorUpstreamError(w http.ResponseWriter, logger *slog.Logger, serviceID string, err error) {
+func (h *Handlers) WriteMirrorUpstreamError(w http.ResponseWriter, logger *slog.Logger, serviceID string, err error) {
 	logger.Warn("mirror upstream failed", "service", serviceID, "error", err)
-	if errorsIsUnauthorized(err) {
+	if ErrorsIsUnauthorized(err) {
 		shared.WriteJSONError(w, http.StatusUnauthorized,
 			fmt.Sprintf("no valid token for %s — authorize at /v1/auth/%s/login", serviceID, serviceID))
 		return
@@ -274,15 +274,15 @@ func (s *Server) writeMirrorUpstreamError(w http.ResponseWriter, logger *slog.Lo
 	shared.WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("mirror failed on %s: %v", serviceID, err))
 }
 
-func errorsIsUnauthorized(err error) bool {
+func ErrorsIsUnauthorized(err error) bool {
 	return err != nil && (err == kinds.ErrUnauthorized || strings.Contains(err.Error(), "unauthorized"))
 }
 
 // requireMirrorWritable checks the target allows writes for the kind under
 // the caller's grant map.
-func (s *Server) requireMirrorWritable(grants shared.GrantMap, serviceID, kind string) error {
-	svc := s.config.GetService(serviceID)
-	if svc == nil {
+func (h *Handlers) RequireMirrorWritable(grants shared.GrantMap, serviceID, kind string) error {
+	svc, ok := h.Host.Service(serviceID)
+	if !ok {
 		return fmt.Errorf("service %q not configured", serviceID)
 	}
 	if strings.EqualFold(svc.Action, "block") {
@@ -297,9 +297,9 @@ func (s *Server) requireMirrorWritable(grants shared.GrantMap, serviceID, kind s
 
 // requireMirrorReadable checks the source allows reads for the kind under
 // the caller's grant map.
-func (s *Server) requireMirrorReadable(grants shared.GrantMap, serviceID, kind string) error {
-	svc := s.config.GetService(serviceID)
-	if svc == nil {
+func (h *Handlers) RequireMirrorReadable(grants shared.GrantMap, serviceID, kind string) error {
+	svc, ok := h.Host.Service(serviceID)
+	if !ok {
 		return fmt.Errorf("service %q not configured", serviceID)
 	}
 	if strings.EqualFold(svc.Action, "block") {
@@ -313,8 +313,8 @@ func (s *Server) requireMirrorReadable(grants shared.GrantMap, serviceID, kind s
 }
 
 // defaultMirrorSource picks the canonical home for kind, else "".
-func (s *Server) defaultMirrorSource(kind string) string {
-	for _, svc := range s.config.ServiceSnapshots() {
+func (h *Handlers) DefaultMirrorSource(kind string) string {
+	for _, svc := range h.Host.Services() {
 		if svc.IsCanonicalFor(kind) {
 			return svc.ID
 		}
@@ -322,50 +322,50 @@ func (s *Server) defaultMirrorSource(kind string) string {
 	return ""
 }
 
-// mirrorSource is the read surface the mirror engine needs from a service:
+// MirrorSource is the read surface the mirror engine needs from a service:
 // the type-level list operations reconciliation plans against.
-type mirrorSource interface {
+type MirrorSource interface {
 	kinds.PlaylistItemsProvider
 	kinds.LikedTrackProvider
 	kinds.LikedTrackPageProvider
 }
 
-// mirrorTarget is the write surface: the type-level placement operations
+// MirrorTarget is the write surface: the type-level placement operations
 // (issue #254). Appending to a known playlist is what lets a mirror chain
 // spread across job steps without creating a playlist per batch
 // (issue #227 phase 3).
-type mirrorTarget interface {
+type MirrorTarget interface {
 	kinds.PlaylistItemWriteProvider
 	kinds.LikedTrackWriteProvider
 }
 
-func (s *Server) mirrorSourceFor(serviceID, kind string) (mirrorSource, error) {
-	if s.mirrorSourceFn != nil {
-		return s.mirrorSourceFn(serviceID, kind)
+func (h *Handlers) MirrorSourceFor(serviceID, kind string) (MirrorSource, error) {
+	if h.MirrorSourceFn != nil {
+		return h.MirrorSourceFn(serviceID, kind)
 	}
-	if conn, ok := s.connectors[serviceID].(mirrorSource); ok {
+	if conn, ok := h.Connectors[serviceID].(MirrorSource); ok {
 		return conn, nil
 	}
 	return nil, fmt.Errorf("mirror source %q is not supported yet (supported: %s)",
-		serviceID, mirrorSupportedFor[mirrorSource](s))
+		serviceID, MirrorSupportedFor[MirrorSource](h))
 }
 
-func (s *Server) mirrorTargetFor(serviceID, kind string) (mirrorTarget, error) {
-	if s.mirrorTargetFn != nil {
-		return s.mirrorTargetFn(serviceID, kind)
+func (h *Handlers) MirrorTargetFor(serviceID, kind string) (MirrorTarget, error) {
+	if h.MirrorTargetFn != nil {
+		return h.MirrorTargetFn(serviceID, kind)
 	}
-	if conn, ok := s.connectors[serviceID].(mirrorTarget); ok {
+	if conn, ok := h.Connectors[serviceID].(MirrorTarget); ok {
 		return conn, nil
 	}
 	return nil, fmt.Errorf("mirror target %q is not supported yet (supported: %s)",
-		serviceID, mirrorSupportedFor[mirrorTarget](s))
+		serviceID, MirrorSupportedFor[MirrorTarget](h))
 }
 
 // mirrorSupportedFor lists registered services implementing P, so
 // "not supported yet" copy stays accurate as connectors gain operations.
-func mirrorSupportedFor[P any](s *Server) string {
-	ids := make([]string, 0, len(s.connectors))
-	for id, conn := range s.connectors {
+func MirrorSupportedFor[P any](h *Handlers) string {
+	ids := make([]string, 0, len(h.Connectors))
+	for id, conn := range h.Connectors {
 		if _, ok := any(conn).(P); ok {
 			ids = append(ids, id)
 		}
@@ -402,7 +402,7 @@ func loadMirrorPlaylistItems(ctx context.Context, src kinds.PlaylistItemsProvide
 }
 
 // mirrorRefFromPlaylist projects a neutral playlist ref onto the API shape.
-func mirrorRefFromPlaylist(service string, p kinds.Playlist, count int) MirrorRef {
+func MirrorRefFromPlaylist(service string, p kinds.Playlist, count int) MirrorRef {
 	ref := MirrorRef{Service: service, Name: p.Name, Count: count}
 	if len(p.Sources) > 0 {
 		ref.ID = p.Sources[0].ID
@@ -437,11 +437,11 @@ func toMirrorConflicts(conflicts []kinds.PlaceConflict) []MirrorConflict {
 
 // mirrorOpFor resolves a provider operation surface P for a service from
 // the connector registry, naming what implements P on failure.
-func mirrorOpFor[P any](s *Server, serviceID, what string) (P, error) {
-	if conn, ok := any(s.connectors[serviceID]).(P); ok {
+func MirrorOpFor[P any](h *Handlers, serviceID, what string) (P, error) {
+	if conn, ok := any(h.Connectors[serviceID]).(P); ok {
 		return conn, nil
 	}
 	var zero P
 	return zero, fmt.Errorf("%s %q is not supported yet (supported: %s)",
-		what, serviceID, mirrorSupportedFor[P](s))
+		what, serviceID, MirrorSupportedFor[P](h))
 }

@@ -605,7 +605,7 @@ func TestFlowProvidesKind_AgreesWithHasProviders(t *testing.T) {
 	conn := placesDocumentsConnector{}
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.connectors["stub"] = conn
-	for _, k := range srv.builtinKinds() {
+	for _, k := range srv.library().BuiltinKinds() {
 		if k.Provides(conn) && !k.HasProviders(srv) {
 			t.Errorf("kind %q: Provides(conn)=true but HasProviders(srv)=false", k.Def().ID)
 		}

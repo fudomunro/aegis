@@ -49,7 +49,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("events status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -61,7 +61,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("contacts status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -79,7 +79,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/services/google-calendar/me/events", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleServiceProxy)(w, req)
+	srv.AuthMiddleware(srv.library().HandleServiceProxy)(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("proxy status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -102,7 +102,7 @@ func TestAuthMiddleware_AppTokenFreeBusyRouteOnly(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("events status = %d body = %s, want 403", w.Code, w.Body.String())
 	}
@@ -111,7 +111,7 @@ func TestAuthMiddleware_AppTokenFreeBusyRouteOnly(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.routeHandler("/v1/library/freebusy"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("freebusy status = %d body = %s", w.Code, w.Body.String())
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestAPIRouteAllowed(t *testing.T) {
@@ -131,8 +132,8 @@ func TestAuthMiddleware_ExternalAPI_TokensOnly(t *testing.T) {
 		adminAPIKey: "admin-key",
 		authMode:    AuthModeAuto,
 		config:      &Config{},
-		cache:       NewCache(),
-		mbCache:     NewCache(),
+		cache:       shared.NewCache(),
+		mbCache:     shared.NewCache(),
 		scopes:      scopeStore,
 		identity:    ServeHeaderResolver{},
 	}

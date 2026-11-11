@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/library"
 	"testing"
 )
 
@@ -11,7 +12,7 @@ import (
 func TestLibraryKinds_BuiltinInSync(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	builtin := map[string]bool{}
-	for _, k := range srv.builtinKinds() {
+	for _, k := range srv.library().BuiltinKinds() {
 		if k.Def().ID == "" {
 			t.Fatal("kinds.Builtin entry with empty ID")
 		}
@@ -22,12 +23,12 @@ func TestLibraryKinds_BuiltinInSync(t *testing.T) {
 	}
 
 	seen := map[string]bool{}
-	for _, k := range libraryKinds {
+	for _, k := range library.LibraryKinds {
 		if k.ID == "" {
-			t.Fatal("libraryKinds entry with empty ID")
+			t.Fatal("library.LibraryKinds entry with empty ID")
 		}
 		if seen[k.ID] {
-			t.Fatalf("duplicate libraryKinds ID %q", k.ID)
+			t.Fatalf("duplicate library.LibraryKinds ID %q", k.ID)
 		}
 		seen[k.ID] = true
 		if !builtin[k.ID] {
@@ -36,7 +37,7 @@ func TestLibraryKinds_BuiltinInSync(t *testing.T) {
 	}
 	for id := range builtin {
 		if !seen[id] {
-			t.Errorf("kinds.Builtin has extra kind %q with no libraryKinds entry", id)
+			t.Errorf("kinds.Builtin has extra kind %q with no library.LibraryKinds entry", id)
 		}
 	}
 }
@@ -51,7 +52,7 @@ func TestLibraryKinds_RoutesInSync(t *testing.T) {
 
 	declared := map[string]string{} // pattern → owning kind ID
 	appReadable := map[string]bool{}
-	for _, bk := range srv.builtinKinds() {
+	for _, bk := range srv.library().BuiltinKinds() {
 		id := bk.Def().ID
 		for _, route := range bk.Routes() {
 			if route.Pattern == "" || route.Handler == nil {
@@ -66,7 +67,7 @@ func TestLibraryKinds_RoutesInSync(t *testing.T) {
 		}
 	}
 
-	for _, k := range libraryKinds {
+	for _, k := range library.LibraryKinds {
 		owner, ok := declared[k.Path]
 		if !ok {
 			t.Errorf("kind %q has no declared route at %s", k.ID, k.Path)
@@ -87,7 +88,7 @@ func TestLibraryKinds_RoutesInSync(t *testing.T) {
 		"/v1/library/links":  true,
 		"/v1/library/links/": true,
 	}
-	for path := range (&Server{}).libraryRouteHandlers() {
+	for path := range (&Server{}).library().RouteHandlers() {
 		if _, ok := declared[path]; ok || fixed[path] {
 			continue
 		}

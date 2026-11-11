@@ -56,7 +56,7 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/services/spotify/playlists/pl1", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleServiceProxy)(w, req)
+	srv.AuthMiddleware(srv.library().HandleServiceProxy)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -80,7 +80,7 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 	req2 := httptest.NewRequest("GET", "/v1/services/spotify/playlists/pl1", nil)
 	req2.Header.Set("X-Api-Key", "test-key")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleServiceProxy)(w2, req2)
+	srv.AuthMiddleware(srv.library().HandleServiceProxy)(w2, req2)
 	if w2.Header().Get("X-Aegis-Cache") != "hit" {
 		t.Fatalf("cache header = %q, want hit", w2.Header().Get("X-Aegis-Cache"))
 	}
@@ -109,7 +109,7 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
+	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -181,7 +181,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 	req3 := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req3.Header.Set("X-Api-Key", "test-key")
 	w3 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w3, req3)
+	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w3, req3)
 	if w3.Code != http.StatusOK {
 		t.Fatalf("agent status = %d body=%s", w3.Code, w3.Body.String())
 	}
