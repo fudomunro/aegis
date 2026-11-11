@@ -9,9 +9,9 @@
 > mid-campaign; append questions here instead. Precedent for a record like
 > this: [`restructure-core-types-connectors.md`](restructure-core-types-connectors.md).
 
-Status: **in progress** — Phase 0 (rules + this record), P1 (seam
-vocabulary into `internal/shared`), P2 (`internal/library` + engines), and
-P3 (`internal/admin` + apps/scopes stores) are landed. P4–P5 pending.
+Status: **in progress** — Phases 0–P4 are landed (rules, seam
+vocabulary, `internal/library`, `internal/admin`, `internal/syncjobs`).
+P5 (hub cleanup) pending.
 
 Related issues: **#358** (this restructure), **#346** (hookhealth/inject
 extraction — their final homes are settled here), **#325** (dissolution of
@@ -222,6 +222,28 @@ file-level rows:
    permissions view moved to `internal/kinds` (it inspects `kinds.*Provider`
    interfaces), keeping the surfaces uncoupled.
 
+## Implementation amendments (P4)
+
+1. **The layering is a chain, not three peers.** The mirror runner drives
+   the data plane's mirror engine, so `internal/syncjobs` sits **above**
+   `internal/library`, and the management surface reads the queue and the
+   capture surface, so `internal/admin` sits above `internal/syncjobs`:
+   `shared → kinds → connectors → library → syncjobs → admin → core`.
+   The two HTTP surfaces still never import each other (admin reads the
+   data plane through the `KindCatalog` interface).
+2. **`core/copies` stays a `core/` engine** (the settled call said
+   syncjobs). The copy ledger is stamped by the data plane (`copyInfoFor`
+   feeds `Host.CopyInfo`), read by admin, and driven by freshness — it
+   must sit below all three, and `core/copies` does.
+3. **The maintenance pair moved together** as the P3 amendment promised:
+   capture shape, collector, and bundle writer into `internal/syncjobs`;
+   the admin handler into `internal/admin` over a narrow
+   `MaintenanceCapture` interface the hub wires.
+4. **`kinds.ServiceView`-style fakes over hub fixtures**: the runner tests
+   moved into `internal/syncjobs` beside their sources (the testing
+   convention), with fixture hosts replacing `testServerWithBase` — the
+   import direction forbids the reverse.
+
 ## Move phases
 
 Each phase is one `refactor/…` branch and PR; tests move with the code; the
@@ -233,7 +255,7 @@ guardrails table updates in the same commit; the 80% floor never bends.
 | **P1** | Seam vocabulary → `internal/shared`; `internal/kinds` drops `core/policy`, `core/scopes`, `core/audit`, `core/search` imports; `SearchIndex` interface lands in kinds — **landed** | `internal/kinds` row shrinks to `{shared}`; connectors row drops `core/policy` |
 | **P2** | `internal/library` + `core/search`, `core/links`; splits of `cache.go`, `copy_ledger.go`, `canonical.go` — **landed** (the `handler.go` split is P5; see amendments) | `internal/library` row added |
 | **P3** | `internal/admin` + `core/apps`, `core/scopes`; `searchindex.go` rename — **landed** (`core/udk` stays; see amendments) | `internal/admin` row added |
-| **P4** | `internal/syncjobs` (promote `core/syncjobs`) + runners, freshness, maintenance, `core/copies` | add `internal/syncjobs` row; drop `core/syncjobs` |
+| **P4** | `internal/syncjobs` (promoted `core/syncjobs`) + runners, freshness, maintenance — **landed** (`core/copies` stays; see amendments) | `internal/syncjobs` row added; `core/syncjobs` dropped |
 | **P5** | Hub cleanup: `run.go` CLI → `cmd/`, `musicbrainz.go`, `maturity.go`, `fakeupstream.go`, `httpclient.go`, `handler.go` → `auth.go` + `hook.go` | table shrinkage |
 
 ## Out of scope

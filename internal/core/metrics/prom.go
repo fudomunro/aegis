@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
+	"github.com/fudomunro/aegis/internal/syncjobs"
 )
 
 // Prometheus-style metrics export (issue #105). Process-lifetime counters

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/syncjobs"
 )
 
 // TestMaintenanceLoop_FakeDriftToSignals drives the loop's capture half end
@@ -22,14 +22,16 @@ func TestMaintenanceLoop_FakeDriftToSignals(t *testing.T) {
 	up := httptest.NewServer(fu)
 	t.Cleanup(up.Close)
 
+	dir := t.TempDir()
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
+	srv.dataDir = dir
 	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.syncJobs = testJobStore(t)
 	srv.syncRunners = syncjobs.NewRunnerRegistry()
-	registerCanaryRunners(srv.syncRunners, srv)
+	srv.runners().Register(srv.syncRunners)
 
 	w := syncjobs.NewSyncWorker(srv.syncJobs, srv.syncRunners, syncjobs.SyncWorkerOptions{Workers: 1, Poll: 10 * time.Millisecond})
 	w.Start()
@@ -51,7 +53,7 @@ func TestMaintenanceLoop_FakeDriftToSignals(t *testing.T) {
 	mustEnqueue(t, srv.syncJobs, syncjobs.SyncEnqueue{Kind: "tracks", JobType: syncjobs.SyncJobTypeCanary, Service: "spotify", MaxAttempts: 1})
 	w.Kick()
 	waitFor(t, 1, func() int { return srv.syncJobs.Counts("", "").Succeeded })
-	if sig := srv.CollectMaintenanceSignals(); sig.Sync != nil && len(sig.Sync.Failures) > 0 {
+	if sig := srv.runners().CollectMaintenanceSignals(); sig.Sync != nil && len(sig.Sync.Failures) > 0 {
 		t.Fatalf("healthy canary must not fail: %+v", sig.Sync.Failures)
 	}
 
@@ -64,7 +66,7 @@ func TestMaintenanceLoop_FakeDriftToSignals(t *testing.T) {
 	w.Kick()
 	waitFor(t, 1, func() int { return srv.syncJobs.Counts("", "").Failed })
 
-	sig := srv.CollectMaintenanceSignals()
+	sig := srv.runners().CollectMaintenanceSignals()
 	if sig.Sync == nil || len(sig.Sync.Failures) != 1 {
 		t.Fatalf("bundle failures = %+v", sig.Sync)
 	}
@@ -78,9 +80,8 @@ func TestMaintenanceLoop_FakeDriftToSignals(t *testing.T) {
 
 	// The capture writes the evidence as a self-contained bundle file for
 	// the out-of-process scanner and dashboard tool to read.
-	dir := t.TempDir()
 	sig.CapturedAt = time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC)
-	path, err := WriteMaintenanceSignals(dir, sig)
+	path, err := srv.runners().WriteMaintenanceSignals(sig)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -24,18 +24,19 @@ import (
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/sampledata"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/library/links"
 	"github.com/fudomunro/aegis/internal/library/search"
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/syncjobs"
 )
 
-// newSyncRunnerRegistry wires the runners this build supports.
+// newSyncRunnerRegistry wires the background-consistency runners this build
+// supports onto the queue registry (issue #358).
 func newSyncRunnerRegistry(srv *Server) *syncjobs.RunnerRegistry {
 	r := syncjobs.NewRunnerRegistry()
-	r.Register(&mailIngestRunner{srv: srv})
+	srv.runners().Register(r)
 	return r
 }
 
@@ -350,7 +351,7 @@ func Run() {
 	if scheduleStore != nil {
 		defer scheduleStore.Close()
 		if scheduleStore.Enabled() {
-			if added, err := scheduleStore.SeedDefaults(freshnessKinds); err == nil && added > 0 {
+			if added, err := scheduleStore.SeedDefaults(syncjobs.SyncFreshnessKinds); err == nil && added > 0 {
 				slog.Info("seeded default sync schedules", "count", added)
 			}
 			slog.Info("sync schedule store ready", "count", len(scheduleStore.List()))
@@ -560,9 +561,6 @@ func Run() {
 	// Fail-open: a disabled store or zero workers leaves the queue idle and
 	// the request-driven sync surfaces keep working.
 	srv.syncRunners = newSyncRunnerRegistry(srv)
-	registerFreshnessRunners(srv.syncRunners, srv)
-	registerMirrorRunners(srv.syncRunners, srv)
-	registerCanaryRunners(srv.syncRunners, srv)
 	if syncStore.Enabled() && *syncWorkers > 0 {
 		srv.syncWorker = syncjobs.NewSyncWorker(syncStore, srv.syncRunners, syncjobs.SyncWorkerOptions{
 			Workers:            *syncWorkers,

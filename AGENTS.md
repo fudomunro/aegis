@@ -114,7 +114,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Generic/shared content transport | `internal/library` (`proxy.go` handler), `internal/connectors` (upstream transport), `internal/core` hub (`GetValidToken` — the `connectors.Host` credential seam), `internal/shared` (HTTP client) | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths. Tokens never leave the hub |
 | Shared plumbing + seam vocabulary (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table, body-shape tokens; capability/onboarding/mail-ingest/ownership seam shapes) | `internal/shared` | Stdlib-only imports. One owner: plumbing and the shapes two internal packages exchange to agree on a contract — shapes and trivial pure constructors/accessors/predicates over them (the `kindrules.go` table), no state, no I/O, no configuration resolution, no `Host`, no service registries, no provider paths (issue #280, amended #325). Do not re-grow twins in `core` or `connectors` |
 | Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared` (state store), `internal/core` hub (flows) | AES-256-GCM + PBKDF2; refresh singleflight |
-| Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go` runners) | Durable SQLite-backed jobs (issue #227). The engine takes a `SyncMetrics` seam; hub wiring and runners stay in core |
+| Sync domain (queue / runners / freshness) | `internal/syncjobs` (engine + runners + maintenance capture), `internal/admin` (`syncjobs_admin.go` read model), `internal/core` hub (wiring) | Durable SQLite-backed jobs (issue #227). The engine takes a `SyncMetrics` seam; the runners drive the data plane's mirror engine and the mail walks |
 | Access + Prometheus metrics engines | `internal/core/metrics/` (engines), `internal/core` hub (`metrics.go` handlers/derivation) | `AccessMetrics` ring + `PromMetrics` text export. The hub feeds them from request handlers; `PromMetrics` satisfies `syncjobs.SyncMetrics` |
 | Sample/demo datasets + sample:// connector | `internal/core/sampledata/`, `docs/development.md`, `docs/demo-datasets.md` | Deterministic fixtures (generic + LotR/Lincoln packs), mbox/JSON writers, `SampleLibraryConnector`. Demo lockdown validation stays in the hub (`demo.go`) |
 | UDK registry + admin overlay | `internal/core/udk/` (registry/loader + `user_kinds.json` overlay), `internal/admin` (`udk_admin.go`), `internal/library` (serving glue) | User-defined kinds (issue #15). Schema packs under `user-kinds/` load into the same pipeline. The registry stays a `core/` engine — the data plane's kind composition consumes it |
@@ -235,7 +235,7 @@ Principles, not a closed package list. `import_boundary_test.go` and
 `churn_guardrails_test.go` enforce these; this section explains them.
 
 > **Layout transition (issue #358).** This section states the **target**
-> dependency direction; the tree is mid-move toward it (P1–P3 landed:
+> dependency direction; the tree is mid-move toward it (P1–P4 landed:
 > shared seam vocabulary, `internal/library`, and `internal/admin`). The
 > per-package import
 > table in `churn_guardrails_test.go` is the ratchet and keeps matching the
@@ -246,22 +246,28 @@ Principles, not a closed package list. `import_boundary_test.go` and
 > design record instead.
 
 1. **Dependency direction.** Layers, bottom to top: `internal/shared` →
-   `internal/kinds` → `internal/connectors` → the three surface packages
-   (`internal/admin`, `internal/library`, `internal/syncjobs`) → the hub
-   (`internal/core`) → `main`. Nothing under `internal/` imports the hub; only
+   `internal/kinds` → `internal/connectors` → `internal/library` →
+   `internal/syncjobs` → `internal/admin` → the hub (`internal/core`) →
+   `main`. Nothing under `internal/` imports the hub; only
    `main` packages do (the repo root and `cmd/*`). `internal/shared` is a
    leaf. `internal/kinds` imports `internal/shared` only; `internal/connectors`
-   imports `internal/shared` and `internal/kinds`. Surface packages may import
-   domain packages, `internal/shared`, and `core/` engine sub-packages
-   (`core/policy`, `core/tokens`, …) — never the hub.
-2. **Surface packages follow audiences.** `internal/admin` is the management
-   surface (`/v1/admin/*`, admin UI, setup flows, admin-owned writes).
-   `internal/library` is the agent data plane (`/v1/library/*`, content
-   transport, read-time enforcement). `internal/syncjobs` is background
-   consistency (queue, runners, freshness, maintenance) and serves no HTTP
-   routes. The hub registers routes and wraps handlers with the auth
-   perimeter; each surface exposes its handler set and read models for the
-   hub to mount. The pre-request hook stays in the hub (perimeter).
+   imports `internal/shared` and `internal/kinds`. A package may import
+   anything below it and `core/` engine sub-packages
+   (`core/policy`, `core/tokens`, …) — never the hub. The two HTTP
+   surfaces (`internal/admin`, `internal/library`) never import each other
+   in practice: admin reads the data plane through a narrow interface the
+   hub wires.
+2. **Packages follow audiences and work.** `internal/admin` is the
+   management surface (`/v1/admin/*`, admin UI, setup flows, admin-owned
+   writes). `internal/library` is the agent data plane (`/v1/library/*`,
+   content transport, read-time enforcement). `internal/syncjobs` is the
+   sync domain (queue, runners, freshness, maintenance) that drives the
+   data plane in the background and serves no HTTP routes — it sits above
+   the data plane and below the management surface (which reads its queue
+   and capture surface). The hub registers routes and wraps handlers with
+   the auth perimeter; each surface exposes its handler set and read
+   models for the hub to mount. The pre-request hook stays in the hub
+   (perimeter).
 3. **When a new package is allowed.** Any new internal package that (a)
    exposes one documented seam interface that the hub implements (like
    `connectors.Host`) or is a self-contained store/engine, (b) obeys the

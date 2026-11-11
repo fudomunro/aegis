@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/syncjobs"
 )
 
 // Admin sync surface (issue #227). Read model for the queue plus on-demand

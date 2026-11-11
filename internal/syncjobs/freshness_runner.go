@@ -1,11 +1,9 @@
-package core
+package syncjobs
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 // Freshness-check runner (issue #227 phase 2). One runner per library kind,
@@ -26,23 +24,23 @@ type freshnessRunner struct {
 	kind   string
 }
 
-// JobTypes implements syncjobs.SyncRunner.
-func (r *freshnessRunner) JobTypes() []string { return []string{syncjobs.SyncJobTypeFreshness} }
+// JobTypes implements SyncRunner.
+func (r *freshnessRunner) JobTypes() []string { return []string{SyncJobTypeFreshness} }
 
-// Kind implements syncjobs.SyncRunner.
+// Kind implements SyncRunner.
 func (r *freshnessRunner) Kind() string { return r.kind }
 
 // Run checks one bounded batch of copy rows and chains until the ledger is
 // exhausted. Always succeeds as long as the store answers: an uncheckable row
 // is skipped and left alone, never failed.
-func (r *freshnessRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.SyncStep, error) {
+func (r *freshnessRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
 	if r == nil || r.engine == nil {
-		return syncjobs.SyncStep{}, fmt.Errorf("%w: freshness engine not wired", syncjobs.ErrSyncTerminal)
+		return SyncStep{}, fmt.Errorf("%w: freshness engine not wired", ErrSyncTerminal)
 	}
 	var p freshnessJobPayload
 	if len(job.Payload) > 0 {
 		if err := json.Unmarshal(job.Payload, &p); err != nil {
-			return syncjobs.SyncStep{}, fmt.Errorf("%w: bad freshness payload: %v", syncjobs.ErrSyncTerminal, err)
+			return SyncStep{}, fmt.Errorf("%w: bad freshness payload: %v", ErrSyncTerminal, err)
 		}
 	}
 	kind := p.Kind
@@ -51,10 +49,10 @@ func (r *freshnessRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjo
 	}
 	batch, err := r.engine.RunBatch(ctx, kind, p.AfterID, p.Limit)
 	if err != nil {
-		return syncjobs.SyncStep{}, err
+		return SyncStep{}, err
 	}
 
-	step := syncjobs.SyncStep{
+	step := SyncStep{
 		Done: batch.Done,
 		Progress: map[string]any{
 			"kind":       batch.Kind,
@@ -80,24 +78,24 @@ func (r *freshnessRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjo
 	return step, nil
 }
 
-// freshnessKinds are the library kinds a freshness_check runner is registered
+// SyncFreshnessKinds are the library kinds a freshness_check runner is registered
 // for today. Copy rows for other kinds (contacts, events, photos) still show
 // up in the freshness rollup as unchecked — they simply have no checker yet.
-var freshnessKinds = []string{"messages", "playlists", "tracks"}
+var SyncFreshnessKinds = []string{"messages", "playlists", "tracks"}
 
 // newFreshnessRunners builds one freshness runner per supported kind.
-func newFreshnessRunners(srv *Server) []syncjobs.SyncRunner {
-	engine := NewFreshnessEngine(srv, newCheckerRegistry(srv))
-	out := make([]syncjobs.SyncRunner, 0, len(freshnessKinds))
-	for _, kind := range freshnessKinds {
+func newFreshnessRunners(run *Runners) []SyncRunner {
+	engine := NewFreshnessEngine(run, newCheckerRegistry(run))
+	out := make([]SyncRunner, 0, len(SyncFreshnessKinds))
+	for _, kind := range SyncFreshnessKinds {
 		out = append(out, &freshnessRunner{engine: engine, kind: kind})
 	}
 	return out
 }
 
 // registerFreshnessRunners adds the freshness runners to a registry.
-func registerFreshnessRunners(reg *syncjobs.RunnerRegistry, srv *Server) {
-	for _, r := range newFreshnessRunners(srv) {
+func registerFreshnessRunners(reg *RunnerRegistry, run *Runners) {
+	for _, r := range newFreshnessRunners(run) {
 		reg.Register(r)
 	}
 }

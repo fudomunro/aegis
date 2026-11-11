@@ -132,7 +132,7 @@ func registerAdminRoutes(mux *http.ServeMux, srv *Server) {
 	mux.HandleFunc("/v1/admin/cache", adminOnly(srv.admin().HandleAdminCache))
 	mux.HandleFunc("/v1/admin/cache/clear", adminOnly(srv.admin().HandleAdminCacheClear))
 	mux.HandleFunc("/v1/admin/hook-health", adminOnly(srv.admin().HandleAdminHookHealth))
-	mux.HandleFunc("/v1/admin/maintenance/signals", adminOnly(srv.HandleAdminMaintenanceSignals))
+	mux.HandleFunc("/v1/admin/maintenance/signals", adminOnly(srv.admin().HandleAdminMaintenanceSignals))
 	mux.HandleFunc("/v1/admin/mail/status", adminOnly(srv.admin().HandleAdminMailStatus))
 	mux.HandleFunc("/v1/admin/search/status", adminOnly(srv.admin().HandleAdminSearchStatus))
 	mux.HandleFunc("/v1/admin/mail/sync", adminOnly(srv.admin().HandleAdminMailSync))

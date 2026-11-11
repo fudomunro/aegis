@@ -13,7 +13,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/core/metrics"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
+	"github.com/fudomunro/aegis/internal/syncjobs"
 )
 
 // testJobStore opens a throwaway sync job store for hub tests. The engine's
@@ -180,7 +180,7 @@ func TestHandleAdminSync_Validation(t *testing.T) {
 		`{}`,
 		`{"kind":"messages"}`,
 		`{"job_type":"ingest"}`,
-		`{"kind":"messages","job_type":"freshness_check"}`, // no runner registered
+		`{"kind":"photos","job_type":"ingest"}`, // no runner serves photos
 	} {
 		req := adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", body)
 		w := httptest.NewRecorder()
@@ -359,7 +359,7 @@ func TestHandleAdminSync_WorkerDisabledStillValidates(t *testing.T) {
 
 	// Unknown job type is still rejected (validation does not need the pool).
 	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key",
-		`{"kind":"messages","job_type":"freshness_check"}`)
+		`{"kind":"photos","job_type":"ingest"}`)
 	w = httptest.NewRecorder()
 	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusBadRequest {

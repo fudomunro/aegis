@@ -1,4 +1,4 @@
-package core
+package syncjobs
 
 import (
 	"context"
@@ -113,15 +113,15 @@ type freshnessOutcome struct {
 // FreshnessEngine walks copy rows and stamps check results. Shared by the
 // per-kind freshness runners.
 type FreshnessEngine struct {
-	srv      *Server
+	run      *Runners
 	checkers *CheckerRegistry
 	logger   *slog.Logger
 }
 
 // NewFreshnessEngine builds an engine over the server's copy ledger.
-func NewFreshnessEngine(srv *Server, checkers *CheckerRegistry) *FreshnessEngine {
+func NewFreshnessEngine(run *Runners, checkers *CheckerRegistry) *FreshnessEngine {
 	return &FreshnessEngine{
-		srv:      srv,
+		run:      run,
 		checkers: checkers,
 		logger:   slog.Default().With("component", "sync_freshness"),
 	}
@@ -163,14 +163,14 @@ type FreshnessBatch struct {
 // one job step.
 func (e *FreshnessEngine) RunBatch(ctx context.Context, kind string, afterID int64, limit int) (FreshnessBatch, error) {
 	out := FreshnessBatch{Kind: kind, AfterID: afterID, NextAfter: afterID}
-	if e == nil || e.srv == nil || e.srv.copyLedger == nil || !e.srv.copyLedger.Enabled() {
+	if e == nil || e.run == nil || e.run.Copies == nil || !e.run.Copies.Enabled() {
 		out.Done = true
 		return out, nil
 	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows := e.srv.copyLedger.ListForCheck(kind, afterID, limit)
+	rows := e.run.Copies.ListForCheck(kind, afterID, limit)
 	for _, row := range rows {
 		rec := row.Rec
 		if err := ctx.Err(); err != nil {
@@ -185,7 +185,7 @@ func (e *FreshnessEngine) RunBatch(ctx context.Context, kind string, afterID int
 					"external_id", rec.ExternalID, "reason", res.Skip)
 			}
 		} else {
-			if err := e.srv.copyLedger.MarkChecked(rec.Kind, rec.EntityKey, rec.Service, rec.ExternalID, res.Status); err != nil {
+			if err := e.run.Copies.MarkChecked(rec.Kind, rec.EntityKey, rec.Service, rec.ExternalID, res.Status); err != nil {
 				e.logger.Warn("copy freshness stamp failed",
 					"kind", rec.Kind, "service", rec.Service, "error", err)
 			}
@@ -215,7 +215,7 @@ func (e *FreshnessEngine) RunBatch(ctx context.Context, kind string, afterID int
 // promises. Endpoint comes from the connector's configured service (never
 // hardcoded), per the connector rules.
 type musicMirrorChecker struct {
-	srv     *Server
+	run     *Runners
 	service string
 }
 
@@ -224,7 +224,7 @@ func (c *musicMirrorChecker) Services() []string { return []string{c.service} }
 
 // Check implements CopyChecker.
 func (c *musicMirrorChecker) Check(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
-	p, ok := c.srv.connectors[c.service].(kinds.PlaylistMetaProvider)
+	p, ok := c.run.Connectors[c.service].(kinds.PlaylistMetaProvider)
 	if !ok {
 		return copies.Version{}, false, false, nil
 	}
@@ -258,7 +258,7 @@ func (c *musicMirrorChecker) Check(ctx context.Context, rec copies.Record) (copi
 // is `missing` — the ingested data is still in the archive, but the
 // recorded copy location is gone.
 type snapshotChecker struct {
-	srv     *Server
+	run     *Runners
 	service string
 }
 
@@ -267,7 +267,7 @@ func (c *snapshotChecker) Services() []string { return []string{c.service} }
 
 // Check implements CopyChecker.
 func (c *snapshotChecker) Check(_ context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
-	p, ok := c.srv.mailIngests[c.service].(kinds.SnapshotProber)
+	p, ok := c.run.MailIngests[c.service].(kinds.SnapshotProber)
 	if !ok {
 		return copies.Version{}, false, false, nil
 	}
@@ -292,16 +292,16 @@ func (c *snapshotChecker) Check(_ context.Context, rec copies.Record) (copies.Ve
 // way. Services with no checker (Bluesky shares, DAV item etags) are
 // deliberately absent: their rows stay `unknown` until a checker lands,
 // which is the honest answer.
-func newCheckerRegistry(srv *Server) *CheckerRegistry {
+func newCheckerRegistry(run *Runners) *CheckerRegistry {
 	r := NewCheckerRegistry()
-	for id, conn := range srv.connectors {
+	for id, conn := range run.Connectors {
 		if _, ok := conn.(kinds.PlaylistMetaProvider); ok {
-			r.Register(&musicMirrorChecker{srv: srv, service: id})
+			r.Register(&musicMirrorChecker{run: run, service: id})
 		}
 	}
-	for id, ing := range srv.mailIngests {
+	for id, ing := range run.MailIngests {
 		if _, ok := ing.(kinds.SnapshotProber); ok {
-			r.Register(&snapshotChecker{srv: srv, service: id})
+			r.Register(&snapshotChecker{run: run, service: id})
 		}
 	}
 	return r

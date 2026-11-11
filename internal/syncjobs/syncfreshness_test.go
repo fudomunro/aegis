@@ -1,4 +1,4 @@
-package core
+package syncjobs
 
 import (
 	"context"
@@ -11,13 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
-	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
@@ -100,19 +96,19 @@ func TestCheckerRegistry(t *testing.T) {
 	}
 }
 
-func freshServerWithLedger(t *testing.T) (*Server, *copies.Ledger) {
+func freshServerWithLedger(t *testing.T) (*Runners, *copies.Ledger) {
 	t.Helper()
 	ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db"))
 	if err != nil {
 		t.Fatalf("copies.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = ledger.Close() })
-	srv := &Server{copyLedger: ledger}
+	srv := &Runners{Copies: ledger}
 	return srv, ledger
 }
 
 func TestFreshnessEngine_StampsStatuses(t *testing.T) {
-	srv, ledger := freshServerWithLedger(t)
+	run, ledger := freshServerWithLedger(t)
 	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p1", Service: "spotify", ExternalID: "pl1",
 		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull,
@@ -150,7 +146,7 @@ func TestFreshnessEngine_StampsStatuses(t *testing.T) {
 	}
 	reg := NewCheckerRegistry()
 	reg.Register(checker)
-	engine := NewFreshnessEngine(srv, reg)
+	engine := NewFreshnessEngine(run, reg)
 
 	batch, err := engine.RunBatch(context.Background(), "playlists", 0, 50)
 	if err != nil {
@@ -195,7 +191,7 @@ func TestFreshnessEngine_StampsStatuses(t *testing.T) {
 }
 
 func TestFreshnessEngine_ChainsBatches(t *testing.T) {
-	srv, ledger := freshServerWithLedger(t)
+	run, ledger := freshServerWithLedger(t)
 	for i := 0; i < 5; i++ {
 		_, _ = ledger.Upsert(copies.Record{
 			Kind: "playlists", EntityKey: fmt.Sprint("p", i), Service: "spotify",
@@ -211,7 +207,7 @@ func TestFreshnessEngine_ChainsBatches(t *testing.T) {
 	}
 	reg := NewCheckerRegistry()
 	reg.Register(checker)
-	engine := NewFreshnessEngine(srv, reg)
+	engine := NewFreshnessEngine(run, reg)
 
 	// Two per step: the chain must walk all five rows via after_id.
 	first, err := engine.RunBatch(context.Background(), "playlists", 0, 2)
@@ -243,7 +239,7 @@ func TestFreshnessEngine_ChainsBatches(t *testing.T) {
 }
 
 func TestFreshnessEngine_AuthOrErrorLeavesRowAlone(t *testing.T) {
-	srv, ledger := freshServerWithLedger(t)
+	run, ledger := freshServerWithLedger(t)
 	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p1", Service: "spotify", ExternalID: "pl1",
 		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{ItemCount: 3},
@@ -256,7 +252,7 @@ func TestFreshnessEngine_AuthOrErrorLeavesRowAlone(t *testing.T) {
 	}
 	reg := NewCheckerRegistry()
 	reg.Register(checker)
-	engine := NewFreshnessEngine(srv, reg)
+	engine := NewFreshnessEngine(run, reg)
 
 	batch, err := engine.RunBatch(context.Background(), "playlists", 0, 10)
 	if err != nil {
@@ -272,7 +268,7 @@ func TestFreshnessEngine_AuthOrErrorLeavesRowAlone(t *testing.T) {
 }
 
 func TestFreshnessEngine_DisabledLedgerIsNoop(t *testing.T) {
-	engine := NewFreshnessEngine(&Server{copyLedger: &copies.Ledger{}}, NewCheckerRegistry())
+	engine := NewFreshnessEngine(&Runners{Copies: &copies.Ledger{}}, NewCheckerRegistry())
 	batch, err := engine.RunBatch(context.Background(), "playlists", 0, 10)
 	if err != nil {
 		t.Fatalf("RunBatch on disabled ledger: %v", err)
@@ -285,7 +281,7 @@ func TestFreshnessEngine_DisabledLedgerIsNoop(t *testing.T) {
 // --- runner ---
 
 func TestFreshnessRunner_ChainsUntilDone(t *testing.T) {
-	srv, ledger := freshServerWithLedger(t)
+	run, ledger := freshServerWithLedger(t)
 	for i := 0; i < 3; i++ {
 		_, _ = ledger.Upsert(copies.Record{
 			Kind: "playlists", EntityKey: fmt.Sprint("p", i), Service: "spotify",
@@ -300,9 +296,9 @@ func TestFreshnessRunner_ChainsUntilDone(t *testing.T) {
 			return copies.Version{ItemCount: 1}, true, true, nil
 		},
 	})
-	runner := &freshnessRunner{engine: NewFreshnessEngine(srv, reg), kind: "playlists"}
+	runner := &freshnessRunner{engine: NewFreshnessEngine(run, reg), kind: "playlists"}
 
-	step, err := runner.Run(context.Background(), syncjobs.SyncJob{Payload: json.RawMessage(`{"limit":1}`)})
+	step, err := runner.Run(context.Background(), SyncJob{Payload: json.RawMessage(`{"limit":1}`)})
 	if err != nil {
 		t.Fatalf("first step: %v", err)
 	}
@@ -319,7 +315,7 @@ func TestFreshnessRunner_ChainsUntilDone(t *testing.T) {
 	for i := 0; i < 5 && !step.Done; i++ {
 		var p freshnessJobPayload
 		_ = json.Unmarshal(step.Payload, &p)
-		step, err = runner.Run(context.Background(), syncjobs.SyncJob{Payload: step.Payload})
+		step, err = runner.Run(context.Background(), SyncJob{Payload: step.Payload})
 		if err != nil {
 			t.Fatalf("step %d: %v", i, err)
 		}
@@ -334,16 +330,16 @@ func TestFreshnessRunner_ChainsUntilDone(t *testing.T) {
 
 func TestFreshnessRunner_TerminalConditions(t *testing.T) {
 	var bad *freshnessRunner
-	if _, err := bad.Run(context.Background(), syncjobs.SyncJob{}); err == nil {
+	if _, err := bad.Run(context.Background(), SyncJob{}); err == nil {
 		t.Fatal("nil runner must fail terminal")
-	} else if !strings.Contains(err.Error(), syncjobs.ErrSyncTerminal.Error()) {
+	} else if !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
 		t.Fatalf("err = %v, want terminal", err)
 	}
-	r := &freshnessRunner{engine: NewFreshnessEngine(&Server{copyLedger: &copies.Ledger{}}, NewCheckerRegistry()), kind: "playlists"}
-	if _, err := r.Run(context.Background(), syncjobs.SyncJob{Payload: json.RawMessage(`{`)}); err == nil {
+	r := &freshnessRunner{engine: NewFreshnessEngine(&Runners{Copies: &copies.Ledger{}}, NewCheckerRegistry()), kind: "playlists"}
+	if _, err := r.Run(context.Background(), SyncJob{Payload: json.RawMessage(`{`)}); err == nil {
 		t.Fatal("bad payload must fail terminal")
 	}
-	if got := r.JobTypes(); len(got) != 1 || got[0] != syncjobs.SyncJobTypeFreshness {
+	if got := r.JobTypes(); len(got) != 1 || got[0] != SyncJobTypeFreshness {
 		t.Fatalf("JobTypes = %v", got)
 	}
 	if r.Kind() != "playlists" {
@@ -352,18 +348,18 @@ func TestFreshnessRunner_TerminalConditions(t *testing.T) {
 }
 
 func TestNewFreshnessRunners_CoverSupportedKinds(t *testing.T) {
-	runners := newFreshnessRunners(&Server{copyLedger: &copies.Ledger{}})
-	if len(runners) != len(freshnessKinds) {
-		t.Fatalf("runners = %d, want %d", len(runners), len(freshnessKinds))
+	runners := newFreshnessRunners(&Runners{Copies: &copies.Ledger{}})
+	if len(runners) != len(SyncFreshnessKinds) {
+		t.Fatalf("runners = %d, want %d", len(runners), len(SyncFreshnessKinds))
 	}
-	reg := syncjobs.NewRunnerRegistry()
-	registerFreshnessRunners(reg, &Server{copyLedger: &copies.Ledger{}})
-	for _, kind := range freshnessKinds {
-		if _, ok := reg.For(kind, syncjobs.SyncJobTypeFreshness); !ok {
+	reg := NewRunnerRegistry()
+	registerFreshnessRunners(reg, &Runners{Copies: &copies.Ledger{}})
+	for _, kind := range SyncFreshnessKinds {
+		if _, ok := reg.For(kind, SyncJobTypeFreshness); !ok {
 			t.Fatalf("kind %s has no freshness runner", kind)
 		}
 	}
-	if _, ok := reg.For("contacts", syncjobs.SyncJobTypeFreshness); ok {
+	if _, ok := reg.For("contacts", SyncJobTypeFreshness); ok {
 		t.Fatal("contacts has no checker yet and must not advertise a runner")
 	}
 }
@@ -376,9 +372,10 @@ func TestSnapshotChecker(t *testing.T) {
 	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	srv := &Server{}
-	srv.wireMailIngests()
-	c := &snapshotChecker{srv: srv, service: connectors.TakeoutServiceID}
+	run := &Runners{MailIngests: map[string]connectors.MailIngest{
+		connectors.TakeoutServiceID: connectors.NewTakeoutIngest(),
+	}}
+	c := &snapshotChecker{run: run, service: connectors.TakeoutServiceID}
 	if got := c.Services(); len(got) != 1 || got[0] != connectors.TakeoutServiceID {
 		t.Fatalf("Services = %v", got)
 	}
@@ -402,7 +399,7 @@ func TestSnapshotChecker(t *testing.T) {
 	}
 
 	// A source that is not a SnapshotProber is not applicable.
-	noop := &snapshotChecker{srv: srv, service: "nope"}
+	noop := &snapshotChecker{run: run, service: "nope"}
 	if _, _, ok, _ := noop.Check(context.Background(), copies.Record{ExternalID: path}); ok {
 		t.Fatal("non-prober source must not report a successful check")
 	}
@@ -410,7 +407,7 @@ func TestSnapshotChecker(t *testing.T) {
 
 func TestMusicMirrorChecker_SpotifyShapes(t *testing.T) {
 	var gotPath string
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	run, _, _ := connectorTestRunners(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path + "?" + r.URL.RawQuery
 		if strings.Contains(r.URL.Path, "/playlists/pl1") {
 			json.NewEncoder(w).Encode(map[string]any{
@@ -425,16 +422,9 @@ func TestMusicMirrorChecker_SpotifyShapes(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(up.Close)
+	}), "spotify")
 
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
-	}}}, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
-
-	c := &musicMirrorChecker{srv: srv, service: "spotify"}
+	c := &musicMirrorChecker{run: run, service: "spotify"}
 
 	cur, exists, ok, err := c.Check(context.Background(), copies.Record{ExternalID: "pl1"})
 	if err != nil || !ok || !exists {
@@ -461,7 +451,9 @@ func TestMusicMirrorChecker_SpotifyShapes(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(up2.Close)
-	srv.config.updateService("spotify", func(svc *Service) { svc.Endpoint = up2.URL })
+	svc := run.Host.(*fixtureHost).services["spotify"]
+	svc.Endpoint = up2.URL
+	run.Host.(*fixtureHost).services["spotify"] = svc
 	_, exists, ok, err = c.Check(context.Background(), copies.Record{ExternalID: "pl1"})
 	if err != nil || !ok || exists {
 		t.Fatalf("Check(404) = (exists=%v ok=%v err=%v), want (false,true,nil)", exists, ok, err)
@@ -469,7 +461,7 @@ func TestMusicMirrorChecker_SpotifyShapes(t *testing.T) {
 }
 
 func TestMusicMirrorChecker_YouTubeShapes(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	run, _, _ := connectorTestRunners(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("id") == "LL" {
 			json.NewEncoder(w).Encode(map[string]any{
 				"items": []any{map[string]any{"contentDetails": map[string]any{"itemCount": 7}}},
@@ -482,16 +474,9 @@ func TestMusicMirrorChecker_YouTubeShapes(t *testing.T) {
 				"contentDetails": map[string]any{"itemCount": 4},
 			}},
 		})
-	}))
-	t.Cleanup(up.Close)
+	}), "youtube-music")
 
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: up.URL,
-	}}}, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
-
-	c := &musicMirrorChecker{srv: srv, service: "youtube-music"}
+	c := &musicMirrorChecker{run: run, service: "youtube-music"}
 	cur, exists, ok, err := c.Check(context.Background(), copies.Record{ExternalID: "PLx"})
 	if err != nil || !ok || !exists {
 		t.Fatalf("Check = (%+v,%v,%v,%v)", cur, exists, ok, err)
@@ -513,7 +498,9 @@ func TestMusicMirrorChecker_YouTubeShapes(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{"items": []any{}})
 	}))
 	t.Cleanup(up2.Close)
-	srv.config.updateService("youtube-music", func(svc *Service) { svc.Endpoint = up2.URL })
+	svc := run.Host.(*fixtureHost).services["youtube-music"]
+	svc.Endpoint = up2.URL
+	run.Host.(*fixtureHost).services["youtube-music"] = svc
 	_, exists, ok, err = c.Check(context.Background(), copies.Record{ExternalID: "PLx"})
 	if err != nil || !ok || exists {
 		t.Fatalf("Check(empty) = (exists=%v ok=%v err=%v), want (false,true,nil)", exists, ok, err)
@@ -577,110 +564,8 @@ func TestCopyLedger_FreshnessRollup(t *testing.T) {
 
 // --- admin surface ---
 
-func TestHandleAdminSync_ReportsFreshnessAndSchedules(t *testing.T) {
-	srv := syncAdminServer(t)
-	ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ledger.Close()
-	srv.copyLedger = ledger
-	_, _ = srv.copyLedger.Upsert(copies.Record{Kind: "playlists", EntityKey: "a", Service: "spotify", ExternalID: "1",
-		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Status: copies.CopyStatusStale})
-	srv.syncSchedules = testScheduleStore(t)
-	if _, err := srv.syncSchedules.Upsert(syncjobs.SyncSchedule{
-		Name: "Daily copy freshness", Kind: "playlists", JobType: syncjobs.SyncJobTypeFreshness,
-		EverySeconds: 3600, Enabled: true,
-	}); err != nil {
-		t.Fatalf("Upsert schedule: %v", err)
-	}
-
-	req := adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
-	}
-	var got admin.SyncStatus
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(got.Freshness) != 1 || got.Freshness[0].Kind != "playlists" || got.Freshness[0].Stale != 1 {
-		t.Fatalf("freshness = %+v, want one stale playlists row", got.Freshness)
-	}
-	if len(got.Schedules) != 1 || got.Schedules[0].JobType != syncjobs.SyncJobTypeFreshness {
-		t.Fatalf("schedules = %+v, want one freshness template", got.Schedules)
-	}
-}
-
-func TestHandleAdminSyncSchedule_Toggle(t *testing.T) {
-	srv := syncAdminServer(t)
-	store := testScheduleStore(t)
-	srv.syncSchedules = store
-	sc, err := store.Upsert(syncjobs.SyncSchedule{
-		Kind: "playlists", JobType: syncjobs.SyncJobTypeFreshness, EverySeconds: 3600, Enabled: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	req := adminRequest(http.MethodPost,
-		fmt.Sprintf("/v1/admin/sync/schedules/%d/disable", sc.ID), "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("disable status = %d, body %s", w.Code, w.Body.String())
-	}
-	var out syncjobs.SyncSchedule
-	_ = json.Unmarshal(w.Body.Bytes(), &out)
-	if out.Enabled {
-		t.Fatal("schedule must be disabled")
-	}
-
-	req = adminRequest(http.MethodPost,
-		fmt.Sprintf("/v1/admin/sync/schedules/%d/enable", sc.ID), "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("enable status = %d", w.Code)
-	}
-
-	for _, path := range []string{
-		"/v1/admin/sync/schedules/9999/disable",
-		"/v1/admin/sync/schedules/abc/disable",
-		"/v1/admin/sync/schedules/1/poke",
-		"/v1/admin/sync/schedules//disable",
-	} {
-		req = adminRequest(http.MethodPost, path, "admin-key", "")
-		w = httptest.NewRecorder()
-		srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
-		if w.Code < 400 {
-			t.Fatalf("%s = %d, want an error", path, w.Code)
-		}
-	}
-
-	req = adminRequest(http.MethodGet, fmt.Sprintf("/v1/admin/sync/schedules/%d/disable", sc.ID), "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET = %d, want 405", w.Code)
-	}
-}
-
-func TestHandleAdminSyncSchedule_DisabledStore(t *testing.T) {
-	srv := syncAdminServer(t)
-	req := adminRequest(http.MethodPost, "/v1/admin/sync/schedules/1/disable", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503", w.Code)
-	}
-}
-
-// --- end to end ---
-
 func TestFreshness_EndToEndThroughQueue(t *testing.T) {
-	srv, ledger := freshServerWithLedger(t)
+	run, ledger := freshServerWithLedger(t)
 	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p1", Service: "spotify", ExternalID: "pl1",
 		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{SnapshotID: "s1", ItemCount: 3},
@@ -693,15 +578,15 @@ func TestFreshness_EndToEndThroughQueue(t *testing.T) {
 		},
 	})
 	store := testJobStore(t)
-	runners := syncjobs.NewRunnerRegistry()
-	runners.Register(&freshnessRunner{engine: NewFreshnessEngine(srv, reg), kind: "playlists"})
-	w := syncjobs.NewSyncWorker(store, runners, syncjobs.SyncWorkerOptions{Workers: 1})
+	runners := NewRunnerRegistry()
+	runners.Register(&freshnessRunner{engine: NewFreshnessEngine(run, reg), kind: "playlists"})
+	w := NewSyncWorker(store, runners, SyncWorkerOptions{Workers: 1})
 
-	mustEnqueue(t, store, syncjobs.SyncEnqueue{Kind: "playlists", JobType: syncjobs.SyncJobTypeFreshness})
+	mustEnqueue(t, store, SyncEnqueue{Kind: "playlists", JobType: SyncJobTypeFreshness})
 	for i := 0; i < 3 && w.RunOnce(context.Background(), "w"); i++ {
 	}
-	job := store.List(syncjobs.SyncFilter{})[0]
-	if job.State != syncjobs.SyncJobSucceeded {
+	job := store.List(SyncFilter{})[0]
+	if job.State != SyncJobSucceeded {
 		t.Fatalf("job state = %s, want succeeded (progress %s)", job.State, job.Progress)
 	}
 	rec, _ := ledger.Get("playlists", "spotify", "pl1")
@@ -712,7 +597,7 @@ func TestFreshness_EndToEndThroughQueue(t *testing.T) {
 
 func TestFreshnessEngine_UnknownIDIsNotAFailure(t *testing.T) {
 	// A checker reporting ok=false (unsupported shape) must skip, not fail.
-	srv, ledger := freshServerWithLedger(t)
+	run, ledger := freshServerWithLedger(t)
 	_, _ = ledger.Upsert(copies.Record{
 		Kind: "tracks", EntityKey: "liked:spotify", Service: "spotify", ExternalID: "",
 		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{ItemCount: 3},
@@ -724,7 +609,7 @@ func TestFreshnessEngine_UnknownIDIsNotAFailure(t *testing.T) {
 			return copies.Version{}, false, false, nil
 		},
 	})
-	engine := NewFreshnessEngine(srv, reg)
+	engine := NewFreshnessEngine(run, reg)
 	batch, err := engine.RunBatch(context.Background(), "tracks", 0, 10)
 	if err != nil {
 		t.Fatalf("RunBatch: %v", err)
@@ -739,7 +624,7 @@ var errCheckerBoom = errors.New("checker exploded")
 func TestFreshnessEngine_CheckerPanicPropagates(t *testing.T) {
 	// The engine does not recover panics — the worker's safeRun does. A
 	// checker returning an error is the documented path.
-	srv, ledger := freshServerWithLedger(t)
+	run, ledger := freshServerWithLedger(t)
 	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p", Service: "spotify", ExternalID: "pl",
 		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{ItemCount: 1},
@@ -751,7 +636,7 @@ func TestFreshnessEngine_CheckerPanicPropagates(t *testing.T) {
 			return copies.Version{}, false, false, errCheckerBoom
 		},
 	})
-	engine := NewFreshnessEngine(srv, reg)
+	engine := NewFreshnessEngine(run, reg)
 	batch, err := engine.RunBatch(context.Background(), "playlists", 0, 10)
 	if err != nil {
 		t.Fatalf("RunBatch must not fail on a checker error: %v", err)
@@ -765,7 +650,7 @@ func TestFreshnessEngine_CheckerPanicPropagates(t *testing.T) {
 // real ledger, and the real worker. Proves a copy row's status is stamped
 // from a live version descriptor end to end.
 func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	run, _, _ := connectorTestRunners(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/playlists/pl-sync"):
 			json.NewEncoder(w).Encode(map[string]any{
@@ -782,20 +667,13 @@ func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
-	}))
-	t.Cleanup(up.Close)
-
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
-	}}}, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
+	}), "spotify")
 	ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ledger.Close() })
-	srv.copyLedger = ledger
+	run.Copies = ledger
 
 	for _, rec := range []copies.Record{
 		{Kind: "playlists", EntityKey: "a", Service: "spotify", ExternalID: "pl-sync",
@@ -815,12 +693,12 @@ func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
 	}
 
 	store := testJobStore(t)
-	runners := syncjobs.NewRunnerRegistry()
-	registerFreshnessRunners(runners, srv)
-	w := syncjobs.NewSyncWorker(store, runners, syncjobs.SyncWorkerOptions{Workers: 1})
+	runners := NewRunnerRegistry()
+	registerFreshnessRunners(runners, run)
+	w := NewSyncWorker(store, runners, SyncWorkerOptions{Workers: 1})
 
 	for _, kind := range []string{"playlists", "tracks"} {
-		mustEnqueue(t, store, syncjobs.SyncEnqueue{Kind: kind, JobType: syncjobs.SyncJobTypeFreshness})
+		mustEnqueue(t, store, SyncEnqueue{Kind: kind, JobType: SyncJobTypeFreshness})
 		for i := 0; i < 3 && w.RunOnce(context.Background(), "w"); i++ {
 		}
 	}
