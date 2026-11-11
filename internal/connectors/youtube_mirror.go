@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -154,7 +155,8 @@ func youtubeItemsToTracks(raw map[string]any) []kinds.Track {
 // PlacePlaylistItems implements kinds.PlaylistItemWriteProvider. Creates
 // the target playlist when playlistID is empty, then resolves and appends
 // items one by one. An empty playlistID is the single-call path; a known
-// playlistID continues a chained job.
+// playlistID continues a chained job and, with a non-empty name, sets the
+// playlist's title so renames propagate to the copy (issue #365).
 func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []kinds.Track) (kinds.PlacePlaylistItemsResult, error) {
 	var result kinds.PlacePlaylistItemsResult
 	if playlistID == "" {
@@ -175,6 +177,12 @@ func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlist
 			return result, fmt.Errorf("youtube create playlist returned no id")
 		}
 		result.URL = "https://www.youtube.com/playlist?list=" + playlistID
+	} else if strings.TrimSpace(name) != "" {
+		// Title write on the append path (issue #365): a rename on the
+		// source renames the converged copy.
+		if err := c.renamePlaylist(ctx, playlistID, name); err != nil {
+			return result, err
+		}
 	}
 	result.PlaylistID = playlistID
 
@@ -200,6 +208,41 @@ func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlist
 		result.Copied++
 	}
 	return result, nil
+}
+
+// renamePlaylist sets a YouTube playlist's title. The snippet PUT is a
+// full replace and requires categoryId, so the current snippet is fetched
+// and carried over; an already-matching title skips the write.
+func (c *YouTubeMusicConnector) renamePlaylist(ctx context.Context, playlistID, name string) error {
+	raw, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "GET", "/playlists",
+		url.Values{"part": []string{"snippet"}, "id": []string{playlistID}}, nil)
+	if err != nil {
+		return err
+	}
+	items, _ := raw["items"].([]any)
+	if len(items) == 0 {
+		return fmt.Errorf("youtube playlist %q not found", playlistID)
+	}
+	pl, _ := items[0].(map[string]any)
+	snippet := map[string]any{"title": name}
+	if s, ok := pl["snippet"].(map[string]any); ok {
+		if title, _ := s["title"].(string); title == name {
+			return nil
+		}
+		if cat, ok := s["categoryId"]; ok {
+			snippet["categoryId"] = cat
+		}
+		if desc, ok := s["description"]; ok {
+			snippet["description"] = desc
+		}
+	}
+	if _, ok := snippet["categoryId"]; !ok {
+		snippet["categoryId"] = "0"
+	}
+	_, _, err = apiJSON(ctx, c.host, YouTubeMusicServiceID, "PUT", "/playlists",
+		url.Values{"part": []string{"snippet"}},
+		map[string]any{"id": playlistID, "snippet": snippet})
+	return err
 }
 
 // SaveLikedTracks implements kinds.LikedTrackWriteProvider by rating the

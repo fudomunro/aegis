@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -433,14 +434,16 @@ func (c *entityStubConn) heldContacts() []string {
 	return out
 }
 
-// convergeStubRunners wires a Runners whose connectors are entity stubs and
-// whose fixture host reports one sync group for kind (issue #365).
-func convergeStubRunners(t *testing.T, kind, hub string, members []string, conns map[string]*entityStubConn) (*Runners, *fixtureHost) {
+// convergeStubRunners wires a Runners whose connectors are entity or
+// playlist stubs and whose fixture host reports one sync group for kind
+// (issue #365).
+func convergeStubRunners(t *testing.T, kind, hub string, members []string, conns map[string]connectors.ServiceConnector) (*Runners, *fixtureHost) {
 	t.Helper()
 	h := newFixtureHost("https://aegis.example.com")
 	h.grants = shared.GrantMap{
-		"contacts": shared.AccessFull,
-		"events":   shared.AccessFull,
+		"contacts":  shared.AccessFull,
+		"events":    shared.AccessFull,
+		"playlists": shared.AccessFull,
 	}
 	for id, conn := range conns {
 		h.services[id] = fixtureService{Name: id, Action: "inject"}
@@ -461,8 +464,8 @@ func convergeStubRunners(t *testing.T, kind, hub string, members []string, conns
 	}, h
 }
 
-// convergeTestRunners swaps in entity stubs and a job store.
-func convergeTestRunners(t *testing.T, kind, hub string, members []string, conns map[string]*entityStubConn) (*Runners, *JobStore, *SyncWorker) {
+// convergeTestRunners swaps in entity or playlist stubs and a job store.
+func convergeTestRunners(t *testing.T, kind, hub string, members []string, conns map[string]connectors.ServiceConnector) (*Runners, *JobStore, *SyncWorker) {
 	t.Helper()
 	run, _ := convergeStubRunners(t, kind, hub, members, conns)
 	store := testJobStore(t)
@@ -470,4 +473,223 @@ func convergeTestRunners(t *testing.T, kind, hub string, members []string, conns
 	registerConvergeRunners(reg, run)
 	w := NewSyncWorker(store, reg, SyncWorkerOptions{Workers: 1})
 	return run, store, w
+}
+
+// --- playlist converge fixtures (issue #365) ---
+
+// playlistStubConn is a test connector for playlist convergence: a small
+// playlist store implementing the placement contract — create, append, and
+// the title write — with no delete surface at all (issue #365). Items page
+// on offset cursors like Spotify; pageLimit (when set) forces small pages.
+type playlistStubConn struct {
+	mu         sync.Mutex
+	svc        string
+	pageLimit  int
+	order      []string
+	byID       map[string]*playlistStub
+	nextID     int
+	failPlace  error
+	failList   error
+	created    int
+	placeCalls int
+}
+
+type playlistStub struct {
+	id     string
+	name   string
+	tracks []kinds.Track
+}
+
+func newPlaylistStubConn(svc string) *playlistStubConn {
+	return &playlistStubConn{svc: svc, byID: map[string]*playlistStub{}}
+}
+
+// seed adds a playlist holding one track per name, in order. Returns its id.
+func (c *playlistStubConn) seed(name string, trackNames ...string) string {
+	c.mu.Lock()
+	c.nextID++
+	id := fmt.Sprintf("%s-pl-%d", c.svc, c.nextID)
+	c.mu.Unlock()
+	return c.seedAs(id, name, trackNames...)
+}
+
+// seedAs adds a playlist with a caller-chosen id (a pre-existing member
+// copy that a copy-ledger row already points at).
+func (c *playlistStubConn) seedAs(id, name string, trackNames ...string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	pl := &playlistStub{id: id, name: name}
+	for _, n := range trackNames {
+		pl.tracks = append(pl.tracks, stubTrack(c.svc, n))
+	}
+	c.byID[id] = pl
+	c.order = append(c.order, id)
+	return id
+}
+
+// addTrack appends one track to a playlist (a source-side edit between runs).
+func (c *playlistStubConn) addTrack(id, name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.byID[id].tracks = append(c.byID[id].tracks, stubTrack(c.svc, name))
+}
+
+// renameTo sets a playlist's title (a user-side edit between runs).
+func (c *playlistStubConn) renameTo(id, name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.byID[id].name = name
+}
+
+// trackNames returns a playlist's track names in order.
+func (c *playlistStubConn) trackNames(id string) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	pl := c.byID[id]
+	if pl == nil {
+		return nil
+	}
+	out := make([]string, 0, len(pl.tracks))
+	for _, t := range pl.tracks {
+		out = append(out, t.Name)
+	}
+	return out
+}
+
+// title returns a playlist's current title.
+func (c *playlistStubConn) title(id string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if pl := c.byID[id]; pl != nil {
+		return pl.name
+	}
+	return ""
+}
+
+// ids returns the playlist ids in listing order.
+func (c *playlistStubConn) ids() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.order...)
+}
+
+func stubTrack(svc, name string) kinds.Track {
+	return kinds.Track{Name: name, Sources: []kinds.TrackSource{{Service: svc, ID: "t-" + name}}}
+}
+
+// --- connectors.ServiceConnector (unused surfaces) ---
+
+func (c *playlistStubConn) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
+}
+
+func (c *playlistStubConn) SystemInstructions(string) string { return "" }
+
+func (c *playlistStubConn) HandleProxy(http.ResponseWriter, *http.Request, string) {}
+
+// --- kinds.PlaylistProvider ---
+
+func (c *playlistStubConn) ListUserPlaylists(ctx context.Context) ([]kinds.Playlist, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failList != nil {
+		return nil, false, c.failList
+	}
+	out := make([]kinds.Playlist, 0, len(c.order))
+	for _, id := range c.order {
+		pl := c.byID[id]
+		out = append(out, kinds.Playlist{
+			Name:       pl.name,
+			TrackCount: len(pl.tracks),
+			Sources:    []kinds.PlaylistSource{{Service: c.svc, ID: pl.id}},
+		})
+	}
+	return out, false, nil
+}
+
+// --- kinds.PlaylistItemsProvider ---
+
+func (c *playlistStubConn) ListPlaylistItems(ctx context.Context, playlistID, cursor string, limit int) (kinds.Playlist, kinds.TrackPage, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ref := kinds.Playlist{Sources: []kinds.PlaylistSource{{Service: c.svc, ID: playlistID}}}
+	pl := c.byID[playlistID]
+	if pl == nil {
+		return ref, kinds.TrackPage{}, fmt.Errorf("playlist %q not found", playlistID)
+	}
+	if c.failList != nil {
+		return ref, kinds.TrackPage{}, c.failList
+	}
+	ref.Name = pl.name
+	ref.TrackCount = len(pl.tracks)
+	offset := 0
+	if cursor != "" {
+		fmt.Sscanf(cursor, "%d", &offset)
+	}
+	if limit <= 0 {
+		limit = 2
+	}
+	if c.pageLimit > 0 && limit > c.pageLimit {
+		limit = c.pageLimit
+	}
+	end := offset + limit
+	if end > len(pl.tracks) {
+		end = len(pl.tracks)
+	}
+	if offset > len(pl.tracks) {
+		offset = len(pl.tracks)
+	}
+	page := kinds.TrackPage{Tracks: pl.tracks[offset:end], Total: len(pl.tracks)}
+	if end < len(pl.tracks) {
+		page.Next = fmt.Sprint(end)
+	}
+	return ref, page, nil
+}
+
+// --- kinds.PlaylistItemWriteProvider ---
+
+func (c *playlistStubConn) PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []kinds.Track) (kinds.PlacePlaylistItemsResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.placeCalls++
+	if c.failPlace != nil {
+		err := c.failPlace
+		c.failPlace = nil
+		return kinds.PlacePlaylistItemsResult{}, err
+	}
+	if playlistID == "" {
+		c.nextID++
+		id := fmt.Sprintf("%s-pl-%d", c.svc, c.nextID)
+		pl := &playlistStub{id: id, name: name, tracks: append([]kinds.Track(nil), tracks...)}
+		c.byID[id] = pl
+		c.order = append(c.order, id)
+		c.created++
+		return kinds.PlacePlaylistItemsResult{
+			PlaylistID: id,
+			URL:        "https://example.com/" + id,
+			Copied:     len(tracks),
+		}, nil
+	}
+	pl := c.byID[playlistID]
+	if pl == nil {
+		return kinds.PlacePlaylistItemsResult{PlaylistID: playlistID}, fmt.Errorf("playlist %q not found", playlistID)
+	}
+	// Append only — nothing on the member is ever removed. The title write
+	// on the append path is the contract rename propagation relies on.
+	pl.tracks = append(pl.tracks, tracks...)
+	if strings.TrimSpace(name) != "" {
+		pl.name = name
+	}
+	return kinds.PlacePlaylistItemsResult{
+		PlaylistID: playlistID,
+		URL:        "https://example.com/" + playlistID,
+		Copied:     len(tracks),
+	}, nil
+}
+
+// setFailPlace arms a one-shot placement failure.
+func (c *playlistStubConn) setFailPlace(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.failPlace = err
 }

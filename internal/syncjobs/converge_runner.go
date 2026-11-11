@@ -9,18 +9,22 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/library"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Converge job runners (issue #365): the scheduled job that moves a kind's
 // data from its canonical home out to the group's other write-capable
-// members. One runner serves one kind; a job chains through its members one
-// target per step (the mirror runner's chain model, member list instead of
-// source cursor).
+// members. One runner serves one kind. Entities chain one member per step
+// (the mirror runner's chain model, member list instead of source cursor);
+// playlists chain one item page per step — members outermost, then the
+// canonical home's playlists, then each playlist's pages.
 //
 // Convergence never deletes on a member. The write surface is Place* only —
 // create-or-update with identity matching — so items that exist only on a
-// member survive untouched. Conflicts (a member record changed underfoot,
-// If-Match refusal) are counted and reported, never overwritten and never
+// member survive untouched. Placement order is source order (order is
+// fidelity); an already-converged playlist gains only what is missing.
+// Conflicts (a member record changed underfoot, If-Match refusal or a
+// member-side rename) are counted and reported, never overwritten and never
 // retried in place; the conflict hand-off is a later phase.
 
 // convergeJobPayload is the job payload for one converge step. The target
@@ -35,6 +39,21 @@ type convergeJobPayload struct {
 	// Index is the next target to converge.
 	Index int `json:"index,omitempty"`
 
+	// Playlist chain state (kind=playlists): which canonical playlist is in
+	// flight, how far through its items, and the member playlist it maps to.
+	// The member playlist id comes from the copy ledger (what this hub
+	// playlist converged to before) or from the create that placed it.
+	PlaylistIndex int    `json:"playlist_index,omitempty"`
+	SourceID      string `json:"source_id,omitempty"`
+	Name          string `json:"name,omitempty"`
+	ItemCursor    string `json:"item_cursor,omitempty"`
+	TargetID      string `json:"target_id,omitempty"`
+	// RowName is the title we last set on the member (the copy row's name):
+	// a member title that differs from both it and the canonical title is a
+	// member-side rename — a conflict, not an overwrite.
+	RowName       string `json:"row_name,omitempty"`
+	PlaylistsDone int    `json:"playlists_done,omitempty"`
+
 	// Accumulated across steps for the admin panel.
 	Planned    int  `json:"planned,omitempty"`
 	Copied     int  `json:"copied,omitempty"`
@@ -44,11 +63,20 @@ type convergeJobPayload struct {
 	TargetDone int  `json:"target_done,omitempty"`
 }
 
-// convergeKinds are the kinds a converge runner is registered for: the
-// entity kinds whose write placement is whole-collection (contacts, events).
-// Playlists converge in a later phase — item paging and order fidelity need
-// the chained placement contract first.
-var convergeKinds = []string{library.MirrorKindContacts, library.MirrorKindEvents}
+// resetPlaylistChain clears the in-flight playlist so the next step picks
+// the following one (or moves to the next member).
+func (p *convergeJobPayload) resetPlaylistChain() {
+	p.SourceID = ""
+	p.Name = ""
+	p.ItemCursor = ""
+	p.TargetID = ""
+	p.RowName = ""
+}
+
+// convergeKinds are the kinds a converge runner is registered for. Entities
+// (contacts, events) place their whole collection per member; playlists fan
+// out one item page at a time and propagate titles (issue #365).
+var convergeKinds = []string{library.MirrorKindContacts, library.MirrorKindEvents, library.MirrorKindPlaylists}
 
 // SyncConvergeKinds are the kinds the build registers converge runners for —
 // the schedule seed's kind list (the store does not know them).
@@ -104,6 +132,10 @@ func (r *convergeRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error)
 	}
 	if err := s.Mirror.RequireMirrorReadable(s.Host.OwnerGrants(), p.SourceService, p.Kind); err != nil {
 		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+
+	if r.kind == library.MirrorKindPlaylists {
+		return r.runPlaylistStep(ctx, p, target)
 	}
 
 	items, truncated, err := r.listCanonical(ctx, p.SourceService)
@@ -190,7 +222,18 @@ func convergeTargetOK(s *Runners, kind, serviceID string) bool {
 	if !ok {
 		return false
 	}
-	return k.WriteCapable(conn)
+	if !k.WriteCapable(conn) {
+		return false
+	}
+	if kind == library.MirrorKindPlaylists {
+		// Playlist convergence re-reads the member's items so a re-run
+		// appends only what is missing. A member that cannot list its items
+		// cannot converge idempotently — it is not a converge target.
+		if _, ok := conn.(kinds.PlaylistItemsProvider); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // entitySet is one kind's canonical collection for a step. Only one field is
@@ -263,6 +306,228 @@ func (r *convergeRunner) placeOn(ctx context.Context, target string, items entit
 	}
 }
 
+// runPlaylistStep executes one bounded playlist step: at most one canonical
+// item page placed onto one member. Members are outermost; within a member
+// the canonical home's playlists run in listing order, each chained through
+// its item pages. The member playlist is looked up in the copy ledger (what
+// this canonical playlist converged to before) so re-runs append and rename
+// instead of creating duplicates — which is also why playlist convergence
+// needs the copy ledger enabled.
+func (r *convergeRunner) runPlaylistStep(ctx context.Context, p convergeJobPayload, target string) (SyncStep, error) {
+	s := r.run
+	if s.Copies == nil || !s.Copies.Enabled() {
+		return SyncStep{}, fmt.Errorf("%w: playlist convergence needs the copy ledger to remember member playlists", ErrSyncTerminal)
+	}
+
+	if p.SourceID == "" {
+		if err := r.pickPlaylist(ctx, &p, target); err != nil {
+			return SyncStep{}, err
+		}
+		if p.SourceID == "" {
+			// This member's playlist list is exhausted: chain to the next
+			// member, or close the job when they all are.
+			return r.step(p, target, p.Index >= len(p.Targets), ""), nil
+		}
+	}
+
+	// What the member already holds: the skip filter for a re-run, its item
+	// count for the copy stamp, and its title for rename-conflict detection.
+	state := memberPlaylistState{keys: map[string]bool{}}
+	if p.TargetID != "" {
+		var err error
+		state, err = loadMemberPlaylistState(ctx, s, target, p.TargetID)
+		if err != nil {
+			// Provider trouble is retryable; the chain state is durable.
+			return r.step(p, target, false, ""), err
+		}
+	}
+
+	src, err := library.MirrorOpFor[kinds.PlaylistItemsProvider](s.Mirror, p.SourceService, "converge source")
+	if err != nil {
+		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	ref, page, err := src.ListPlaylistItems(ctx, p.SourceID, p.ItemCursor, library.MirrorTrackCap)
+	if err != nil {
+		return r.step(p, target, false, ""), err
+	}
+	if p.Name == "" {
+		p.Name = ref.Name
+	}
+
+	// Placement order is source order (order is fidelity); what the member
+	// already holds is dropped from placement only — member-only rows and
+	// any member-side order survive untouched.
+	alreadyHeld := 0
+	newTracks := make([]kinds.Track, 0, len(page.Tracks))
+	for _, t := range page.Tracks {
+		if state.keys[repairIdentityKey(t)] {
+			alreadyHeld++
+			continue
+		}
+		newTracks = append(newTracks, t)
+	}
+
+	// A member title that differs from both what we last set and the
+	// canonical title is a member-side rename: counted as a conflict and
+	// left alone (the hand-off to the user is a later phase).
+	conflicted := p.TargetID != "" && state.title != "" && state.title != p.Name && state.title != p.RowName
+	title := p.Name
+	if conflicted || (p.ItemCursor != "" && page.Next != "") {
+		// Conflicted: keep the member's title. Middle pages append only —
+		// the first page creates/renames and the last one re-asserts the
+		// title so a rename propagates even when no new items land.
+		title = ""
+	}
+
+	copied, skips := 0, 0
+	// The final page always places: it carries the title write and closes
+	// the playlist even when every item is already on the member.
+	if len(newTracks) > 0 || p.TargetID == "" || page.Next == "" {
+		dst, err := library.MirrorOpFor[kinds.PlaylistItemWriteProvider](s.Mirror, target, "converge target")
+		if err != nil {
+			return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+		}
+		res, perr := dst.PlacePlaylistItems(ctx, p.TargetID, title, newTracks)
+		if res.PlaylistID != "" {
+			p.TargetID = res.PlaylistID // the create happened even on partial failure
+		}
+		if perr != nil {
+			// Counters stay unmutated on failure so a retry cannot
+			// double-count. Placement is create-or-append, so the retry is
+			// safe — and never deletes.
+			return r.step(p, target, false, ""), perr
+		}
+		copied, skips = res.Copied, len(res.Skips)
+	}
+
+	p.Planned += len(page.Tracks)
+	p.Copied += copied
+	p.Skipped += alreadyHeld + skips
+	if conflicted && p.ItemCursor == "" {
+		p.Conflicts++ // once per member copy, counted on the first page
+	}
+
+	if page.Next != "" {
+		p.ItemCursor = page.Next
+		return r.step(p, target, false, ""), nil
+	}
+
+	// Canonical playlist exhausted on this member: stamp the copy row the
+	// freshness pass reads — the member's item count as it stands now, and
+	// the title evidence (a conflicted copy keeps the name we last set).
+	stampedName := p.Name
+	if conflicted {
+		stampedName = p.RowName
+	}
+	s.Mirror.RecordMirrorCopy(library.MirrorKindPlaylists, p.SourceService, p.SourceID,
+		target, p.TargetID, stampedName, state.count+copied, "")
+	p.PlaylistsDone++
+	p.resetPlaylistChain()
+	p.PlaylistIndex++
+	return r.step(p, target, false, ""), nil
+}
+
+// pickPlaylist advances the playlist chain: picks the next canonical
+// playlist to converge onto target and resolves the member playlist it maps
+// to via the copy ledger. An empty SourceID on return means this member's
+// playlist list is exhausted — the caller chains to the next member (or
+// closes the job). A terminal error means the group cannot converge.
+func (r *convergeRunner) pickPlaylist(ctx context.Context, p *convergeJobPayload, target string) error {
+	s := r.run
+	src, err := library.MirrorOpFor[kinds.PlaylistProvider](s.Mirror, p.SourceService, "converge source")
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	all, truncated, err := src.ListUserPlaylists(ctx)
+	if err != nil {
+		return err
+	}
+	if truncated {
+		p.Truncated = true
+	}
+	for p.PlaylistIndex < len(all) {
+		pl := all[p.PlaylistIndex]
+		p.SourceID = playlistSourceID(pl, p.SourceService)
+		if p.SourceID == "" {
+			// No service-local identity on the canonical home: nothing to
+			// converge from.
+			p.Skipped++
+			p.PlaylistIndex++
+			p.SourceID = ""
+			continue
+		}
+		p.Name = pl.Name
+		p.ItemCursor = ""
+		p.TargetID = ""
+		p.RowName = ""
+		entity := library.MirrorEntityKey(library.MirrorKindPlaylists, p.SourceService, p.SourceID)
+		for _, row := range s.Copies.GetByEntity(library.MirrorKindPlaylists, entity) {
+			if row.Service == target {
+				p.TargetID = row.ExternalID
+				p.RowName = row.Version.Name
+				break
+			}
+		}
+		return nil
+	}
+	// This member holds every canonical playlist: chain to the next one.
+	p.resetPlaylistChain()
+	p.PlaylistIndex = 0
+	p.TargetDone = p.Index + 1
+	p.Index++
+	return nil
+}
+
+// memberPlaylistState is what a member's playlist holds now: identity keys
+// for the skip filter, the raw item count for the copy stamp, and the title
+// for rename-conflict detection.
+type memberPlaylistState struct {
+	keys  map[string]bool
+	count int
+	title string
+}
+
+// loadMemberPlaylistState pages a member playlist's items.
+func loadMemberPlaylistState(ctx context.Context, s *Runners, service, playlistID string) (memberPlaylistState, error) {
+	src, err := library.MirrorOpFor[kinds.PlaylistItemsProvider](s.Mirror, service, "converge target")
+	if err != nil {
+		return memberPlaylistState{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	st := memberPlaylistState{keys: map[string]bool{}}
+	cursor := ""
+	for i := 0; i < shared.LibraryPageCap; i++ {
+		ref, page, err := src.ListPlaylistItems(ctx, playlistID, cursor, 100)
+		if err != nil {
+			return memberPlaylistState{}, err
+		}
+		if i == 0 {
+			st.title = ref.Name
+		}
+		for _, t := range page.Tracks {
+			st.keys[repairIdentityKey(t)] = true
+			st.count++
+		}
+		if page.Next == "" {
+			return st, nil
+		}
+		cursor = page.Next
+	}
+	return st, nil
+}
+
+// playlistSourceID is a playlist's service-local id on the canonical home.
+func playlistSourceID(pl kinds.Playlist, hub string) string {
+	for _, src := range pl.Sources {
+		if src.Service == hub {
+			return src.ID
+		}
+	}
+	if len(pl.Sources) > 0 {
+		return pl.Sources[0].ID
+	}
+	return ""
+}
+
 // step projects the accumulated payload onto a SyncStep. done closes the
 // job; otherwise the step carries the target index forward for the next one.
 // target names the member this step converged (empty when none ran).
@@ -278,6 +543,8 @@ func (r *convergeRunner) step(p convergeJobPayload, target string, done bool, no
 			"target":         target,
 			"targets":        len(p.Targets),
 			"target_done":    p.TargetDone,
+			"playlist":       p.Name,
+			"playlists_done": p.PlaylistsDone,
 			"planned":        p.Planned,
 			"copied":         p.Copied,
 			"skipped":        p.Skipped,

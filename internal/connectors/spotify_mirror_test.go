@@ -382,7 +382,7 @@ func TestSpotifyPlacePlaylistItems_UpstreamErrors(t *testing.T) {
 
 func TestSpotifyPlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 	var mu sync.Mutex
-	var created, addBodies []string
+	var created, addBodies, renames []string
 	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -394,6 +394,12 @@ func TestSpotifyPlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"id": "PL1", "external_urls": map[string]any{"spotify": "https://open.spotify.com/playlist/PL1"},
 			})
+		case r.Method == http.MethodPut && r.URL.Path == "/playlists/PL1":
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			name, _ := body["name"].(string)
+			renames = append(renames, name)
+			json.NewEncoder(w).Encode(map[string]any{})
 		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/playlists/PL1/tracks"):
 			addBodies = append(addBodies, r.URL.Path)
 			json.NewEncoder(w).Encode(map[string]any{"snapshot_id": "snap"})
@@ -413,8 +419,12 @@ func TestSpotifyPlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 	if len(created) != 1 || len(addBodies) != 1 {
 		t.Fatalf("created=%v add=%v, want one of each", created, addBodies)
 	}
+	if len(renames) != 0 {
+		t.Fatalf("create must not issue a title write, renames=%v", renames)
+	}
 
-	// A second step with a known playlist id must append, not create.
+	// A second step with a known playlist id must append, not create — and
+	// a non-empty name sets the title (issue #365 rename propagation).
 	res2, err := c.PlacePlaylistItems(context.Background(), "PL1", "Backup",
 		[]kinds.Track{placeTrack(SpotifyServiceID, "B", "", "spotify:track:b")})
 	if err != nil {
@@ -428,6 +438,19 @@ func TestSpotifyPlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 	}
 	if len(addBodies) != 2 {
 		t.Fatalf("append must post to the same playlist, add=%v", addBodies)
+	}
+	if len(renames) != 1 || renames[0] != "Backup" {
+		t.Fatalf("renames = %v, want one title write of Backup", renames)
+	}
+
+	// An empty name on the append path keeps the existing title.
+	res3, err := c.PlacePlaylistItems(context.Background(), "PL1", "",
+		[]kinds.Track{placeTrack(SpotifyServiceID, "C", "", "spotify:track:c")})
+	if err != nil || res3.Copied != 1 {
+		t.Fatalf("append(keep title) = (%+v,%v)", res3, err)
+	}
+	if len(renames) != 1 {
+		t.Fatalf("empty name must not rename, renames=%v", renames)
 	}
 }
 

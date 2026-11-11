@@ -248,12 +248,25 @@ func TestYouTubePlacePlaylistItems_CreateSearchAndSkips(t *testing.T) {
 func TestYouTubePlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 	var mu sync.Mutex
 	var created, itemPosts int
+	var renames []string
 	c := newYouTubeMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/playlists":
 			created++
+			json.NewEncoder(w).Encode(map[string]any{"id": "PLy"})
+		case r.Method == http.MethodGet && r.URL.Path == "/playlists":
+			json.NewEncoder(w).Encode(map[string]any{"items": []any{map[string]any{"snippet": map[string]any{
+				"title": "Old Title", "categoryId": "10", "description": "keep me",
+			}}}})
+		case r.Method == http.MethodPut && r.URL.Path == "/playlists":
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			snippet, _ := body["snippet"].(map[string]any)
+			title, _ := snippet["title"].(string)
+			cat, _ := snippet["categoryId"].(string)
+			renames = append(renames, title+"|"+cat)
 			json.NewEncoder(w).Encode(map[string]any{"id": "PLy"})
 		case r.Method == http.MethodPost && r.URL.Path == "/playlistItems":
 			itemPosts++
@@ -278,7 +291,12 @@ func TestYouTubePlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 	if created != 1 || itemPosts != 1 {
 		t.Fatalf("created=%d items=%d, want 1/1", created, itemPosts)
 	}
+	if len(renames) != 0 {
+		t.Fatalf("create must not issue a title write, renames=%v", renames)
+	}
 
+	// Append with a non-empty name sets the title first (issue #365):
+	// the snippet PUT carries the fetched categoryId over.
 	res2, err := c.PlacePlaylistItems(context.Background(), "PLy", "Backup",
 		[]kinds.Track{placeTrack(YouTubeMusicServiceID, "B", "v2", "")})
 	if err != nil || res2.Copied != 1 {
@@ -286,6 +304,19 @@ func TestYouTubePlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 	}
 	if created != 1 || itemPosts != 2 {
 		t.Fatalf("append must not create: created=%d items=%d", created, itemPosts)
+	}
+	if len(renames) != 1 || renames[0] != "Backup|10" {
+		t.Fatalf("renames = %v, want one write of Backup with categoryId 10", renames)
+	}
+
+	// An empty name keeps the existing title — no snippet write at all.
+	res3, err := c.PlacePlaylistItems(context.Background(), "PLy", "",
+		[]kinds.Track{placeTrack(YouTubeMusicServiceID, "C", "v3", "")})
+	if err != nil || res3.Copied != 1 {
+		t.Fatalf("append(keep title) = (%+v,%v)", res3, err)
+	}
+	if len(renames) != 1 {
+		t.Fatalf("empty name must not rename, renames=%v", renames)
 	}
 }
 

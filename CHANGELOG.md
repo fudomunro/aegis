@@ -7,6 +7,22 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Playlist convergence (issue #365, Phase 2b).** The `converge` job now
+  covers playlists: each canonical playlist fans out to the group's
+  write-capable members one item page per step, in canonical item order
+  (order is fidelity for what convergence places). A re-run appends only
+  what is missing — the member's items are read back first — and titles
+  propagate through a `PlacePlaylistItems` contract extension: a non-empty
+  `playlistID` with a name sets the playlist's title, so a rename on the
+  canonical home renames the converged copy (Spotify and YouTube Music
+  implement it). A member-side rename is counted as a conflict and left
+  alone, not overwritten. The member playlist a canonical playlist
+  converged to before is adopted from the copy ledger, so daily runs extend
+  the same copies instead of duplicating them; playlist convergence
+  therefore needs the copy ledger enabled. Creates and empty playlists
+  propagate; nothing is ever deleted on a member. Pre-existing same-named
+  playlists on a member are not adopted (identity matching for that lands
+  with conflict resolution).
 - **Outbound convergence (issue #365, Phase 2).** The `converge` sync job
   type moves a kind's data from its **canonical home** out to the group's
   other write-capable members — contacts and events first (playlists follow
