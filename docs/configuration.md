@@ -319,7 +319,7 @@ Content-Type: application/json
 | `source_service` | Service to read from; empty uses the configured `canonical_for` home |
 | `source_id` | Service-local playlist ID (required for `playlists`) |
 | `target_service` | Service to write to (required; must differ from source) |
-| `name` | Optional playlist title on the target |
+| `name` | Optional playlist title on the target — set on creation and re-applied on every placement, so a chained copy renames the playlist when the title changes |
 | `dry_run` | Plan only — no writes to the target |
 
 Response reports `planned`, `copied`, `skipped`, and per-track `skips`. Set
@@ -549,9 +549,11 @@ not duplicated) and re-arms the schedule one interval out.
 On first start Aegis seeds one template per checked kind — **Daily copy
 freshness** for `messages`, `playlists`, and `tracks`, every 24 hours — and
 one **Daily outbound convergence** template per converged kind (`contacts`,
-`events`), which fans a kind's data out from its canonical home to the
-group's other write-capable members. Convergence only creates and updates on
-a member; it never deletes there. The
+`events`, `playlists`), which fans a kind's data out from its canonical home
+to the group's other write-capable members. Convergence only creates and
+updates on a member; it never deletes there. Converged playlists keep the
+canonical item order for what they place, gain only what is missing on a
+re-run, and rename the member copy when the canonical title changes. The
 seed only fills in what is missing: a paused or edited schedule is left as the
 operator set it. Pause and resume from the panel or the
 `/v1/admin/sync/schedules/{id}/enable|disable` routes.

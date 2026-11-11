@@ -38,7 +38,7 @@ func TestConvergeRunner_PlacesCanonicalContactsOnMembers(t *testing.T) {
 	// A local import store is a read-only member and must never be targeted,
 	// even though the stub would accept writes.
 	local := &entityStubConn{}
-	conns := map[string]*entityStubConn{"google": hub, "icloud": member, connectors.TimelineServiceID: local}
+	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": member, connectors.TimelineServiceID: local}
 	run, store, w := convergeTestRunners(t, "contacts", "google",
 		[]string{"google", "icloud", connectors.TimelineServiceID}, conns)
 
@@ -75,7 +75,7 @@ func TestConvergeRunner_NeverDeletesMemberOnlyItems(t *testing.T) {
 		Name:    "Solo",
 		Sources: []kinds.ContactSource{{Service: "icloud", ID: "id-solo"}},
 	}}}
-	conns := map[string]*entityStubConn{"google": hub, "icloud": member}
+	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": member}
 	_, store, w := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"}, conns)
 
 	convergeJob(t, store, "contacts")
@@ -107,7 +107,7 @@ func TestConvergeRunner_ChainsAcrossMembers(t *testing.T) {
 	hub := &entityStubConn{contacts: []kinds.Contact{{Name: "Ada"}, {Name: "Bob"}}}
 	one := &entityStubConn{}
 	two := &entityStubConn{}
-	conns := map[string]*entityStubConn{"google": hub, "icloud": one, "outlook": two}
+	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": one, "outlook": two}
 	_, store, w := convergeTestRunners(t, "contacts", "google",
 		[]string{"google", "icloud", "outlook"}, conns)
 
@@ -133,7 +133,7 @@ func TestConvergeRunner_ChainsAcrossMembers(t *testing.T) {
 
 func TestConvergeRunner_NoCanonicalHomeCompletesWithNote(t *testing.T) {
 	member := &entityStubConn{}
-	conns := map[string]*entityStubConn{"icloud": member}
+	conns := map[string]connectors.ServiceConnector{"icloud": member}
 	_, store, w := convergeTestRunners(t, "contacts", "", []string{"icloud"}, conns)
 
 	convergeJob(t, store, "contacts")
@@ -155,7 +155,7 @@ func TestConvergeRunner_NoCanonicalHomeCompletesWithNote(t *testing.T) {
 func TestConvergeRunner_NoWriteCapableMembersCompletesWithNote(t *testing.T) {
 	hub := &entityStubConn{contacts: []kinds.Contact{{Name: "Ada"}}}
 	local := &entityStubConn{}
-	conns := map[string]*entityStubConn{"google": hub, connectors.TimelineServiceID: local}
+	conns := map[string]connectors.ServiceConnector{"google": hub, connectors.TimelineServiceID: local}
 	_, store, w := convergeTestRunners(t, "contacts", "google",
 		[]string{"google", connectors.TimelineServiceID}, conns)
 
@@ -182,7 +182,7 @@ func TestConvergeRunner_ConflictsAreCountedNotRetried(t *testing.T) {
 		[]kinds.PlaceConflict{{Name: "Ada", Service: "icloud", ID: "id-ada", Reason: "changed"}},
 		[]kinds.PlaceSkip{{Name: "Bob", Reason: "no match"}},
 	)
-	conns := map[string]*entityStubConn{"google": hub, "icloud": member}
+	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": member}
 	_, store, w := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"}, conns)
 
 	convergeJob(t, store, "contacts")
@@ -207,7 +207,7 @@ func TestConvergeRunner_ConflictsAreCountedNotRetried(t *testing.T) {
 func TestConvergeRunner_StampsCopyRowsFreshnessReads(t *testing.T) {
 	hub := &entityStubConn{contacts: []kinds.Contact{{Name: "Ada"}, {Name: "Bob"}}}
 	member := &entityStubConn{}
-	conns := map[string]*entityStubConn{"google": hub, "icloud": member}
+	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": member}
 	run, store, w := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"}, conns)
 
 	convergeJob(t, store, "contacts")
@@ -245,7 +245,7 @@ func TestConvergeRunner_RetriesUpstreamError(t *testing.T) {
 	hub := &entityStubConn{contacts: []kinds.Contact{{Name: "Ada"}}}
 	member := &entityStubConn{}
 	member.setFailPlace(&SyncRetryAfter{Err: fmt.Errorf("upstream 502"), After: time.Millisecond})
-	conns := map[string]*entityStubConn{"google": hub, "icloud": member}
+	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": member}
 	_, store, w := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"}, conns)
 
 	convergeJob(t, store, "contacts")
@@ -278,7 +278,7 @@ func TestConvergeRunner_RetriesUpstreamError(t *testing.T) {
 func TestConvergeRunner_BadPayloadIsTerminal(t *testing.T) {
 	hub := &entityStubConn{}
 	member := &entityStubConn{}
-	conns := map[string]*entityStubConn{"google": hub, "icloud": member}
+	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": member}
 	run, _, _ := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"}, conns)
 
 	r := &convergeRunner{run: run, kind: "contacts"}
@@ -294,7 +294,7 @@ func TestConvergeRunner_BadPayloadIsTerminal(t *testing.T) {
 func TestConvergeRunner_EventsUseTitlePlacement(t *testing.T) {
 	hub := &entityStubConn{events: []kinds.CalendarEvent{{Title: "Standup"}, {Title: "Review"}}}
 	member := &entityStubConn{}
-	conns := map[string]*entityStubConn{"google-calendar": hub, "icloud": member}
+	conns := map[string]connectors.ServiceConnector{"google-calendar": hub, "icloud": member}
 	_, store, w := convergeTestRunners(t, "events", "google-calendar",
 		[]string{"google-calendar", "icloud"}, conns)
 
@@ -315,10 +315,10 @@ func TestConvergeRunner_EventsUseTitlePlacement(t *testing.T) {
 func TestConvergeRunner_LocalImportMembersAreSkipped(t *testing.T) {
 	hub := &entityStubConn{contacts: []kinds.Contact{{Name: "Ada"}}}
 	remote := &entityStubConn{}
-	conns := map[string]*entityStubConn{
+	conns := map[string]connectors.ServiceConnector{
 		"google":                     hub,
-		connectors.TimelineServiceID: {},
-		connectors.QuickenServiceID:  {},
+		connectors.TimelineServiceID: &entityStubConn{},
+		connectors.QuickenServiceID:  &entityStubConn{},
 		"icloud":                     remote,
 	}
 	_, store, w := convergeTestRunners(t, "contacts", "google",

@@ -323,9 +323,12 @@ type PlacePlaylistItemsResult struct {
 // catalog search when a track carries no service-local reference.
 type PlaylistItemWriteProvider interface {
 	// PlacePlaylistItems creates a playlist named name when playlistID is
-	// empty, else appends to it — appending is what lets a chained job spread
-	// across steps without creating a playlist per batch. Return
-	// ErrUnauthorized when no valid token is available.
+	// empty, else appends to it and — when name is non-empty — sets the
+	// playlist's title to name (a rename when it differs; an empty name on
+	// the append path keeps the title). Appending is what lets a chained job
+	// spread across steps without creating a playlist per batch, and the
+	// title write is how playlist renames propagate to a converged copy.
+	// Return ErrUnauthorized when no valid token is available.
 	PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []Track) (PlacePlaylistItemsResult, error)
 }
 

@@ -136,7 +136,8 @@ func spotifyItemsToTracks(raw map[string]any) ([]kinds.Track, int) {
 // PlacePlaylistItems implements kinds.PlaylistItemWriteProvider. Creates
 // the target playlist when playlistID is empty, then resolves and appends
 // tracks in chunks. An empty playlistID is the single-call path; a known
-// playlistID continues a chained job.
+// playlistID continues a chained job and, with a non-empty name, sets the
+// playlist's title so renames propagate to the copy (issue #365).
 func (c *SpotifyConnector) PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []kinds.Track) (kinds.PlacePlaylistItemsResult, error) {
 	var result kinds.PlacePlaylistItemsResult
 	if playlistID == "" {
@@ -161,6 +162,14 @@ func (c *SpotifyConnector) PlacePlaylistItems(ctx context.Context, playlistID, n
 		}
 		if ext, ok := created["external_urls"].(map[string]any); ok {
 			result.URL, _ = ext["spotify"].(string)
+		}
+	} else if strings.TrimSpace(name) != "" {
+		// Title write on the append path (issue #365): a partial update,
+		// so a rename on the source renames the converged copy.
+		if _, _, err := apiJSON(ctx, c.host, SpotifyServiceID, "PUT",
+			"/playlists/"+url.PathEscape(playlistID), nil,
+			map[string]any{"name": name}); err != nil {
+			return result, err
 		}
 	}
 	result.PlaylistID = playlistID
