@@ -15,6 +15,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*Server, *httptest.Server) {
@@ -23,13 +24,13 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 	t.Cleanup(ts.Close)
 
 	grants := policy.DataGrants{
-		policy.DefaultKey: {Default: policy.AccessRead},
+		shared.DefaultKey: {Default: shared.AccessRead},
 	}
 	if targetWrite {
 		grants = policy.DataGrants{
-			policy.DefaultKey: {Default: policy.AccessRead},
-			"playlists":       {Default: policy.AccessFull},
-			"tracks":          {Default: policy.AccessFull},
+			shared.DefaultKey: {Default: shared.AccessRead},
+			"playlists":       {Default: shared.AccessFull},
+			"tracks":          {Default: shared.AccessFull},
 		}
 	}
 	cfg := &Config{

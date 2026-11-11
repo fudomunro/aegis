@@ -12,6 +12,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
@@ -97,7 +98,7 @@ func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := &Config{typePolicies: policy.DataGrants{"playlists": {Default: policy.AccessRead}}}
+	cfg := &Config{typePolicies: policy.DataGrants{"playlists": {Default: shared.AccessRead}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.links = st
 
@@ -109,7 +110,7 @@ func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
 		t.Fatalf("read-only grant must deny link create: status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	cfg.typePolicies = policy.DataGrants{"playlists": {Default: policy.AccessFull}}
+	cfg.typePolicies = policy.DataGrants{"playlists": {Default: shared.AccessFull}}
 	req = httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
 	w = httptest.NewRecorder()
 	srv.HandleEntityLinks(w, req)
@@ -122,7 +123,7 @@ func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
 	}
 
 	// The write grant governs delete too (kind comes from the stored link).
-	cfg.typePolicies = policy.DataGrants{"playlists": {Default: policy.AccessRead}}
+	cfg.typePolicies = policy.DataGrants{"playlists": {Default: shared.AccessRead}}
 	req = httptest.NewRequest(http.MethodDelete, "/v1/library/links/"+created.ID, nil)
 	w = httptest.NewRecorder()
 	srv.HandleEntityLinks(w, req)

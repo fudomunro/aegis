@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func mustWriteFile(t *testing.T, path, content string) {
@@ -56,13 +57,13 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
 	// Bootstrap from aegis.json still applies when the overlay is empty.
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != shared.AccessRead {
 		t.Fatalf("bootstrap tracks = %q, want read", got)
 	}
 
 	if err := cfg.SetDataGrants(policy.DataGrants{
-		"tracks": {Default: policy.AccessFull},
-		"player": {Default: policy.AccessNone},
+		"tracks": {Default: shared.AccessFull},
+		"player": {Default: shared.AccessNone},
 	}); err != nil {
 		t.Fatalf("SetDataGrants: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	if ov.Version != dataGrantsFileVersion {
 		t.Fatalf("overlay version = %d", ov.Version)
 	}
-	if ov.DataGrants["tracks"].Default != policy.AccessFull {
+	if ov.DataGrants["tracks"].Default != shared.AccessFull {
 		t.Fatalf("overlay tracks = %+v", ov.DataGrants["tracks"])
 	}
 
@@ -102,7 +103,7 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	rules := fresh.DataGrants().Levels()
-	if rules.Level("tracks") != policy.AccessFull || rules.Level("player") != policy.AccessNone {
+	if rules.Level("tracks") != shared.AccessFull || rules.Level("player") != shared.AccessNone {
 		t.Fatalf("reloaded grants = %+v", fresh.DataGrants())
 	}
 
@@ -150,10 +151,10 @@ func TestPermissionsOverlay_BootstrapUnchangedWhenAbsentFromOverlay(t *testing.T
 		t.Fatal(err)
 	}
 	// An overlay file without a data_grants map leaves bootstrap in place.
-	if got := cfg.DataGrants().Levels().Level("player"); got != policy.AccessNone {
+	if got := cfg.DataGrants().Levels().Level("player"); got != shared.AccessNone {
 		t.Fatalf("player = %q, want none from bootstrap", got)
 	}
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != shared.AccessRead {
 		t.Fatalf("tracks = %q, want read from bootstrap", got)
 	}
 }
@@ -170,7 +171,7 @@ func TestPermissionsOverlay_MissingFileIsEmpty(t *testing.T) {
 	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("missing overlay should not fail: %v", err)
 	}
-	if got := cfg.DataGrants().Levels().Level("player"); got != policy.AccessNone {
+	if got := cfg.DataGrants().Levels().Level("player"); got != shared.AccessNone {
 		t.Fatalf("player = %q, want none from bootstrap", got)
 	}
 }
@@ -198,7 +199,7 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessNone {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != shared.AccessNone {
 		t.Fatalf("overlay tracks = %q, want none", got)
 	}
 
@@ -208,7 +209,7 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 		t.Fatalf("Reload: %v", err)
 	}
 	// Overlay still wins.
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessNone {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != shared.AccessNone {
 		t.Fatalf("after reload tracks = %q, want none from overlay", got)
 	}
 }

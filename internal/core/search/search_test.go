@@ -3,6 +3,8 @@ package search
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func newTestIndex(t *testing.T) *Index {
@@ -15,8 +17,8 @@ func newTestIndex(t *testing.T) *Index {
 	return x
 }
 
-func searchDoc(id, title, body string, services ...string) SearchDocument {
-	return SearchDocument{
+func searchDoc(id, title, body string, services ...string) shared.SearchDocument {
+	return shared.SearchDocument{
 		ItemID:   id,
 		Title:    title,
 		Body:     body,
@@ -27,21 +29,21 @@ func searchDoc(id, title, body string, services ...string) SearchDocument {
 
 func TestSearchIndex_UpsertAndSearch(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("tracks", "", []SearchDocument{
+	if err := x.Upsert("tracks", "", []shared.SearchDocument{
 		searchDoc("t1", "Purple Rain", "Purple Rain Prince", "spotify"),
 		searchDoc("t2", "Raining Blood", "Raining Blood Slayer", "spotify"),
 	}); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
 
-	res, err := x.Search(Query{Kind: "tracks", Q: "rain"})
+	res, err := x.Search(shared.SearchQuery{Kind: "tracks", Q: "rain"})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
 	if res.Total != 2 {
 		t.Fatalf("total = %d, want 2: %+v", res.Total, res.Docs)
 	}
-	res, err = x.Search(Query{Kind: "tracks", Q: "prince"})
+	res, err = x.Search(shared.SearchQuery{Kind: "tracks", Q: "prince"})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -53,12 +55,12 @@ func TestSearchIndex_UpsertAndSearch(t *testing.T) {
 	}
 
 	// Re-upsert refreshes the FTS row rather than duplicating it.
-	if err := x.Upsert("tracks", "", []SearchDocument{
+	if err := x.Upsert("tracks", "", []shared.SearchDocument{
 		searchDoc("t1", "Purple Rain", "Purple Rain The Artist Formerly Known As Prince", "spotify"),
 	}); err != nil {
 		t.Fatalf("re-upsert: %v", err)
 	}
-	res, err = x.Search(Query{Kind: "tracks", Q: "artist"})
+	res, err = x.Search(shared.SearchQuery{Kind: "tracks", Q: "artist"})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -69,32 +71,32 @@ func TestSearchIndex_UpsertAndSearch(t *testing.T) {
 
 func TestSearchIndex_DatasetPartitions(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("tracks", "shire", []SearchDocument{
+	if err := x.Upsert("tracks", "shire", []shared.SearchDocument{
 		searchDoc("t1", "Hobbiton", "Shared token shire"),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := x.Upsert("tracks", "gondor", []SearchDocument{
+	if err := x.Upsert("tracks", "gondor", []shared.SearchDocument{
 		searchDoc("t2", "Minas Tirith", "Shared token gondor"),
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	all, err := x.Search(Query{Kind: "tracks", Q: "shared"})
+	all, err := x.Search(shared.SearchQuery{Kind: "tracks", Q: "shared"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if all.Total != 2 {
 		t.Fatalf("unscoped total = %d", all.Total)
 	}
-	shire, err := x.Search(Query{Kind: "tracks", Dataset: "shire", Q: "shared"})
+	shire, err := x.Search(shared.SearchQuery{Kind: "tracks", Dataset: "shire", Q: "shared"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if shire.Total != 1 || shire.Docs[0].ItemID != "t1" {
 		t.Fatalf("shire partition leaked: %+v", shire)
 	}
-	gondor, err := x.Search(Query{Kind: "tracks", Dataset: "gondor", Q: "shared"})
+	gondor, err := x.Search(shared.SearchQuery{Kind: "tracks", Dataset: "gondor", Q: "shared"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +114,7 @@ func TestSearchIndex_CountAndEmptyQuery(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("count = %d, want 0", n)
 	}
-	if err := x.Upsert("tracks", "", []SearchDocument{searchDoc("t1", "One", "One")}); err != nil {
+	if err := x.Upsert("tracks", "", []shared.SearchDocument{searchDoc("t1", "One", "One")}); err != nil {
 		t.Fatal(err)
 	}
 	n, err = x.Count("tracks", "")
@@ -123,14 +125,14 @@ func TestSearchIndex_CountAndEmptyQuery(t *testing.T) {
 		t.Fatalf("count = %d, want 1", n)
 	}
 	// An empty match expression must not error the query.
-	if _, err := x.Search(Query{Kind: "tracks", Q: ""}); err != nil {
+	if _, err := x.Search(shared.SearchQuery{Kind: "tracks", Q: ""}); err != nil {
 		t.Fatalf("empty query: %v", err)
 	}
 }
 
 func TestSearchIndex_HostileFTSInput(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("tracks", "", []SearchDocument{
+	if err := x.Upsert("tracks", "", []shared.SearchDocument{
 		searchDoc("t1", "NEAR(a b)", "OR AND NOT * ^ : ( ) { } \"quoted\""),
 	}); err != nil {
 		t.Fatal(err)
@@ -139,7 +141,7 @@ func TestSearchIndex_HostileFTSInput(t *testing.T) {
 		`NEAR(a b)`, `title:foo`, `"unbalanced`, `a OR b`, `{x} ^y`,
 		`*"`, `::::`, `(){} `,
 	} {
-		if _, err := x.Search(Query{Kind: "tracks", Q: q}); err != nil {
+		if _, err := x.Search(shared.SearchQuery{Kind: "tracks", Q: q}); err != nil {
 			t.Fatalf("hostile q=%q: %v", q, err)
 		}
 	}
@@ -147,21 +149,21 @@ func TestSearchIndex_HostileFTSInput(t *testing.T) {
 
 func TestSearchIndex_PaginationCap(t *testing.T) {
 	x := newTestIndex(t)
-	docs := make([]SearchDocument, 0, 5)
+	docs := make([]shared.SearchDocument, 0, 5)
 	for i := range 5 {
 		docs = append(docs, searchDoc("t"+string(rune('a'+i)), "Shared title", "Shared title"))
 	}
 	if err := x.Upsert("tracks", "", docs); err != nil {
 		t.Fatal(err)
 	}
-	res, err := x.Search(Query{Kind: "tracks", Q: "shared", Limit: 2})
+	res, err := x.Search(shared.SearchQuery{Kind: "tracks", Q: "shared", Limit: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Total != 5 || len(res.Docs) != 2 {
 		t.Fatalf("page 1: total=%d len=%d", res.Total, len(res.Docs))
 	}
-	res2, err := x.Search(Query{Kind: "tracks", Q: "shared", Limit: 2, Offset: 2})
+	res2, err := x.Search(shared.SearchQuery{Kind: "tracks", Q: "shared", Limit: 2, Offset: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +187,7 @@ func TestSearchIndex_Disabled(t *testing.T) {
 	if err := nilIdx.Upsert("tracks", "", nil); err == nil {
 		t.Fatal("upsert on disabled index must error")
 	}
-	if _, err := nilIdx.Search(Query{Kind: "tracks"}); err == nil {
+	if _, err := nilIdx.Search(shared.SearchQuery{Kind: "tracks"}); err == nil {
 		t.Fatal("search on disabled index must error")
 	}
 }
@@ -206,13 +208,13 @@ func TestSearchIndex_CountsByKind(t *testing.T) {
 	if _, err := x.CountsByKind(); err != nil {
 		t.Fatalf("empty counts: %v", err)
 	}
-	if err := x.Upsert("tracks", "", []SearchDocument{
+	if err := x.Upsert("tracks", "", []shared.SearchDocument{
 		searchDoc("t1", "One", "One"),
 		searchDoc("t2", "Two", "Two"),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := x.Upsert("contacts", "shire", []SearchDocument{
+	if err := x.Upsert("contacts", "shire", []shared.SearchDocument{
 		searchDoc("c1", "Ada", "Ada"),
 	}); err != nil {
 		t.Fatal(err)
@@ -235,52 +237,52 @@ func TestSearchIndex_CountsByKind(t *testing.T) {
 
 func TestSearchIndex_SyncDropsRefutedRows(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("contacts", "", []SearchDocument{
+	if err := x.Upsert("contacts", "", []shared.SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 		searchDoc("t2", "Grace", "Grace Hopper", "google"),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// A complete fetch that no longer returns t2 refutes it.
-	if err := x.Sync("contacts", "", []SearchDocument{
+	if err := x.Sync("contacts", "", []shared.SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 	}, []string{"google"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := x.Search(Query{Kind: "contacts", Q: "grace"})
+	res, err := x.Search(shared.SearchQuery{Kind: "contacts", Q: "grace"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Total != 0 {
 		t.Fatalf("refuted row still matches: %+v", res.Docs)
 	}
-	if res, err = x.Search(Query{Kind: "contacts", Q: "ada"}); err != nil || res.Total != 1 {
+	if res, err = x.Search(shared.SearchQuery{Kind: "contacts", Q: "ada"}); err != nil || res.Total != 1 {
 		t.Fatalf("survivor: %+v err=%v", res, err)
 	}
 }
 
 func TestSearchIndex_SyncKeepsRowsFromIncompleteServices(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("contacts", "", []SearchDocument{
+	if err := x.Upsert("contacts", "", []shared.SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 		searchDoc("t2", "Secret", "Secret Person", "outlook"),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// Only google completed; outlook's row must survive the fetch.
-	if err := x.Sync("contacts", "", []SearchDocument{
+	if err := x.Sync("contacts", "", []shared.SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 	}, []string{"google"}); err != nil {
 		t.Fatal(err)
 	}
-	if res, err := x.Search(Query{Kind: "contacts", Q: "secret"}); err != nil || res.Total != 1 {
+	if res, err := x.Search(shared.SearchQuery{Kind: "contacts", Q: "secret"}); err != nil || res.Total != 1 {
 		t.Fatalf("row from incomplete service dropped: %+v err=%v", res, err)
 	}
 }
 
 func TestSearchIndex_SyncWithoutCompletionDeletesNothing(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("contacts", "", []SearchDocument{
+	if err := x.Upsert("contacts", "", []shared.SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 	}); err != nil {
 		t.Fatal(err)
@@ -295,14 +297,14 @@ func TestSearchIndex_SyncWithoutCompletionDeletesNothing(t *testing.T) {
 
 func TestSearchIndex_SyncPreservesUnknownMembership(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("contacts", "", []SearchDocument{
+	if err := x.Upsert("contacts", "", []shared.SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google", "outlook"),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// google still returns the item but outlook is degraded: the vouch from
 	// outlook must stay so a later google-only fetch cannot refute the row.
-	if err := x.Sync("contacts", "", []SearchDocument{
+	if err := x.Sync("contacts", "", []shared.SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace updated", "google"),
 	}, []string{"google"}); err != nil {
 		t.Fatal(err)
@@ -310,7 +312,7 @@ func TestSearchIndex_SyncPreservesUnknownMembership(t *testing.T) {
 	if err := x.Sync("contacts", "", nil, []string{"google"}); err != nil {
 		t.Fatal(err)
 	}
-	res, err := x.Search(Query{Kind: "contacts", Q: "ada"})
+	res, err := x.Search(shared.SearchQuery{Kind: "contacts", Q: "ada"})
 	if err != nil || res.Total != 1 {
 		t.Fatalf("row with unknown vouch was refuted: %+v err=%v", res, err)
 	}

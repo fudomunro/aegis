@@ -783,10 +783,10 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	matched := s.config.FindMatchingServices(payload.UserMessage)
 	// Data-scope isolation: never match (or block on) services outside this
 	// principal's dataset partition (docs/data-scopes.md).
-	if scope := scopes.From(r); scope != nil {
+	if scope := shared.DataScopeFrom(r); scope != nil {
 		visible := make([]Service, 0, len(matched))
 		for i := range matched {
-			if scopes.ServiceVisible(matched[i].Dataset, scope) {
+			if shared.ServiceVisible(matched[i].Dataset, scope) {
 				visible = append(visible, matched[i])
 			}
 		}

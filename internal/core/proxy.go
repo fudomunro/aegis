@@ -9,7 +9,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/metrics"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -47,7 +46,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	// Data-scope isolation: foreign partitions look missing, never 403
 	// (docs/data-scopes.md).
-	if !scopes.ServiceVisible(svc.Dataset, scopes.From(r)) {
+	if !shared.ServiceVisible(svc.Dataset, shared.DataScopeFrom(r)) {
 		logger.Warn("service not found", "reason", "dataset partition")
 		shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
 		return

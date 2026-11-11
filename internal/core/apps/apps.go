@@ -40,7 +40,7 @@ type App struct {
 	// Scopes restrict which library kinds the app may read, using the
 	// same access levels as service permissions (none / freebusy / read /
 	// write / read-write). freebusy is events-only.
-	Scopes policy.GrantMap `json:"scopes"`
+	Scopes shared.GrantMap `json:"scopes"`
 	// CreatedAt / UpdatedAt are informational.
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -168,14 +168,14 @@ func appTokenHint(token string) string {
 type AppCreateRequest struct {
 	ID     string          `json:"id"`
 	Name   string          `json:"name"`
-	Scopes policy.GrantMap `json:"scopes"`
+	Scopes shared.GrantMap `json:"scopes"`
 }
 
 // AppUpdateRequest patches name/scopes/disabled. Nil fields are left alone.
 // Scopes, when present, are normalized and default to none for unlisted types.
 type AppUpdateRequest struct {
 	Name     *string          `json:"name,omitempty"`
-	Scopes   *policy.GrantMap `json:"scopes,omitempty"`
+	Scopes   *shared.GrantMap `json:"scopes,omitempty"`
 	Disabled *bool            `json:"disabled,omitempty"`
 }
 
@@ -248,18 +248,18 @@ func (s *Store) Create(req AppCreateRequest) (AppView, string, error) {
 	}
 	scopes := req.Scopes
 	if scopes == nil {
-		scopes = policy.GrantMap{policy.DefaultKey: policy.AccessNone}
+		scopes = shared.GrantMap{shared.DefaultKey: shared.AccessNone}
 	}
 	if err := policy.ValidateGrantMap(scopes); err != nil {
 		return AppView{}, "", err
 	}
 	// Fail closed: unspecified types deny unless explicitly allowed.
-	normalized := policy.GrantMap{}
+	normalized := shared.GrantMap{}
 	for k, v := range scopes {
-		normalized[k] = policy.NormalizeAccess(v)
+		normalized[k] = shared.NormalizeAccess(v)
 	}
-	if _, ok := normalized[policy.DefaultKey]; !ok {
-		normalized[policy.DefaultKey] = policy.AccessNone
+	if _, ok := normalized[shared.DefaultKey]; !ok {
+		normalized[shared.DefaultKey] = shared.AccessNone
 	}
 
 	token, hash, hint, err := generateAppToken()
@@ -313,15 +313,15 @@ func (s *Store) Update(id string, req AppUpdateRequest) (AppView, error) {
 		app.Name = name
 	}
 	if req.Scopes != nil {
-		normalized := policy.GrantMap{}
+		normalized := shared.GrantMap{}
 		for k, v := range *req.Scopes {
-			normalized[k] = policy.NormalizeAccess(v)
+			normalized[k] = shared.NormalizeAccess(v)
 		}
 		if err := policy.ValidateGrantMap(normalized); err != nil {
 			return AppView{}, err
 		}
-		if _, ok := normalized[policy.DefaultKey]; !ok {
-			normalized[policy.DefaultKey] = policy.AccessNone
+		if _, ok := normalized[shared.DefaultKey]; !ok {
+			normalized[shared.DefaultKey] = shared.AccessNone
 		}
 		app.Scopes = normalized
 	}
@@ -475,7 +475,7 @@ type appIdentityKey struct{}
 type AppIdentity struct {
 	ID     string
 	Name   string
-	Scopes policy.GrantMap
+	Scopes shared.GrantMap
 }
 
 func WithAppIdentity(r *http.Request, app *App) *http.Request {

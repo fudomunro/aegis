@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func searchTestServer(t *testing.T, contacts ...kinds.Contact) *Server {
@@ -171,7 +172,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 
 	// Seed the gondor partition so its query is warm and cannot bootstrap
 	// from the scope-unaware fake provider.
-	if err := srv.search.Upsert("contacts", "gondor", []search.SearchDocument{{
+	if err := srv.search.Upsert("contacts", "gondor", []shared.SearchDocument{{
 		ItemID:   "g1",
 		Title:    "Gondor Contact",
 		Body:     "Gondor Contact",
@@ -221,7 +222,7 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}
 	srv.waitIndex()
-	if err := srv.search.Upsert("contacts", "", []search.SearchDocument{{
+	if err := srv.search.Upsert("contacts", "", []shared.SearchDocument{{
 		ItemID:   "secret",
 		Title:    "Secret Person",
 		Body:     "Secret Person",
@@ -249,7 +250,7 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 
 func TestLibrarySearch_MetadataRouteStripsExcerpt(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"documents/metadata": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"documents/metadata": {Default: shared.AccessRead}},
 		Services: []Service{{
 			ID:     "paperless",
 			Name:   "Paperless-ngx",
@@ -404,8 +405,8 @@ func TestLibrarySearch_FreeBusyRouteKeepsOwnerRows(t *testing.T) {
 	// index rows stay at owner-tier detail.
 	cfg := &Config{
 		typePolicies: policy.DataGrants{
-			"events":   {Default: policy.AccessRead},
-			"freebusy": {Default: policy.AccessRead},
+			"events":   {Default: shared.AccessRead},
+			"freebusy": {Default: shared.AccessRead},
 		},
 		Services: []Service{{
 			ID:     "google-calendar",
@@ -456,7 +457,7 @@ func TestLibrarySearch_FreeBusyRouteKeepsOwnerRows(t *testing.T) {
 
 func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"documents": {Default: shared.AccessRead}},
 		Services: []Service{{
 			ID:     "paperless",
 			Name:   "Paperless-ngx",
@@ -471,7 +472,7 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 	}
 	store := testAppStore(t)
 	srv.apps = store
-	_, appToken := createTestApp(t, store, "reader", policy.GrantMap{"documents/metadata": policy.AccessRead})
+	_, appToken := createTestApp(t, store, "reader", shared.GrantMap{"documents/metadata": shared.AccessRead})
 
 	before := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical")
 	if len(before) != 1 || before[0].Excerpt != "sensitive excerpt" {

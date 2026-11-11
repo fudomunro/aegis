@@ -3,7 +3,7 @@ package apps
 import (
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestParseScopeList(t *testing.T) {
@@ -11,7 +11,7 @@ func TestParseScopeList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if len(entries) != 2 || entries[0].Type != "freebusy" || entries[0].Level != policy.AccessRead {
+	if len(entries) != 2 || entries[0].Type != "freebusy" || entries[0].Level != shared.AccessRead {
 		t.Fatalf("entries = %+v", entries)
 	}
 	if _, err := parseScopeList("tracks:freebusy"); err == nil {
@@ -22,14 +22,14 @@ func TestParseScopeList(t *testing.T) {
 	}
 	// bare type means read
 	entries, err = parseScopeList("events")
-	if err != nil || entries[0].Level != policy.AccessRead {
+	if err != nil || entries[0].Level != shared.AccessRead {
 		t.Fatalf("bare = %+v err=%v", entries, err)
 	}
 }
 
 func TestGrantStore_Expires(t *testing.T) {
 	g := NewGrantStore()
-	code, err := g.Issue(GrantCode{AppID: "eco", Scopes: policy.GrantMap{"events": policy.AccessRead}})
+	code, err := g.Issue(GrantCode{AppID: "eco", Scopes: shared.GrantMap{"events": shared.AccessRead}})
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}

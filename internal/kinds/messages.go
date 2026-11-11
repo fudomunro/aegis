@@ -4,8 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/fudomunro/aegis/internal/core/audit"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -132,7 +130,7 @@ func (k *messagesKind) serve(w http.ResponseWriter, r *http.Request) {
 			// if the archive is disabled (issue #139).
 			if k.mail != nil && k.mail.Readable(r) {
 				mail := k.mail
-				dataset := scopes.Dataset(r)
+				dataset := shared.Dataset(r)
 				targets = append(targets, NamedLister[Message]{
 					ID:    MailArchiveSourceID,
 					Local: true,
@@ -202,7 +200,7 @@ func (k *messagesKind) serveOne(w http.ResponseWriter, r *http.Request) {
 			Surface:  SurfaceLibrary,
 			Target:   kind.ID,
 			Kind:     kind.ID,
-			Decision: audit.DecisionDeny,
+			Decision: DecisionDeny,
 			Reason:   "data_grant",
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
@@ -214,7 +212,7 @@ func (k *messagesKind) serveOne(w http.ResponseWriter, r *http.Request) {
 	svc, known := k.h.Service(serviceID)
 	if known {
 		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
-		if !scopes.ServiceVisible(svc.Dataset, scopes.From(r)) {
+		if !shared.ServiceVisible(svc.Dataset, shared.DataScopeFrom(r)) {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
 			return
 		}
@@ -228,7 +226,7 @@ func (k *messagesKind) serveOne(w http.ResponseWriter, r *http.Request) {
 	// (issue #311). Then the live provider, so every row the collection
 	// endpoint shows is fetchable by its source id regardless of source.
 	if k.mail != nil && k.mail.Readable(r) {
-		if msg, ok := k.mail.Get(scopes.Dataset(r), serviceID, id); ok {
+		if msg, ok := k.mail.Get(shared.Dataset(r), serviceID, id); ok {
 			shared.WriteJSON(w, msg)
 			k.h.RecordAccess(r, AccessEvent{
 				Agent:   agent,

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/apps"
-	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func testAppStore(t *testing.T) *apps.Store {
@@ -21,7 +21,7 @@ func testAppStore(t *testing.T) *apps.Store {
 	return store
 }
 
-func createTestApp(t *testing.T, store *apps.Store, id string, scopes policy.GrantMap) (view apps.AppView, token string) {
+func createTestApp(t *testing.T, store *apps.Store, id string, scopes shared.GrantMap) (view apps.AppView, token string) {
 	t.Helper()
 	view, token, err := store.Create(apps.AppCreateRequest{ID: id, Name: id, Scopes: scopes})
 	if err != nil {
@@ -32,9 +32,9 @@ func createTestApp(t *testing.T, store *apps.Store, id string, scopes policy.Gra
 
 func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", policy.GrantMap{
-		"events":   policy.AccessRead,
-		"contacts": policy.AccessNone,
+	_, token := createTestApp(t, store, "eco", shared.GrantMap{
+		"events":   shared.AccessRead,
+		"contacts": shared.AccessNone,
 	})
 	svc := &Service{
 		ID:     "google-calendar",
@@ -87,7 +87,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 
 func TestAuthMiddleware_AppTokenFreeBusyRouteOnly(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", policy.GrantMap{"freebusy": policy.AccessRead})
+	_, token := createTestApp(t, store, "eco", shared.GrantMap{"freebusy": shared.AccessRead})
 	svc := &Service{
 		ID:     "google-calendar",
 		Name:   "Google Calendar",
@@ -230,7 +230,7 @@ func TestAppPathAllowed(t *testing.T) {
 
 func TestAgentForRequest_AppIdentity(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
-	req = apps.WithAppIdentity(req, &apps.App{ID: "eco", Name: "E Co", Scopes: policy.GrantMap{"events": policy.AccessRead}})
+	req = apps.WithAppIdentity(req, &apps.App{ID: "eco", Name: "E Co", Scopes: shared.GrantMap{"events": shared.AccessRead}})
 	if got := agentForRequest(req); got != "app:eco" {
 		t.Fatalf("agent = %q", got)
 	}

@@ -123,7 +123,7 @@ func TestHandleLibraryEvents_NoProviders(t *testing.T) {
 
 func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"events": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"events": {Default: shared.AccessNone}},
 		Services: []Service{{
 			ID:     "google-calendar",
 			Name:   "Google Calendar",

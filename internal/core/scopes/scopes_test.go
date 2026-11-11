@@ -60,25 +60,3 @@ func TestNewStore_LoadAndResolve(t *testing.T) {
 		t.Fatalf("All() = %d scopes", len(s.All()))
 	}
 }
-
-func TestServiceVisible(t *testing.T) {
-	owner := (*Scope)(nil)
-	shire := &Scope{ID: "shire", Dataset: "shire"}
-	gondor := &Scope{ID: "gondor", Dataset: "gondor"}
-
-	if !ServiceVisible("", owner) || !ServiceVisible("", shire) {
-		t.Fatal("shared service must be visible to every scope")
-	}
-	if !ServiceVisible("shire", owner) {
-		t.Fatal("owner scope sees every service")
-	}
-	if !ServiceVisible("shire", shire) {
-		t.Fatal("matching dataset must be visible")
-	}
-	if ServiceVisible("shire", gondor) {
-		t.Fatal("other dataset must be invisible")
-	}
-	if !ServiceVisible("", shire) {
-		t.Fatal("empty dataset is shared")
-	}
-}

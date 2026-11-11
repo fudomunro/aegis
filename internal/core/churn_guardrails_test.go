@@ -15,15 +15,18 @@ import (
 // Churn guardrails. Each test here pins a decision that was made, reversed,
 // and re-decided at least once — so the next session cannot quietly undo it.
 //
-//  1. Package import boundaries (#15 / #280 / #301 / #303 / #325):
+//  1. Package import boundaries (#15 / #280 / #301 / #303 / #325 / #358):
 //     `internal/shared` is the single owner of stdlib-only plumbing AND
 //     cross-package seam vocabulary — the shapes two internal packages
 //     exchange to agree on a contract (capabilities, onboarding, mail
-//     ingest, ownership). Shapes and trivial constructors/accessors only
-//     (the kindrules.go test): no domain behavior, no service registries,
-//     no provider paths, no Host. `internal/kinds` holds kind data and
-//     neutral models; authorization policy is `internal/core/policy`; and
-//     connectors depend on `Host` — not the core hub.
+//     ingest, ownership, grant maps, data-scope views, search documents)
+//     plus trivial pure constructors/accessors/predicates over them
+//     (kindrules.go is the worked example). No state, no I/O, no
+//     configuration resolution, no service registries, no provider paths,
+//     no Host. `internal/kinds` imports `internal/shared` only;
+//     authorization vocabulary is shared, stored grant resolution is
+//     `internal/core/policy`; and connectors depend on `Host` — not the
+//     core hub.
 //  2. Outbound HTTP has one owner (`shared.HTTPClient`); `http.DefaultClient`
 //     and the `http.Get`/`http.Post`/`http.PostForm` helpers have no timeout.
 
@@ -53,14 +56,14 @@ var allowedImports = map[string][]string{
 		"github.com/fudomunro/aegis/internal/shared",
 	},
 	// the UDK registry loads schema packs and applies the admin overlay;
-	// kind queries go through kinds, access defaults through policy.
+	// kind queries go through kinds, access defaults through the shared
+	// vocabulary.
 	"internal/core/udk": {
-		"github.com/fudomunro/aegis/internal/core/policy",
 		"github.com/fudomunro/aegis/internal/kinds",
 		"github.com/fudomunro/aegis/internal/shared",
 	},
-	// the apps registry mints and verifies third-party app tokens; scope
-	// vocabulary comes from policy, owner-view markers from kinds.
+	// the apps registry mints and verifies third-party app tokens; stored
+	// scope validation comes from policy, owner-view markers from kinds.
 	"internal/core/apps": {
 		"github.com/fudomunro/aegis/internal/core/policy",
 		"github.com/fudomunro/aegis/internal/kinds",
@@ -79,15 +82,10 @@ var allowedImports = map[string][]string{
 	},
 	"internal/kinds": {
 		"github.com/fudomunro/aegis/internal/shared",
-		"github.com/fudomunro/aegis/internal/core/policy",
-		"github.com/fudomunro/aegis/internal/core/scopes",
-		"github.com/fudomunro/aegis/internal/core/audit",
-		"github.com/fudomunro/aegis/internal/core/search",
 	},
 	"internal/connectors": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/kinds",
-		"github.com/fudomunro/aegis/internal/core/policy",
 	},
 }
 

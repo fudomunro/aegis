@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestDataGrantsOverlay_Primary(t *testing.T) {
@@ -45,17 +46,17 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 
 	// Data grant is primary: tracks default full, spotify tightens to none.
 	if err := cfg.SetDataGrants(policy.DataGrants{
-		"tracks": {Default: policy.AccessFull},
-		"places": {Default: policy.AccessNone},
+		"tracks": {Default: shared.AccessFull},
+		"places": {Default: shared.AccessNone},
 	}); err != nil {
 		t.Fatalf("SetDataGrants: %v", err)
 	}
 
 	// The rule map takes each kind's default level.
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessFull {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != shared.AccessFull {
 		t.Fatalf("tracks = %q, want full", got)
 	}
-	if got := cfg.DataGrants().Levels().Level("places"); got != policy.AccessNone {
+	if got := cfg.DataGrants().Levels().Level("places"); got != shared.AccessNone {
 		t.Fatalf("places = %q, want none", got)
 	}
 
@@ -71,7 +72,7 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 	if file.Version != dataGrantsFileVersion {
 		t.Fatalf("version = %d", file.Version)
 	}
-	if file.DataGrants["tracks"].Default != policy.AccessFull {
+	if file.DataGrants["tracks"].Default != shared.AccessFull {
 		t.Fatalf("data_grants.tracks = %+v", file.DataGrants["tracks"])
 	}
 
@@ -83,7 +84,7 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 	if err := fresh.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("InitDataGrantsStore reload: %v", err)
 	}
-	if got := fresh.DataGrants().Levels().Level("tracks"); got != policy.AccessFull {
+	if got := fresh.DataGrants().Levels().Level("tracks"); got != shared.AccessFull {
 		t.Fatalf("reloaded tracks = %q", got)
 	}
 }
@@ -105,10 +106,10 @@ func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != shared.AccessRead {
 		t.Fatalf("bootstrap tracks = %q", got)
 	}
-	if got := cfg.DataGrants().Levels().Level("places"); got != policy.AccessNone {
+	if got := cfg.DataGrants().Levels().Level("places"); got != shared.AccessNone {
 		t.Fatalf("bootstrap places = %q", got)
 	}
 
@@ -118,7 +119,7 @@ func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessFull {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != shared.AccessFull {
 		t.Fatalf("overlay types win = %q", got)
 	}
 }
@@ -158,10 +159,10 @@ func TestHandleAdminDataGrants(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.DataGrants["tracks"].Default != policy.AccessRead {
+	if resp.DataGrants["tracks"].Default != shared.AccessRead {
 		t.Fatalf("data_grants.tracks = %+v", resp.DataGrants["tracks"])
 	}
-	if got := srv.config.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+	if got := srv.config.DataGrants().Levels().Level("tracks"); got != shared.AccessRead {
 		t.Fatalf("effective = %q", got)
 	}
 }
@@ -184,10 +185,10 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != shared.AccessRead {
 		t.Fatalf("bootstrap tracks = %q", got)
 	}
-	if got := cfg.DataGrants().Levels().Level("places"); got != policy.AccessNone {
+	if got := cfg.DataGrants().Levels().Level("places"); got != shared.AccessNone {
 		t.Fatalf("bootstrap places = %q (grant_limits and provider opt-in are legacy)", got)
 	}
 
@@ -197,12 +198,12 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	if err := cfg.InitDataGrantsStore(ovPath); err != nil {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessFull {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != shared.AccessFull {
 		t.Fatalf("overlay data_grants win = %q", got)
 	}
 
 	// Saves write v3 keys only.
-	if err := cfg.SetDataGrants(policy.DataGrants{"tracks": {Default: policy.AccessRead}}); err != nil {
+	if err := cfg.SetDataGrants(policy.DataGrants{"tracks": {Default: shared.AccessRead}}); err != nil {
 		t.Fatalf("SetDataGrants: %v", err)
 	}
 	raw, err := os.ReadFile(ovPath)
@@ -213,7 +214,7 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	if err := json.Unmarshal(raw, &file); err != nil {
 		t.Fatal(err)
 	}
-	if file.DataGrants["tracks"].Default != policy.AccessRead {
+	if file.DataGrants["tracks"].Default != shared.AccessRead {
 		t.Fatalf("saved data_grants = %+v", file.DataGrants)
 	}
 	if file.Version != dataGrantsFileVersion {

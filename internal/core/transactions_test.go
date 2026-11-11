@@ -76,7 +76,7 @@ func TestYNABCategories_FromSplits(t *testing.T) {
 
 func TestValidateGrantMap_SummaryTokenRetired(t *testing.T) {
 	// Totals are the transactions/totals route (issue #348).
-	if err := policy.ValidateGrantMap(policy.GrantMap{"transactions": "summary"}); err == nil {
+	if err := policy.ValidateGrantMap(shared.GrantMap{"transactions": "summary"}); err == nil {
 		t.Fatal("retired summary token must reject")
 	}
 }

@@ -106,7 +106,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Data directory + state path layout | `internal/core` hub | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `internal/core` hub (`Config`) | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
 | Admin permissions overlay | `internal/core` hub | `data_grants.json` v3: `data_grants` (primary DataGrant); admin saves never rewrite aegis.json |
-| Data scopes (principal → dataset) | `internal/core/scopes/`, `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens |
+| Data scopes (principal → dataset) | `internal/core/scopes/`, `internal/shared` (request view), `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens. The stored record stays hub-side; the dataset-partition view crosses into the kinds pipeline as `shared.DataScope` |
 | External access (listeners, invite tokens) | `docs/external-access.md`, `SECURITY.md` | Split listeners: API (publishable, credential perimeter) vs admin (in-tailnet). Contract for issue #149 multi-user |
 | Pre-request injection | `internal/core/inject` (engine: wire-shape detection + JSON surgery), `internal/core` hub (`handler.go` hook) | `allow` / `block` / `modify`; structured `Operation` contract |
 | Hook-health engine | `internal/core/hookhealth/` (engine), `internal/core` hub (`hookhealth.go` wrapper, admin handlers) | Ring of redacted hook observations + Aperture config checks (`/v1/admin/hook-health`); `hook_skip.go` stays in the hub |
@@ -119,7 +119,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Sample/demo datasets + sample:// connector | `internal/core/sampledata/`, `docs/development.md`, `docs/demo-datasets.md` | Deterministic fixtures (generic + LotR/Lincoln packs), mbox/JSON writers, `SampleLibraryConnector`. Demo lockdown validation stays in the hub (`demo.go`) |
 | UDK registry + admin overlay | `internal/core/udk/` (registry/loader + `user_kinds.json` overlay), `internal/core` hub (`udk_admin.go`, `udk_handlers.go`) | User-defined kinds (issue #15). Schema packs under `user-kinds/` load into the same pipeline; the hub owns the admin handlers |
 | Apps registry + consent grants | `internal/core/apps/` (store + grant codes), `internal/core` hub (`apps_grant.go` handlers, `apps_admin.go`) | Third-party app tokens (issue #131). The store mints/verifies tokens; the hub owns the authorize/token/revoke HTTP surface |
-| Neutral models + kind data | `internal/kinds` | Models, merge, and kind registry metadata; authorization policy is `internal/core/policy`, never here |
+| Neutral models + kind data | `internal/kinds` | Models, merge, and kind registry metadata; authorization vocabulary is `internal/shared` and stored grant resolution is `internal/core/policy` — never here |
 | Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points) | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; the hub keeps the fixed cross-kind routes and admin writes |
 | Merge / entity IDs | `internal/kinds` (merge), `internal/core/links/` (entity-link store) | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors` (one file per named service; local import stores share the surface) | Register in the hub's ordered `srv.connectors` list; stores use a local-transport constructor (design: `docs/local-import-stores.md`) |
@@ -156,8 +156,8 @@ drift and are not kept here).
 - Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `shared.HTTPClient`
   over new `http.DefaultClient` call sites.
 - **Connectors depend on `Host`** (`host.go`) — not `*Server`, and never the
-  core hub. Model package `internal/kinds` and `internal/core/policy` are
-  allowed (neutral models, access-level vocabulary, `GrantLimits`). That seam
+  core hub. Model packages `internal/kinds` and `internal/shared` are
+  allowed (neutral models, access-level vocabulary). That seam
   is how named services leave package main under #15. Extend `Host` only for
   cross-connector runtime needs; provider-specific stores are constructor
   args (see `NewQuickenConnector`).
@@ -419,14 +419,15 @@ scope runs everything.
 - **Neutral models at the library boundary.** Provider quirks stay inside
   connectors; `/v1/library/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
 - **Grants are data, not comments.** **Data grants** (what the user allows
-  an LLM agent or app to use) live in `internal/core/policy`: the stored
-  `DataGrant` map materializes to a `GrantMap` (kind → access level) per
-  recognized key, and authorization is one lookup over it — uniformly
+  an LLM agent or app to use) live in `internal/core/policy` as stored
+  `DataGrant` entries; the access-level vocabulary and request rule map are
+  `internal/shared` (`GrantMap` — kind → access level). Each recognized key
+  materializes one map and authorization is one lookup over it — uniformly
   deny-by-default (`GrantMap.Level`). Enforced on the content/ingest proxy,
   library (reads and writes), and pre-request injection. Prefer **data
   grant** in product English (`docs/glossary.md`). Aegis authorization
-  policy (grants, access levels) is `internal/core/policy` — never
-  `internal/kinds`, which holds models and kind metadata only.
+  resolution is `internal/core/policy` (vocabulary in `internal/shared`) —
+  never `internal/kinds`, which holds models and kind metadata only.
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
 - **Outbound HTTP.** Use `shared.HTTPClient` and
   `http.NewRequestWithContext`. No lock-held I/O on the token store hot path;
@@ -496,7 +497,7 @@ scope runs everything.
 | OAuth / connections / refresh | `internal/core` hub (flows), `internal/core/tokens/` (store) |
 | Unified library + merge | `internal/kinds` (models/merge/kind data + aggregate pipeline) |
 | Mail ingest / local mail archive | `docs/mail-ingest.md`, `internal/connectors` (ingests), `internal/core` hub (`MailSink` wiring) |
-| Data grants / agent visibility | `internal/core/policy` (`DataGrant` / `GrantMap`) + hub enforcement | One grant map per key, deny-by-default; product English: **data grant** |
+| Data grants / agent visibility | `internal/core/policy` (`DataGrant` resolution), `internal/shared` (`GrantMap` vocabulary) + hub enforcement | One grant map per key, deny-by-default; product English: **data grant** |
 | Data ownership / completeness feedback | `docs/data-ownership.md`, `internal/core/ownership` (store), `internal/shared` (shapes), hub (derivation) | Per-kind user confirmation + derived evidence; distinct from connection maturity |
 | Admin map / flow | `internal/core` hub, `internal/core/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core` hub (identity) |

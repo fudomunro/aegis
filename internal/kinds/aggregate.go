@@ -12,9 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/audit"
-	"github.com/fudomunro/aegis/internal/core/scopes"
-	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -124,7 +121,7 @@ func AnyServiceTruncated(bySvc map[string]LibraryServiceStatus) bool {
 // responses depend only on the route and the dataset — two keys reaching
 // the same route and partition share cache safely.
 func datasetCacheSuffix(r *http.Request) string {
-	ds := scopes.Dataset(r)
+	ds := shared.Dataset(r)
 	if ds == "" {
 		return ""
 	}
@@ -178,7 +175,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 			Target:   kind.ID,
 			Kind:     kind.ID,
 			Cache:    CacheMiss,
-			Decision: audit.DecisionDeny,
+			Decision: DecisionDeny,
 			Reason:   "data_grant",
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
@@ -247,7 +244,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		// the detail the owner's query expects (issue #272). Kinds that
 		// own their free-text (QAsFilter) never read the index and skip it.
 		if !spec.QAsFilter && kind.Search != nil && e.search.Enabled() && indexWriteable(h, r) {
-			indexAsync(h, e, spec, scopes.Dataset(r), fetched)
+			indexAsync(h, e, spec, shared.Dataset(r), fetched)
 		}
 		return fetched, nil
 	})
@@ -262,7 +259,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 			Surface:  SurfaceService,
 			Target:   id,
 			Kind:     kind.ID,
-			Decision: audit.DecisionDeny,
+			Decision: DecisionDeny,
 			Reason:   "permission",
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
@@ -276,7 +273,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 				Surface:  SurfaceLibrary,
 				Target:   kind.ID,
 				Kind:     kind.ID,
-				Decision: audit.DecisionDeny,
+				Decision: DecisionDeny,
 				Reason:   "permission",
 				Method:   r.Method,
 				Status:   http.StatusForbidden,
@@ -432,7 +429,7 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "search index is disabled")
 		return
 	}
-	dataset := scopes.Dataset(r)
+	dataset := shared.Dataset(r)
 
 	// Grant gate mirrors the aggregate: without any readable target, search
 	// has nothing legitimate to return.
@@ -444,7 +441,7 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 				Surface:  SurfaceLibrary,
 				Target:   kind.ID,
 				Kind:     kind.ID,
-				Decision: audit.DecisionDeny,
+				Decision: DecisionDeny,
 				Reason:   "permission",
 				Method:   r.Method,
 				Status:   http.StatusForbidden,
@@ -510,7 +507,7 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 	}
 
 	// Clamp at the API boundary: the engine trusts its caller's limit.
-	res, err := e.search.Search(search.Query{Kind: kind.ID, Dataset: dataset, Q: q, Limit: min(searchHitCap, MaxPageLimit)})
+	res, err := e.search.Search(shared.SearchQuery{Kind: kind.ID, Dataset: dataset, Q: q, Limit: min(searchHitCap, MaxPageLimit)})
 	if err != nil {
 		logger.Error("search index query failed", "error", err)
 		shared.WriteJSONError(w, http.StatusInternalServerError, "search index unavailable")
@@ -584,7 +581,7 @@ func indexDocuments[T any](e *Engine, spec Spec[T], dataset string, fetched Fetc
 	if !e.search.Enabled() || spec.Kind.Search == nil {
 		return nil
 	}
-	docs := make([]search.SearchDocument, 0, len(fetched.Items))
+	docs := make([]shared.SearchDocument, 0, len(fetched.Items))
 	for _, item := range fetched.Items {
 		doc, err := BuildSearchDocument(spec.SortKey(item), item, *spec.Kind.Search)
 		if err != nil {

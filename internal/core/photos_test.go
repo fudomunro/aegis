@@ -86,7 +86,7 @@ func TestHandleLibraryPhotos_NoProviders(t *testing.T) {
 
 func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"photos": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"photos": {Default: shared.AccessNone}},
 		Services: []Service{{
 			ID:     "google-photos",
 			Name:   "Google Photos",

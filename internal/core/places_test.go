@@ -50,19 +50,19 @@ func TestNormalizePlaceVisitKindAndMode(t *testing.T) {
 }
 
 func TestPermissions_PlacesDefaultNone(t *testing.T) {
-	var nilPerm policy.GrantMap
-	if got := nilPerm.Level("places"); got != policy.AccessNone {
+	var nilPerm shared.GrantMap
+	if got := nilPerm.Level("places"); got != shared.AccessNone {
 		t.Fatalf("nil map places = %q, want none", got)
 	}
-	p := policy.GrantMap{"default": policy.AccessFull, "tracks": policy.AccessRead}
-	if got := p.Level("places"); got != policy.AccessNone {
+	p := shared.GrantMap{"default": shared.AccessFull, "tracks": shared.AccessRead}
+	if got := p.Level("places"); got != shared.AccessNone {
 		t.Fatalf("default key must not enable places: %q", got)
 	}
 	if p.AllowsRead("places") {
 		t.Fatal("places must not be readable by default")
 	}
-	enabled := policy.GrantMap{"places": policy.AccessRead}
-	if got := enabled.Level("places"); got != policy.AccessRead {
+	enabled := shared.GrantMap{"places": shared.AccessRead}
+	if got := enabled.Level("places"); got != shared.AccessRead {
 		t.Fatalf("explicit places = %q, want read", got)
 	}
 	if !enabled.AllowsRead("places") {
@@ -104,7 +104,7 @@ func TestPhotosPlacesJoinDemo(t *testing.T) {
 
 func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"places": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"places": {Default: shared.AccessRead}},
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 			{ID: connectors.OwnTracksServiceID, Name: "OwnTracks", Action: "inject"},
@@ -153,7 +153,7 @@ func TestHandleLibraryPlaces_DeniedByDefault(t *testing.T) {
 
 func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"places/city": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"places/city": {Default: shared.AccessRead}},
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},
@@ -188,7 +188,7 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 
 func TestHandleLibraryPlaces_NamesOmitsCoords(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"places/names": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"places/names": {Default: shared.AccessRead}},
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},
@@ -223,7 +223,7 @@ func TestHandleLibraryPlaces_NamesOmitsCoords(t *testing.T) {
 
 func TestHandleLibraryPlaces_FullKeepsCoords(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"places": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"places": {Default: shared.AccessRead}},
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},

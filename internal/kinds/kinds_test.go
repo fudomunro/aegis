@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // fakeHost implements Host over plain test state — the seam must be usable
@@ -15,8 +15,8 @@ import (
 type fakeHost struct {
 	connectors map[string]any
 	services   []ServiceView
-	grants     policy.GrantMap // request key's rule map
-	owner      policy.GrantMap
+	grants     shared.GrantMap // request key's rule map
+	owner      shared.GrantMap
 	principal  Principal
 	events     []AccessEvent
 }
@@ -34,14 +34,14 @@ func (f *fakeHost) Service(id string) (ServiceView, bool) {
 
 func (f *fakeHost) Services() []ServiceView { return f.services }
 
-func (f *fakeHost) Grants(r *http.Request) (policy.GrantMap, Principal) {
+func (f *fakeHost) Grants(r *http.Request) (shared.GrantMap, Principal) {
 	if OwnerView(r) {
 		return f.owner, PrincipalOwner
 	}
 	return f.grants, f.principal
 }
 
-func (f *fakeHost) OwnerGrants() policy.GrantMap { return f.owner }
+func (f *fakeHost) OwnerGrants() shared.GrantMap { return f.owner }
 
 func (f *fakeHost) RecordAccess(r *http.Request, ev AccessEvent) { f.events = append(f.events, ev) }
 
@@ -91,7 +91,7 @@ func TestCollect_PermissionsAndProviders(t *testing.T) {
 			{ID: "blocked", Action: "block"},
 			{ID: "notprov", Action: "inject"},
 		},
-		grants: policy.GrantMap{"widgets": policy.AccessRead},
+		grants: shared.GrantMap{"widgets": shared.AccessRead},
 	}
 	collect := func() ([]NamedLister[int], []string) {
 		return Collect[int, testProvider](h,
@@ -107,7 +107,7 @@ func TestCollect_PermissionsAndProviders(t *testing.T) {
 	}
 
 	// Deny-by-default: an unlisted kind denies every provider.
-	h.grants = policy.GrantMap{}
+	h.grants = shared.GrantMap{}
 	targets, denied = collect()
 	if len(targets) != 0 {
 		t.Fatalf("targets = %+v, want none", targets)

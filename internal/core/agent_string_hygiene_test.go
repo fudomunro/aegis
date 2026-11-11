@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Agent-facing strings are what the LLM agent reads in pre-request injection
@@ -102,13 +102,13 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 		add("writePolicyNotice", notice)
 	}
 
-	add("permissionNotice/denied", permissionNotice(policy.GrantMap{
-		policy.DefaultKey: policy.AccessNone,
-		"photos":          policy.AccessNone,
+	add("permissionNotice/denied", permissionNotice(shared.GrantMap{
+		shared.DefaultKey: shared.AccessNone,
+		"photos":          shared.AccessNone,
 	}))
-	add("permissionNotice/freebusy", permissionNotice(policy.GrantMap{
-		policy.DefaultKey: policy.AccessRead,
-		"events":          policy.AccessRead,
+	add("permissionNotice/freebusy", permissionNotice(shared.GrantMap{
+		shared.DefaultKey: shared.AccessRead,
+		"events":          shared.AccessRead,
 	}))
 
 	out = append(out, connectorAgentSamples(t, srv)...)

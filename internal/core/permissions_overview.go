@@ -71,7 +71,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			return apps[i].ID < apps[j].ID
 		})
 		for _, app := range apps {
-			scopes := make(policy.GrantMap, len(app.Scopes))
+			scopes := make(shared.GrantMap, len(app.Scopes))
 			for k, v := range app.Scopes {
 				scopes[k] = v
 			}
@@ -99,7 +99,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			Kind:     policy.AccessorSync,
 			Label:    "Mail archive sync",
 			Detail:   "Mail ingest into the local mail archive (live sync and export import). Message bodies stay on the source; Aegis keeps a compressed search copy.",
-			Levels:   map[string]string{"messages": policy.AccessRead},
+			Levels:   map[string]string{"messages": shared.AccessRead},
 			Explicit: map[string]bool{"messages": true},
 		})
 	}
@@ -112,7 +112,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			if rec.Kind == "" {
 				continue
 			}
-			levels[rec.Kind] = policy.AccessWrite
+			levels[rec.Kind] = shared.AccessWrite
 			explicit[rec.Kind] = true
 		}
 		accessors = append(accessors, policy.Accessor{
@@ -130,7 +130,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			Kind:     policy.AccessorSync,
 			Label:    "Timeline import",
 			Detail:   "Google Timeline export ingest into the local places store.",
-			Levels:   map[string]string{"places": policy.AccessRead},
+			Levels:   map[string]string{"places": shared.AccessRead},
 			Explicit: map[string]bool{"places": true},
 		})
 	}
@@ -140,7 +140,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			Kind:     policy.AccessorSync,
 			Label:    "Quicken import",
 			Detail:   "QIF/QFX/OFX import into the local transaction store.",
-			Levels:   map[string]string{"transactions": policy.AccessRead},
+			Levels:   map[string]string{"transactions": shared.AccessRead},
 			Explicit: map[string]bool{"transactions": true},
 		})
 	}
@@ -151,8 +151,8 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			Label:  "Signal import",
 			Detail: "File-based Signal export ingest into the local contacts/messages store. Attachments are never stored.",
 			Levels: map[string]string{
-				"contacts": policy.AccessRead,
-				"messages": policy.AccessRead,
+				"contacts": shared.AccessRead,
+				"messages": shared.AccessRead,
 			},
 			Explicit: map[string]bool{"contacts": true, "messages": true},
 		})
@@ -176,7 +176,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		levels := make(map[string]string, len(provided))
 		explicit := make(map[string]bool, len(provided))
 		for _, dt := range provided {
-			levels[dt] = policy.AccessRead
+			levels[dt] = shared.AccessRead
 			explicit[dt] = true
 		}
 		name := svc.Name
@@ -206,7 +206,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		}
 		for _, dt := range kinds {
 			if _, ok := accessors[i].Levels[dt]; !ok {
-				accessors[i].Levels[dt] = policy.AccessNone
+				accessors[i].Levels[dt] = shared.AccessNone
 			}
 		}
 	}
@@ -232,7 +232,7 @@ func serviceProvidedTypes(conn any) []string {
 	var out []string
 	add := func(name string) {
 		name = strings.TrimSpace(name)
-		if name == "" || name == policy.DefaultKey || seen[name] {
+		if name == "" || name == shared.DefaultKey || seen[name] {
 			return
 		}
 		seen[name] = true

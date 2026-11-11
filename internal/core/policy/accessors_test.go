@@ -1,6 +1,10 @@
 package policy
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/fudomunro/aegis/internal/shared"
+)
 
 func TestOverviewKinds_PrefersLibraryOrderThenExtras(t *testing.T) {
 	got := OverviewKinds(
@@ -21,25 +25,25 @@ func TestOverviewKinds_PrefersLibraryOrderThenExtras(t *testing.T) {
 func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 	kinds := []string{"tracks", "places", "events"}
 	got := AgentOverviewLevels(DataGrants{
-		"events": {Default: AccessRead},
-		"places": {Default: AccessRead},
-		"tracks": {Default: AccessRead},
+		"events": {Default: shared.AccessRead},
+		"places": {Default: shared.AccessRead},
+		"tracks": {Default: shared.AccessRead},
 	}, kinds)
-	if got["tracks"] != AccessRead {
+	if got["tracks"] != shared.AccessRead {
 		t.Fatalf("tracks = %q, want read", got["tracks"])
 	}
-	if got["places"] != AccessRead {
+	if got["places"] != shared.AccessRead {
 		t.Fatalf("places = %q, want read", got["places"])
 	}
-	if got["events"] != AccessRead {
+	if got["events"] != shared.AccessRead {
 		t.Fatalf("events = %q, want read", got["events"])
 	}
 
 	got = AgentOverviewLevels(DataGrants{}, kinds)
-	if got["tracks"] != DefaultAccessType {
-		t.Fatalf("unset tracks = %q, want %q", got["tracks"], DefaultAccessType)
+	if got["tracks"] != shared.DefaultAccessType {
+		t.Fatalf("unset tracks = %q, want %q", got["tracks"], shared.DefaultAccessType)
 	}
-	if got["places"] != AccessNone {
+	if got["places"] != shared.AccessNone {
 		t.Fatalf("unset places = %q, want none", got["places"])
 	}
 }
@@ -48,7 +52,7 @@ func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 	kinds := []string{"tracks", "places", "events"}
 	levels, explicit := AppOverviewLevels(nil, kinds)
 	for _, dt := range kinds {
-		if levels[dt] != AccessNone {
+		if levels[dt] != shared.AccessNone {
 			t.Fatalf("nil scopes %s = %q, want none", dt, levels[dt])
 		}
 		if explicit[dt] {
@@ -56,29 +60,29 @@ func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 		}
 	}
 
-	levels, explicit = AppOverviewLevels(GrantMap{
-		DefaultKey: AccessNone,
-		"events":   AccessRead,
-		"places":   AccessRead,
-		"tracks":   AccessRead,
+	levels, explicit = AppOverviewLevels(shared.GrantMap{
+		shared.DefaultKey: shared.AccessNone,
+		"events":          shared.AccessRead,
+		"places":          shared.AccessRead,
+		"tracks":          shared.AccessRead,
 	}, kinds)
-	if levels["events"] != AccessRead {
+	if levels["events"] != shared.AccessRead {
 		t.Fatalf("events = %q, want read", levels["events"])
 	}
-	if levels["places"] != AccessRead {
+	if levels["places"] != shared.AccessRead {
 		t.Fatalf("places = %q, want read", levels["places"])
 	}
 	if !explicit["events"] || !explicit["places"] || !explicit["tracks"] {
 		t.Fatalf("explicit = %v", explicit)
 	}
 
-	levels, _ = AppOverviewLevels(GrantMap{
-		DefaultKey: AccessRead,
+	levels, _ = AppOverviewLevels(shared.GrantMap{
+		shared.DefaultKey: shared.AccessRead,
 	}, kinds)
-	if levels["tracks"] != AccessRead {
+	if levels["tracks"] != shared.AccessRead {
 		t.Fatalf("tracks via default = %q, want read", levels["tracks"])
 	}
-	if levels["places"] != AccessNone {
+	if levels["places"] != shared.AccessNone {
 		t.Fatalf("places via default = %q, want none", levels["places"])
 	}
 }
@@ -86,7 +90,7 @@ func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 func TestAccessorRelevantTo(t *testing.T) {
 	agent := Accessor{
 		Kind:   AccessorAgent,
-		Levels: map[string]string{"tracks": AccessRead, "places": AccessNone},
+		Levels: map[string]string{"tracks": shared.AccessRead, "places": shared.AccessNone},
 	}
 	if !agent.RelevantTo("tracks") || !agent.RelevantTo("places") {
 		t.Fatal("agent should be relevant to every kind")
@@ -94,7 +98,7 @@ func TestAccessorRelevantTo(t *testing.T) {
 
 	app := Accessor{
 		Kind:     AccessorApp,
-		Levels:   map[string]string{"tracks": AccessNone, "events": AccessRead, "photos": AccessNone},
+		Levels:   map[string]string{"tracks": shared.AccessNone, "events": shared.AccessRead, "photos": shared.AccessNone},
 		Explicit: map[string]bool{"tracks": true, "events": true},
 	}
 	// Explicit none is still relevant (operator named the type).
@@ -111,7 +115,7 @@ func TestAccessorRelevantTo(t *testing.T) {
 
 	sync := Accessor{
 		Kind:     AccessorSync,
-		Levels:   map[string]string{"messages": AccessRead, "tracks": AccessNone},
+		Levels:   map[string]string{"messages": shared.AccessRead, "tracks": shared.AccessNone},
 		Explicit: map[string]bool{"messages": true},
 	}
 	if !sync.RelevantTo("messages") {
@@ -129,27 +133,27 @@ func TestBuildKindAccess_OnlyRelevantOthers(t *testing.T) {
 			ID:     agentAccessorForTest,
 			Kind:   AccessorAgent,
 			Label:  "LLM agents",
-			Levels: map[string]string{"tracks": AccessRead, "messages": AccessRead, "places": AccessNone},
+			Levels: map[string]string{"tracks": shared.AccessRead, "messages": shared.AccessRead, "places": shared.AccessNone},
 		},
 		{
 			ID:       "app:eco",
 			Kind:     AccessorApp,
 			Label:    "Eco",
-			Levels:   map[string]string{"tracks": AccessNone, "messages": AccessNone, "places": AccessNone},
+			Levels:   map[string]string{"tracks": shared.AccessNone, "messages": shared.AccessNone, "places": shared.AccessNone},
 			Explicit: map[string]bool{"tracks": true},
 		},
 		{
 			ID:     "sync:mail",
 			Kind:   AccessorSync,
 			Label:  "Mail",
-			Levels: map[string]string{"tracks": AccessNone, "messages": AccessRead, "places": AccessNone},
+			Levels: map[string]string{"tracks": shared.AccessNone, "messages": shared.AccessRead, "places": shared.AccessNone},
 		},
 	}
 	rows := BuildKindAccess(kinds, accessors)
 	if len(rows) != 3 {
 		t.Fatalf("rows = %d, want 3", len(rows))
 	}
-	if rows[0].ID != "tracks" || rows[0].AgentLevel != AccessRead {
+	if rows[0].ID != "tracks" || rows[0].AgentLevel != shared.AccessRead {
 		t.Fatalf("tracks row = %+v", rows[0])
 	}
 	if len(rows[0].Accessors) != 1 || rows[0].Accessors[0].ID != "app:eco" {
@@ -158,13 +162,13 @@ func TestBuildKindAccess_OnlyRelevantOthers(t *testing.T) {
 	if len(rows[1].Accessors) != 1 || rows[1].Accessors[0].ID != "sync:mail" {
 		t.Fatalf("messages accessors = %+v", rows[1].Accessors)
 	}
-	if rows[1].AgentLevel != AccessRead {
+	if rows[1].AgentLevel != shared.AccessRead {
 		t.Fatalf("messages agent = %q", rows[1].AgentLevel)
 	}
 	if len(rows[2].Accessors) != 0 {
 		t.Fatalf("places should have no other accessors: %+v", rows[2].Accessors)
 	}
-	if rows[2].AgentLevel != AccessNone {
+	if rows[2].AgentLevel != shared.AccessNone {
 		t.Fatalf("places agent = %q", rows[2].AgentLevel)
 	}
 }

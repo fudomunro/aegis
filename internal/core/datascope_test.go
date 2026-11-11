@@ -18,13 +18,14 @@ import (
 	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // readAllGrants is the migrated "share everything read-only" grant map
 // (docs/external-access.md): packs that relied on "empty grants = full read"
 // state it explicitly now that scope resolution is deny-by-default.
 func readAllGrants() policy.DataGrants {
-	return policy.DataGrants{policy.DefaultKey: {Default: policy.AccessRead}}
+	return policy.DataGrants{shared.DefaultKey: {Default: shared.AccessRead}}
 }
 
 // scopeServer builds a server with two dataset-partitioned sample library
@@ -462,7 +463,7 @@ func TestScopeGrants_NoGrantsPrincipalSeesNothing(t *testing.T) {
 func TestScopeGrants_TypeAllowList(t *testing.T) {
 	srv := scopeServer(t, []scopes.Scope{
 		{ID: "contacts-only", Dataset: "shire", APIKey: "YOUR_CONTACTS_KEY",
-			Grants: policy.DataGrants{"contacts": {Default: policy.AccessRead}}},
+			Grants: policy.DataGrants{"contacts": {Default: shared.AccessRead}}},
 	})
 
 	body := callLibrary(t, srv, "YOUR_CONTACTS_KEY", "/v1/library/contacts")
@@ -494,7 +495,7 @@ func TestScopeGrants_RouteKeys(t *testing.T) {
 	srv := scopeServer(t, []scopes.Scope{
 		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY", Grants: readAllGrants()},
 		{ID: "shire-busy", Dataset: "shire", APIKey: "YOUR_BUSY_KEY",
-			Grants: policy.DataGrants{"freebusy": {Default: policy.AccessRead}}},
+			Grants: policy.DataGrants{"freebusy": {Default: shared.AccessRead}}},
 	})
 
 	// Full-read scope first so its events page is cached.
@@ -658,7 +659,7 @@ func TestDataScopeStore_UpdateDisableAndGrants(t *testing.T) {
 		t.Fatal("disabled scope must not authenticate")
 	}
 
-	grants := policy.DataGrants{"contacts": {Default: policy.AccessRead}}
+	grants := policy.DataGrants{"contacts": {Default: shared.AccessRead}}
 	view, err = s.Update("shire", scopes.UpdateRequest{Disabled: boolPtr(false), Grants: &grants})
 	if err != nil {
 		t.Fatalf("update grants: %v", err)
@@ -666,7 +667,7 @@ func TestDataScopeStore_UpdateDisableAndGrants(t *testing.T) {
 	if s.FindByAPIKey(token) == nil {
 		t.Fatal("re-enabled scope must authenticate")
 	}
-	if got := view.Grants["contacts"].Default; got != policy.AccessRead {
+	if got := view.Grants["contacts"].Default; got != shared.AccessRead {
 		t.Fatalf("grants = %v, want contacts read", view.Grants)
 	}
 }

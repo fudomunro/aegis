@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/core/audit"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -122,7 +120,7 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 			Surface:  SurfaceLibrary,
 			Target:   kind.ID,
 			Kind:     kind.ID,
-			Decision: audit.DecisionDeny,
+			Decision: DecisionDeny,
 			Reason:   "data_grant",
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
@@ -134,7 +132,7 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 	svc, known := k.h.Service(serviceID)
 	if known {
 		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
-		if !scopes.ServiceVisible(svc.Dataset, scopes.From(r)) {
+		if !shared.ServiceVisible(svc.Dataset, shared.DataScopeFrom(r)) {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
 			return
 		}

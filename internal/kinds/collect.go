@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // NamedLister is one collection source's typed fetch for a library
@@ -26,14 +26,14 @@ func Collect[T any, P any](
 	kind string,
 	lister func(P) func(ctx context.Context) ([]T, bool, error),
 ) (targets []NamedLister[T], denied []string) {
-	scope := scopes.From(r)
+	scope := shared.DataScopeFrom(r)
 	grants, _ := h.Grants(r)
 	for id, connector := range h.Connectors() {
 		svc, ok := h.Service(id)
 		if !ok || svc.Action == "block" {
 			continue
 		}
-		if !scopes.ServiceVisible(svc.Dataset, scope) {
+		if !shared.ServiceVisible(svc.Dataset, scope) {
 			continue
 		}
 		provider, ok := any(connector).(P)

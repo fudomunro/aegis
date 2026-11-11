@@ -10,9 +10,9 @@ import (
 	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // kindsHost adapts the hub onto the kinds.Host seam (issue #312). The
@@ -61,7 +61,7 @@ func serviceViewOf(svc Service) kinds.ServiceView {
 // Internal owner-tier fetches always see the owner map; app tokens carry
 // their scopes; data scopes carry their grants; everything else is the
 // owner map (agent key, tailnet peers).
-func (s *Server) Grants(r *http.Request) (policy.GrantMap, kinds.Principal) {
+func (s *Server) Grants(r *http.Request) (shared.GrantMap, kinds.Principal) {
 	if kinds.OwnerView(r) {
 		return s.ownerGrants(), kinds.PrincipalOwner
 	}
@@ -75,7 +75,7 @@ func (s *Server) Grants(r *http.Request) (policy.GrantMap, kinds.Principal) {
 }
 
 // OwnerGrants implements kinds.Host.
-func (s *Server) OwnerGrants() policy.GrantMap {
+func (s *Server) OwnerGrants() shared.GrantMap {
 	return s.ownerGrants()
 }
 

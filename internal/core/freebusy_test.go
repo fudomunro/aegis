@@ -10,6 +10,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func freeBusyTestEvents() []kinds.CalendarEvent {
@@ -40,7 +41,7 @@ func TestValidateGrantMap_FreeBusyTokenRetired(t *testing.T) {
 	// Availability access is the freebusy route (issue #348) — the level
 	// token and its aliases reject everywhere.
 	for _, token := range []string{"freebusy", "free-busy", "fb", "busy"} {
-		if err := policy.ValidateGrantMap(policy.GrantMap{"events": token}); err == nil {
+		if err := policy.ValidateGrantMap(shared.GrantMap{"events": token}); err == nil {
 			t.Fatalf("retired token %q must reject", token)
 		}
 	}
@@ -48,7 +49,7 @@ func TestValidateGrantMap_FreeBusyTokenRetired(t *testing.T) {
 
 func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"freebusy": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"freebusy": {Default: shared.AccessRead}},
 		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -81,7 +82,7 @@ func TestHandleLibraryEvents_FreeBusyKeyDenied(t *testing.T) {
 	// Grant map keys are routes (issue #348): a freebusy-only key cannot
 	// reach /v1/library/events at all.
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"freebusy": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"freebusy": {Default: shared.AccessRead}},
 		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -121,7 +122,7 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 }
 
 func TestPermissionNotice_FreeBusy(t *testing.T) {
-	p := policy.GrantMap{"freebusy": policy.AccessRead, "player": policy.AccessNone}
+	p := shared.GrantMap{"freebusy": shared.AccessRead, "player": shared.AccessNone}
 	notice := permissionNotice(p)
 	// Deny-by-default map: the notice is an allow list (player is simply
 	// outside it), with the freebusy route caveat attached.
@@ -169,7 +170,7 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 
 func TestEventsProviderTargets_Collects(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"events": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"events": {Default: shared.AccessRead}},
 		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

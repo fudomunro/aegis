@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 const grantCodeTTL = 10 * time.Minute
@@ -23,7 +24,7 @@ type GrantCode struct {
 	Code       string
 	AppID      string
 	AppName    string
-	Scopes     policy.GrantMap
+	Scopes     shared.GrantMap
 	RedirectTo string
 	State      string
 	Expires    time.Time
@@ -125,7 +126,7 @@ func parseScopeList(s string) ([]PermissionEntry, error) {
 			continue
 		}
 		// Accept "events:freebusy" or bare "events" → read.
-		typ, level := f, policy.AccessRead
+		typ, level := f, shared.AccessRead
 		if i := strings.IndexByte(f, ':'); i >= 0 {
 			typ = strings.TrimSpace(f[:i])
 			level = strings.TrimSpace(f[i+1:])
@@ -138,7 +139,7 @@ func parseScopeList(s string) ([]PermissionEntry, error) {
 	if len(out) == 0 {
 		return nil, fmt.Errorf("scopes is required (e.g. events:freebusy)")
 	}
-	perms := policy.GrantMap{}
+	perms := shared.GrantMap{}
 	for _, e := range out {
 		perms[e.Type] = e.Level
 	}
@@ -148,10 +149,10 @@ func parseScopeList(s string) ([]PermissionEntry, error) {
 	return out, nil
 }
 
-func ScopesFromEntries(entries []PermissionEntry) policy.GrantMap {
-	p := policy.GrantMap{policy.DefaultKey: policy.AccessNone}
+func ScopesFromEntries(entries []PermissionEntry) shared.GrantMap {
+	p := shared.GrantMap{shared.DefaultKey: shared.AccessNone}
 	for _, e := range entries {
-		p[e.Type] = policy.NormalizeAccess(e.Level)
+		p[e.Type] = shared.NormalizeAccess(e.Level)
 	}
 	return p
 }

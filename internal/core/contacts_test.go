@@ -123,7 +123,7 @@ func TestHandleLibraryContacts_NoProviders(t *testing.T) {
 
 func TestHandleLibraryContacts_DeniedByPermission(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"contacts": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"contacts": {Default: shared.AccessNone}},
 
 		Services: []Service{
 			{

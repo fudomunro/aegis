@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -32,7 +31,7 @@ func (s *Server) connectorWriteBlocked(serviceID, kind, method string) bool {
 // materialized as kind → level, with the permissive default prefill. The
 // legacy "omit = unrestricted" semantics live in that prefill, not in the
 // resolution rule, which stays deny-by-default.
-func (s *Server) ownerGrants() policy.GrantMap {
+func (s *Server) ownerGrants() shared.GrantMap {
 	if s == nil || s.config == nil {
 		return nil
 	}
@@ -40,7 +39,7 @@ func (s *Server) ownerGrants() policy.GrantMap {
 }
 
 // requestGrants returns the rule map for the request's key (see Grants).
-func (s *Server) requestGrants(r *http.Request) policy.GrantMap {
+func (s *Server) requestGrants(r *http.Request) shared.GrantMap {
 	g, _ := s.Grants(r)
 	return g
 }
@@ -73,7 +72,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		))
 		return false
 	}
-	if policy.AllowsMethod(level, r.Method) {
+	if shared.AllowsMethod(level, r.Method) {
 		return true
 	}
 	label := kind
@@ -94,9 +93,9 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 // request key's grant map. Deny-by-default maps (unlisted keys closed) are
 // announced as an allow list; maps with a permissive default announce their
 // explicit denials. Narrowed routes get their explanation either way.
-func permissionNotice(p policy.GrantMap) string {
+func permissionNotice(p shared.GrantMap) string {
 	var parts []string
-	if p.Level("") == policy.AccessNone {
+	if p.Level("") == shared.AccessNone {
 		if allowed := p.AllowedKinds(); len(allowed) > 0 {
 			parts = append(parts, "only these library routes are available and all others must not be requested: "+
 				strings.Join(allowed, ", "))
@@ -122,19 +121,19 @@ func permissionNotice(p policy.GrantMap) string {
 
 // allDataDenied reports whether the rule map grants nothing to any kind,
 // so there is nothing useful to inject for the service.
-func allDataDenied(p policy.GrantMap) bool {
+func allDataDenied(p shared.GrantMap) bool {
 	if p == nil {
 		return true
 	}
-	if p.Level("") != policy.AccessNone {
+	if p.Level("") != shared.AccessNone {
 		// Unlisted kinds are not fully denied.
 		return false
 	}
 	for k := range p {
-		if k == policy.DefaultKey {
+		if k == shared.DefaultKey {
 			continue
 		}
-		if p.Level(k) != policy.AccessNone {
+		if p.Level(k) != shared.AccessNone {
 			return false
 		}
 	}

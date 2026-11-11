@@ -59,12 +59,12 @@ func testPhotoShareServer(t *testing.T, sourceWrite, targetWrite bool) (*Server,
 	t.Helper()
 	// One rule map per key (the collapsed model): a write-only level denies
 	// the source read, a read-only level denies the share write.
-	level := policy.AccessFull
+	level := shared.AccessFull
 	switch {
 	case !sourceWrite:
-		level = policy.AccessWrite
+		level = shared.AccessWrite
 	case !targetWrite:
-		level = policy.AccessRead
+		level = shared.AccessRead
 	}
 	cfg := &Config{
 		typePolicies: policy.DataGrants{"photos": {Default: level}},

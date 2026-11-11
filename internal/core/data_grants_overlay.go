@@ -130,5 +130,5 @@ func cloneDataGrant(p policy.DataGrant) policy.DataGrant {
 	if p.Default == "" {
 		return policy.DataGrant{}
 	}
-	return policy.DataGrant{Default: policy.NormalizeAccess(p.Default)}
+	return policy.DataGrant{Default: shared.NormalizeAccess(p.Default)}
 }
