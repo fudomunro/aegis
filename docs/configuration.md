@@ -547,7 +547,11 @@ it comes due the worker enqueues the job (idempotent, so a still-queued job is
 not duplicated) and re-arms the schedule one interval out.
 
 On first start Aegis seeds one template per checked kind — **Daily copy
-freshness** for `messages`, `playlists`, and `tracks`, every 24 hours. The
+freshness** for `messages`, `playlists`, and `tracks`, every 24 hours — and
+one **Daily outbound convergence** template per converged kind (`contacts`,
+`events`), which fans a kind's data out from its canonical home to the
+group's other write-capable members. Convergence only creates and updates on
+a member; it never deletes there. The
 seed only fills in what is missing: a paused or edited schedule is left as the
 operator set it. Pause and resume from the panel or the
 `/v1/admin/sync/schedules/{id}/enable|disable` routes.

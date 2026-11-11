@@ -156,6 +156,42 @@ func TestScheduleStore_SeedDefaultsIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestScheduleStore_SeedConvergeDefaults(t *testing.T) {
+	kinds := []string{"contacts", "events"}
+	s := testScheduleStore(t)
+	added, err := s.SeedConvergeDefaults(kinds)
+	if err != nil {
+		t.Fatalf("SeedConvergeDefaults: %v", err)
+	}
+	if added != len(kinds) {
+		t.Fatalf("added = %d, want %d", added, len(kinds))
+	}
+	for _, sc := range s.List() {
+		if sc.JobType != SyncJobTypeConverge {
+			t.Fatalf("schedule %q carries job type %q, want converge", sc.Name, sc.JobType)
+		}
+		if sc.EverySeconds != 24*60*60 {
+			t.Fatalf("converge cadence = %ds, want daily", sc.EverySeconds)
+		}
+	}
+	// Re-seeding is a no-op; the operator's rows are preserved.
+	if _, ok, err := s.SetEnabled(s.List()[0].ID, false); !ok || err != nil {
+		t.Fatalf("toggle = (%v,%v), want success", ok, err)
+	}
+	added, err = s.SeedConvergeDefaults(kinds)
+	if err != nil || added != 0 {
+		t.Fatalf("re-seed = (%d,%v), want (0,nil)", added, err)
+	}
+	all := s.List()
+	if len(all) != len(kinds) {
+		t.Fatalf("List = %d, want %d", len(all), len(kinds))
+	}
+	var nilStore *ScheduleStore
+	if _, err := nilStore.SeedConvergeDefaults(kinds); err != nil {
+		t.Fatalf("nil SeedConvergeDefaults: %v", err)
+	}
+}
+
 func TestScheduleStore_DisabledIsNoop(t *testing.T) {
 	s, err := OpenScheduleStore(nil, "")
 	if err != nil {

@@ -325,14 +325,45 @@ func defaultFreshnessSchedules(kinds []string) []SyncSchedule {
 	return out
 }
 
+// defaultConvergeSchedules are the recurring outbound-convergence runs
+// seeded on first start (issue #365): one daily job per kind moving that
+// kind's data from its canonical home to the group's write-capable members.
+// Same cadence as freshness so the group's convergence and the freshness
+// view of its copies advance together.
+func defaultConvergeSchedules(kinds []string) []SyncSchedule {
+	out := make([]SyncSchedule, 0, len(kinds))
+	for _, kind := range kinds {
+		out = append(out, SyncSchedule{
+			Name:         "Daily outbound convergence",
+			Kind:         kind,
+			JobType:      SyncJobTypeConverge,
+			EverySeconds: 24 * 60 * 60,
+			Enabled:      true,
+		})
+	}
+	return out
+}
+
 // SeedDefaults inserts any missing default schedules for the given kinds.
 // Existing rows are left exactly as the operator left them.
 func (s *ScheduleStore) SeedDefaults(kinds []string) (int, error) {
+	return s.seedMissing(defaultFreshnessSchedules(kinds))
+}
+
+// SeedConvergeDefaults inserts any missing default converge schedules
+// (issue #365). Existing rows are left exactly as the operator left them.
+func (s *ScheduleStore) SeedConvergeDefaults(kinds []string) (int, error) {
+	return s.seedMissing(defaultConvergeSchedules(kinds))
+}
+
+// seedMissing inserts schedules that have no (kind, job type, service,
+// entity) row yet.
+func (s *ScheduleStore) seedMissing(schedules []SyncSchedule) (int, error) {
 	if !s.Enabled() {
 		return 0, nil
 	}
 	added := 0
-	for _, sc := range defaultFreshnessSchedules(kinds) {
+	for _, sc := range schedules {
 		if _, err := s.getByKey(sc.Kind, sc.JobType, sc.Service, sc.EntityKey); err == nil {
 			continue
 		}

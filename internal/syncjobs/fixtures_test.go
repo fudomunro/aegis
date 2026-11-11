@@ -1,12 +1,14 @@
 package syncjobs
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,6 +39,14 @@ type fixtureHost struct {
 	grants      shared.GrantMap
 	connectors  map[string]connectors.ServiceConnector
 	mailIngests map[string]connectors.MailIngest
+	syncGroups  map[string]fixtureSyncGroup
+}
+
+// fixtureSyncGroup is one kind's configured sync group: the designated
+// canonical home and its member rows (issue #365).
+type fixtureSyncGroup struct {
+	hub     string
+	members []string
 }
 
 func newFixtureHost(baseURL string) *fixtureHost {
@@ -47,6 +57,7 @@ func newFixtureHost(baseURL string) *fixtureHost {
 		grants:      shared.GrantMap{},
 		connectors:  map[string]connectors.ServiceConnector{},
 		mailIngests: map[string]connectors.MailIngest{},
+		syncGroups:  map[string]fixtureSyncGroup{},
 	}
 }
 
@@ -145,6 +156,12 @@ func (h *fixtureHost) CopyInfo(kind, serviceID, externalID string) *kinds.CopyIn
 func (h *fixtureHost) ServiceBlocked(serviceID string) bool {
 	svc, ok := h.services[serviceID]
 	return !ok || svc.Action == "block"
+}
+
+// SyncGroup resolves the fixture's configured group for kind (issue #365).
+func (h *fixtureHost) SyncGroup(kind string) (string, []string) {
+	g := h.syncGroups[kind]
+	return g.hub, append([]string(nil), g.members...)
 }
 
 // --- ported test fixtures ---
@@ -276,4 +293,181 @@ func gmailPayloadJSON(id string) string {
 			"body": {"data": %q}
 		}
 	}`, id, id, subject, id, body)
+}
+
+// --- converge fixtures (issue #365) ---
+
+// entityStubConn is a test connector for the entity kinds: it serves one
+// contact/event collection and records placements. Place* upserts by name
+// and never deletes — the converge contract. Each service ID gets its own
+// instance in the fixture registry.
+type entityStubConn struct {
+	mu         sync.Mutex
+	contacts   []kinds.Contact
+	events     []kinds.CalendarEvent
+	failPlace  error
+	failList   error
+	conflicts  []kinds.PlaceConflict
+	skips      []kinds.PlaceSkip
+	placeCalls int
+	lastPlaced []string
+}
+
+// --- connectors.ServiceConnector (unused surfaces) ---
+
+func (c *entityStubConn) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
+}
+
+func (c *entityStubConn) SystemInstructions(string) string { return "" }
+
+func (c *entityStubConn) HandleProxy(http.ResponseWriter, *http.Request, string) {}
+
+// --- kinds.ContactProvider / ContactWriteProvider ---
+
+func (c *entityStubConn) ListUserContacts(ctx context.Context) ([]kinds.Contact, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failList != nil {
+		return nil, false, c.failList
+	}
+	return append([]kinds.Contact(nil), c.contacts...), false, nil
+}
+
+func (c *entityStubConn) PlaceContacts(ctx context.Context, in []kinds.Contact) (kinds.PlaceEntitiesResult, error) {
+	names := make([]string, 0, len(in))
+	for _, ct := range in {
+		names = append(names, ct.Name)
+	}
+	return c.place(names, func(name string) {
+		for i := range c.contacts {
+			if c.contacts[i].Name == name {
+				return
+			}
+		}
+		c.contacts = append(c.contacts, kinds.Contact{
+			Name:    name,
+			Sources: []kinds.ContactSource{{Service: "stub", ID: "id-" + name}},
+		})
+	})
+}
+
+// --- kinds.CalendarEventProvider / CalendarEventWriteProvider ---
+
+func (c *entityStubConn) ListCalendarEvents(ctx context.Context) ([]kinds.CalendarEvent, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failList != nil {
+		return nil, false, c.failList
+	}
+	return append([]kinds.CalendarEvent(nil), c.events...), false, nil
+}
+
+func (c *entityStubConn) PlaceEvents(ctx context.Context, in []kinds.CalendarEvent) (kinds.PlaceEntitiesResult, error) {
+	names := make([]string, 0, len(in))
+	for _, ev := range in {
+		names = append(names, ev.Title)
+	}
+	return c.place(names, func(name string) {
+		for i := range c.events {
+			if c.events[i].Title == name {
+				return
+			}
+		}
+		c.events = append(c.events, kinds.CalendarEvent{
+			Title:   name,
+			Sources: []kinds.CalendarEventSource{{Service: "stub", ID: "id-" + name}},
+		})
+	})
+}
+
+// place records one placement step: upsert each named item via put (never
+// removing anything already held), reporting any armed failures, skips, and
+// conflicts once.
+func (c *entityStubConn) place(names []string, put func(name string)) (kinds.PlaceEntitiesResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.placeCalls++
+	c.lastPlaced = append([]string(nil), names...)
+	if c.failPlace != nil {
+		err := c.failPlace
+		c.failPlace = nil
+		return kinds.PlaceEntitiesResult{}, err
+	}
+	res := kinds.PlaceEntitiesResult{Conflicts: c.conflicts, Skips: c.skips}
+	c.conflicts, c.skips = nil, nil
+	for i, name := range names {
+		put(name)
+		res.Copied++
+		res.Placed = append(res.Placed, kinds.PlaceRecord{
+			Name:       name,
+			ExternalID: "id-" + name,
+			ETag:       fmt.Sprintf("etag-%d-%d", c.placeCalls, i),
+		})
+	}
+	return res, nil
+}
+
+// setFailPlace arms a one-shot placement failure.
+func (c *entityStubConn) setFailPlace(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.failPlace = err
+}
+
+// setConflicts arms conflicts (and optional skips) for the next placement.
+func (c *entityStubConn) setConflicts(conflicts []kinds.PlaceConflict, skips []kinds.PlaceSkip) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.conflicts, c.skips = conflicts, skips
+}
+
+// heldContacts returns the names the stub currently holds.
+func (c *entityStubConn) heldContacts() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.contacts))
+	for _, ct := range c.contacts {
+		out = append(out, ct.Name)
+	}
+	return out
+}
+
+// convergeStubRunners wires a Runners whose connectors are entity stubs and
+// whose fixture host reports one sync group for kind (issue #365).
+func convergeStubRunners(t *testing.T, kind, hub string, members []string, conns map[string]*entityStubConn) (*Runners, *fixtureHost) {
+	t.Helper()
+	h := newFixtureHost("https://aegis.example.com")
+	h.grants = shared.GrantMap{
+		"contacts": shared.AccessFull,
+		"events":   shared.AccessFull,
+	}
+	for id, conn := range conns {
+		h.services[id] = fixtureService{Name: id, Action: "inject"}
+		h.connectors[id] = conn
+	}
+	h.syncGroups[kind] = fixtureSyncGroup{hub: hub, members: members}
+	ledger, err := copies.Open(t.TempDir() + "/copy_ledger.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ledger.Close() })
+	lib := &library.Handlers{Host: h, Connectors: h.connectors, Copies: ledger}
+	return &Runners{
+		Host:       h,
+		Mirror:     lib,
+		Copies:     ledger,
+		Connectors: h.connectors,
+	}, h
+}
+
+// convergeTestRunners swaps in entity stubs and a job store.
+func convergeTestRunners(t *testing.T, kind, hub string, members []string, conns map[string]*entityStubConn) (*Runners, *JobStore, *SyncWorker) {
+	t.Helper()
+	run, _ := convergeStubRunners(t, kind, hub, members, conns)
+	store := testJobStore(t)
+	reg := NewRunnerRegistry()
+	registerConvergeRunners(reg, run)
+	w := NewSyncWorker(store, reg, SyncWorkerOptions{Workers: 1})
+	return run, store, w
 }

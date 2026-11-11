@@ -355,6 +355,9 @@ func Run() {
 			if added, err := scheduleStore.SeedDefaults(syncjobs.SyncFreshnessKinds); err == nil && added > 0 {
 				slog.Info("seeded default sync schedules", "count", added)
 			}
+			if added, err := scheduleStore.SeedConvergeDefaults(syncjobs.SyncConvergeKinds); err == nil && added > 0 {
+				slog.Info("seeded converge sync schedules", "count", added)
+			}
 			slog.Info("sync schedule store ready", "count", len(scheduleStore.List()))
 		}
 	}
