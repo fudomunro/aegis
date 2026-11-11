@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/apps"
+	"github.com/fudomunro/aegis/internal/admin/apps"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 

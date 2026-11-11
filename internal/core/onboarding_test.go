@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 )
@@ -48,11 +49,11 @@ func TestAdminOnboarding_YNABStatusAndConfig(t *testing.T) {
 
 	req := adminRequest(http.MethodGet, "/v1/admin/setup/ynab", "admin-key", "")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d body=%s", w.Code, w.Body.String())
 	}
-	var view onboardingView
+	var view admin.OnboardingView
 	if err := json.Unmarshal(w.Body.Bytes(), &view); err != nil {
 		t.Fatal(err)
 	}
@@ -70,11 +71,11 @@ func TestAdminOnboarding_YNABStatusAndConfig(t *testing.T) {
 	body := `{"values":{"endpoint":"` + upstream.URL + `","token":"test-pat"}}`
 	req2 := adminRequest(http.MethodPost, "/v1/admin/setup/ynab/save", "admin-key", body)
 	w2 := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w2, req2)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("save status %d body=%s", w2.Code, w2.Body.String())
 	}
-	var saved onboardingActionResult
+	var saved admin.OnboardingActionResult
 	if err := json.Unmarshal(w2.Body.Bytes(), &saved); err != nil {
 		t.Fatal(err)
 	}
@@ -111,11 +112,11 @@ func TestAdminOnboarding_YNABStatusAndConfig(t *testing.T) {
 
 	req3 := adminRequest(http.MethodPost, "/v1/admin/setup/ynab/probe", "admin-key", "")
 	w3 := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w3, req3)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w3, req3)
 	if w3.Code != http.StatusOK {
 		t.Fatalf("probe status %d body=%s", w3.Code, w3.Body.String())
 	}
-	var probed onboardingActionResult
+	var probed admin.OnboardingActionResult
 	if err := json.Unmarshal(w3.Body.Bytes(), &probed); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +143,7 @@ func TestAdminOnboarding_SaveRejectsBadEndpoint(t *testing.T) {
 	req := adminRequest(http.MethodPost, "/v1/admin/setup/ynab/save", "admin-key",
 		`{"values":{"endpoint":"not-a-url","token":"x"}}`)
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status %d body=%s", w.Code, w.Body.String())
 	}
@@ -161,7 +162,7 @@ func TestAdminOnboarding_UnknownServiceAndMethod(t *testing.T) {
 	// No connector registered under this id.
 	req := adminRequest(http.MethodGet, "/v1/admin/setup/ghost", "admin-key", "")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown service status %d", w.Code)
 	}
@@ -170,14 +171,14 @@ func TestAdminOnboarding_UnknownServiceAndMethod(t *testing.T) {
 	srv.connectors["sample-calendar"] = connectors.NewSampleCalendarConnector()
 	req2 := adminRequest(http.MethodGet, "/v1/admin/setup/sample-calendar", "admin-key", "")
 	w2 := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w2, req2)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w2, req2)
 	if w2.Code != http.StatusNotFound {
 		t.Fatalf("no setup flow status %d", w2.Code)
 	}
 
 	req3 := adminRequest(http.MethodPost, "/v1/admin/setup/ynab", "admin-key", "")
 	w3 := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w3, req3)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w3, req3)
 	if w3.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("method status %d", w3.Code)
 	}
@@ -197,17 +198,17 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminSummary)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("summary status %d body=%s", w.Code, w.Body.String())
 	}
 	var resp struct {
-		Services []AdminService `json:"services"`
+		Services []admin.AdminService `json:"services"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	var ynab *AdminService
+	var ynab *admin.AdminService
 	for i := range resp.Services {
 		if resp.Services[i].ID == connectors.QuickenServiceID {
 			t.Fatal("quicken must not appear in admin services list")
@@ -280,7 +281,7 @@ func TestAdminOnboarding_ImmichStatusAndConfig(t *testing.T) {
 
 	// Unauthenticated callers get 401 from the perimeter.
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w, httptest.NewRequest(http.MethodGet, "/v1/admin/setup/immich", nil))
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w, httptest.NewRequest(http.MethodGet, "/v1/admin/setup/immich", nil))
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauth status = %d", w.Code)
 	}
@@ -289,7 +290,7 @@ func TestAdminOnboarding_ImmichStatusAndConfig(t *testing.T) {
 	body := `{"values":{"endpoint":"` + upstream.URL + `","api_key":"good-key"},"flags":{"claim_canonical_for_photos":true}}`
 	req := adminRequest(http.MethodPost, "/v1/admin/setup/immich/save", "admin-key", body)
 	w2 := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w2, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w2, req)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("save status %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -315,7 +316,7 @@ func TestAdminOnboarding_ImmichStatusAndConfig(t *testing.T) {
 	}
 
 	// The refreshed status reflects post-save state and the checklist is green.
-	var res onboardingActionResult
+	var res admin.OnboardingActionResult
 	if err := json.Unmarshal(w2.Body.Bytes(), &res); err != nil {
 		t.Fatal(err)
 	}
@@ -348,11 +349,11 @@ func TestAdminOnboarding_ImmichStatusAndConfig(t *testing.T) {
 	bad := `{"values":{"endpoint":"` + upstream.URL + `","api_key":"bad-key"}}`
 	req3 := adminRequest(http.MethodPost, "/v1/admin/setup/immich/probe", "admin-key", bad)
 	w3 := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w3, req3)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w3, req3)
 	if w3.Code != http.StatusOK {
 		t.Fatalf("probe status %d body=%s", w3.Code, w3.Body.String())
 	}
-	var probed onboardingActionResult
+	var probed admin.OnboardingActionResult
 	if err := json.Unmarshal(w3.Body.Bytes(), &probed); err != nil {
 		t.Fatal(err)
 	}
@@ -375,11 +376,11 @@ func TestAdminOnboarding_ImmichNotConfigured(t *testing.T) {
 
 	req := adminRequest(http.MethodGet, "/v1/admin/setup/immich", "admin-key", "")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d body=%s", w.Code, w.Body.String())
 	}
-	var view onboardingView
+	var view admin.OnboardingView
 	if err := json.Unmarshal(w.Body.Bytes(), &view); err != nil {
 		t.Fatal(err)
 	}

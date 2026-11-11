@@ -19,8 +19,6 @@ const (
 	maxHookBodyBytes = 8 << 20 // 8 MiB
 	// maxProxyBodyBytes covers service-proxy request bodies (write ops, uploads).
 	maxProxyBodyBytes = 16 << 20 // 16 MiB
-	// maxAdminBodyBytes covers admin JSON (permissions, hook-health paste, mirror).
-	maxAdminBodyBytes = 4 << 20 // 4 MiB
 )
 
 // withBodyLimit wraps r.Body with http.MaxBytesReader so oversized inbound

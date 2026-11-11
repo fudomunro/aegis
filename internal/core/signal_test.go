@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/library"
@@ -56,12 +57,12 @@ func signalStatusOf(srv *Server) connectors.ImportStoreStatus {
 	if srv.signal != nil {
 		store = srv.signal
 	}
-	return importStoreAdmin{
-		prefix:    "/v1/admin/signal",
-		serviceID: connectors.SignalServiceID,
-		store:     store,
-		admin:     srv.signal.Admin(),
-	}.status(srv.baseURL)
+	return admin.ImportStoreAdmin{
+		Prefix:    "/v1/admin/signal",
+		ServiceID: connectors.SignalServiceID,
+		Store:     store,
+		Admin:     srv.signal.Admin(),
+	}.Status(srv.baseURL)
 }
 
 func TestPermissionsOverview_SignalImport(t *testing.T) {
@@ -76,7 +77,7 @@ func TestPermissionsOverview_SignalImport(t *testing.T) {
 	srv.signal = store
 	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(store)
 
-	overview := srv.permissionsOverview()
+	overview := srv.admin().PermissionsOverview()
 	byID := map[string]policy.KindAccess{}
 	for _, row := range overview.Rows {
 		byID[row.ID] = row
@@ -89,7 +90,7 @@ func TestPermissionsOverview_SignalImport(t *testing.T) {
 		}
 		found := false
 		for _, acc := range row.Accessors {
-			if acc.ID != syncSignalID {
+			if acc.ID != admin.SyncSignalID {
 				continue
 			}
 			found = true
@@ -153,14 +154,14 @@ func TestHandleAdminSignal(t *testing.T) {
 	// Status
 	req := httptest.NewRequest("GET", "/v1/admin/signal/status", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdminSignal(w, req)
+	srv.admin().HandleAdminSignal(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status code %d body=%s", w.Code, w.Body.String())
 	}
 
 	// Wrong method on status
 	w2 := httptest.NewRecorder()
-	srv.HandleAdminSignal(w2, httptest.NewRequest("POST", "/v1/admin/signal/status", nil))
+	srv.admin().HandleAdminSignal(w2, httptest.NewRequest("POST", "/v1/admin/signal/status", nil))
 	if w2.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status POST code %d", w2.Code)
 	}
@@ -173,21 +174,21 @@ func TestHandleAdminSignal(t *testing.T) {
 	body := strings.NewReader(`{"path":"` + path + `"}`)
 	req3 := httptest.NewRequest("POST", "/v1/admin/signal/import", body)
 	w3 := httptest.NewRecorder()
-	srv.HandleAdminSignal(w3, req3)
+	srv.admin().HandleAdminSignal(w3, req3)
 	if w3.Code != http.StatusOK {
 		t.Fatalf("import code %d body=%s", w3.Code, w3.Body.String())
 	}
 
 	// Import missing path
 	w4 := httptest.NewRecorder()
-	srv.HandleAdminSignal(w4, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{}`)))
+	srv.admin().HandleAdminSignal(w4, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{}`)))
 	if w4.Code != http.StatusBadRequest {
 		t.Fatalf("empty path code %d", w4.Code)
 	}
 
 	// Unknown subpath
 	w5 := httptest.NewRecorder()
-	srv.HandleAdminSignal(w5, httptest.NewRequest("GET", "/v1/admin/signal/nope", nil))
+	srv.admin().HandleAdminSignal(w5, httptest.NewRequest("GET", "/v1/admin/signal/nope", nil))
 	if w5.Code != http.StatusNotFound {
 		t.Fatalf("nope code %d", w5.Code)
 	}
@@ -197,7 +198,7 @@ func TestHandleAdminSignal(t *testing.T) {
 	srv2.cache = shared.NewCache()
 	srv2.mbCache = shared.NewCache()
 	w6 := httptest.NewRecorder()
-	srv2.HandleAdminSignal(w6, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{"path":"/tmp/x"}`)))
+	srv2.admin().HandleAdminSignal(w6, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{"path":"/tmp/x"}`)))
 	if w6.Code != http.StatusBadRequest {
 		t.Fatalf("disabled import code %d", w6.Code)
 	}

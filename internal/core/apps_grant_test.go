@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/apps"
+	"github.com/fudomunro/aegis/internal/admin/apps"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -23,7 +23,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 		"/v1/apps/authorize?client_id=eco-demo&name=Event%20Coordinator&scopes=freebusy:read&redirect_uri=/demo/third-party&state=abc",
 		nil)
 	w := httptest.NewRecorder()
-	srv.HandleAppAuthorize(w, req)
+	srv.admin().HandleAppAuthorize(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("authorize get: %d", w.Code)
 	}
@@ -49,7 +49,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("form grant without CSRF: %d %s", w.Code, w.Body.String())
 	}
@@ -59,7 +59,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 		strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated grant: %d %s", w.Code, w.Body.String())
 	}
@@ -70,7 +70,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusFound {
 		t.Fatalf("grant: %d %s", w.Code, w.Body.String())
 	}
@@ -98,7 +98,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 		strings.NewReader(`{"code":"`+code+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.HandleAppToken(w, req)
+	srv.admin().HandleAppToken(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("token: %d %s", w.Code, w.Body.String())
 	}
@@ -118,7 +118,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 		strings.NewReader(`{"code":"`+code+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.HandleAppToken(w, req)
+	srv.admin().HandleAppToken(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("reuse: %d %s", w.Code, w.Body.String())
 	}
@@ -153,7 +153,7 @@ func TestAppAuthorize_RejectsBadRedirect(t *testing.T) {
 		"/v1/apps/authorize?client_id=eco&scopes=freebusy:read&redirect_uri=https://evil.example.com/",
 		nil)
 	w := httptest.NewRecorder()
-	srv.HandleAppAuthorize(w, req)
+	srv.admin().HandleAppAuthorize(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -163,7 +163,7 @@ func TestHandleThirdPartyDemo(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/demo/third-party", nil)
 	w := httptest.NewRecorder()
-	srv.HandleThirdPartyDemo(w, req)
+	srv.admin().HandleThirdPartyDemo(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -184,7 +184,7 @@ func TestAppAuthorize_JSONGrantAndAppTokenDenied(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("json grant: %d %s", w.Code, w.Body.String())
 	}
@@ -200,7 +200,7 @@ func TestAppAuthorize_JSONGrantAndAppTokenDenied(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("re-grant: %d %s", w.Code, w.Body.String())
 	}
@@ -211,7 +211,7 @@ func TestAppAuthorize_JSONGrantAndAppTokenDenied(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("app token authorize: %d %s", w.Code, w.Body.String())
 	}
@@ -226,7 +226,7 @@ func TestHandleAppToken_Errors(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/apps/token", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	srv.HandleAppToken(w, req)
+	srv.admin().HandleAppToken(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("missing code: %d", w.Code)
 	}
@@ -234,7 +234,7 @@ func TestHandleAppToken_Errors(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/apps/token", strings.NewReader(`not-json`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.HandleAppToken(w, req)
+	srv.admin().HandleAppToken(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("bad json: %d", w.Code)
 	}
@@ -242,14 +242,14 @@ func TestHandleAppToken_Errors(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/apps/token", strings.NewReader(`{"code":"aeg_grant_missing"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.HandleAppToken(w, req)
+	srv.admin().HandleAppToken(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unknown code: %d", w.Code)
 	}
 
 	req = httptest.NewRequest("GET", "/v1/apps/token", nil)
 	w = httptest.NewRecorder()
-	srv.HandleAppToken(w, req)
+	srv.admin().HandleAppToken(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("get token: %d", w.Code)
 	}
@@ -266,7 +266,7 @@ func TestAppRevoke_DisconnectToggle(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("grant: %d %s", w.Code, w.Body.String())
 	}
@@ -280,7 +280,7 @@ func TestAppRevoke_DisconnectToggle(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/apps/token", strings.NewReader(`{"code":"`+grant.Code+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.HandleAppToken(w, req)
+	srv.admin().HandleAppToken(w, req)
 	var tok struct {
 		AccessToken string `json:"access_token"`
 	}
@@ -292,7 +292,7 @@ func TestAppRevoke_DisconnectToggle(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/apps/revoke", nil)
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 	w = httptest.NewRecorder()
-	srv.HandleAppRevoke(w, req)
+	srv.admin().HandleAppRevoke(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("revoke: %d %s", w.Code, w.Body.String())
 	}
@@ -309,7 +309,7 @@ func TestAppRevoke_DisconnectToggle(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("re-grant: %d %s", w.Code, w.Body.String())
 	}
@@ -319,7 +319,7 @@ func TestAppRevoke_DisconnectToggle(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/apps/token", strings.NewReader(`{"code":"`+grant.Code+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.HandleAppToken(w, req)
+	srv.admin().HandleAppToken(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("new token: %d %s", w.Code, w.Body.String())
 	}
@@ -334,7 +334,7 @@ func TestAppRevoke_DisconnectToggle(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/apps/revoke", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.HandleAppRevoke(w, req)
+	srv.admin().HandleAppRevoke(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("api-key revoke: %d", w.Code)
 	}

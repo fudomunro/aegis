@@ -1,8 +1,9 @@
-package core
+package admin
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"net/http"
 	"sort"
 	"strings"
@@ -10,21 +11,20 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // ownershipStatuses derives the per-kind ownership view: user confirmation
 // joined with live evidence. Fail-open throughout — a store or ledger that
 // cannot be read simply drops its evidence from the derivation.
-func (s *Server) ownershipStatuses() []shared.OwnershipStatus {
-	kindList := s.library().AllLibraryKinds()
-	sources, routes := s.ownershipEvidence()
-	freshness := s.ownershipFreshnessByKind()
+func (h *Handlers) OwnershipStatuses() []shared.OwnershipStatus {
+	kindList := h.KindCatalog.AllLibraryKinds()
+	sources, routes := h.ownershipEvidence()
+	freshness := h.ownershipFreshnessByKind()
 
 	entries := map[string]ownership.OwnershipEntry{}
-	if s.ownership != nil {
-		entries = s.ownership.List()
+	if h.Ownership != nil {
+		entries = h.Ownership.List()
 	}
 
 	out := make([]shared.OwnershipStatus, 0, len(kindList))
@@ -56,28 +56,28 @@ func (s *Server) ownershipStatuses() []shared.OwnershipStatus {
 // routes that are not. "In use" means the source is actually managing data:
 // a live connection with credentials, or an archive source that holds
 // imported rows. Everything else that can feed the kind stays a route.
-func (s *Server) ownershipEvidence() (map[string][]shared.OwnershipSource, map[string][]shared.OwnershipRoute) {
+func (h *Handlers) ownershipEvidence() (map[string][]shared.OwnershipSource, map[string][]shared.OwnershipRoute) {
 	sources := map[string][]shared.OwnershipSource{}
 	routes := map[string][]shared.OwnershipRoute{}
 
-	maturity := MaturityByService()
-	use := s.ownershipServiceUse()
+	maturity := connectors.MaturityByService()
+	use := h.ownershipServiceUse()
 
 	// Connector-backed services: configured or catalog-only.
 	seen := map[string]bool{}
-	for _, svc := range s.config.ServiceSnapshots() {
+	for _, svc := range h.Host.ServiceRows() {
 		if strings.EqualFold(svc.Action, "block") {
 			continue
 		}
 		seen[svc.ID] = true
-		conn := s.connectors[svc.ID]
+		conn := h.Connectors[svc.ID]
 		if conn == nil {
 			continue
 		}
 		u := use[svc.ID]
 		name := ownershipServiceName(svc, conn)
-		for _, kind := range s.library().AllLibraryKinds() {
-			if !s.flowProvidesKind(conn, kind.ID) {
+		for _, kind := range h.KindCatalog.AllLibraryKinds() {
+			if !h.FlowProvidesKind(conn, kind.ID) {
 				continue
 			}
 			if u.inUse {
@@ -107,7 +107,7 @@ func (s *Server) ownershipEvidence() (map[string][]shared.OwnershipSource, map[s
 				continue
 			}
 			kind := dt.Name
-			if library.LibraryKindByID(kind) == nil {
+			if kinds.BuiltinKindByID(kind) == nil {
 				continue
 			}
 			u := use[id]
@@ -126,7 +126,7 @@ func (s *Server) ownershipEvidence() (map[string][]shared.OwnershipSource, map[s
 
 	// Mail-archive ingest sources (issue #286) are evidence the maturity
 	// catalog does not carry as separate connections.
-	s.ownershipMailEvidence(sources, routes)
+	h.ownershipMailEvidence(sources, routes)
 
 	for kind := range sources {
 		sort.Slice(sources[kind], func(i, j int) bool {
@@ -152,20 +152,20 @@ type ownershipUse struct {
 // ownershipServiceUse computes per-service evidence: a live connection with
 // credentials is in use; an archive transport is in use only once it holds
 // imported rows, so an empty Signal or Quicken store stays a call to action.
-func (s *Server) ownershipServiceUse() map[string]ownershipUse {
+func (h *Handlers) ownershipServiceUse() map[string]ownershipUse {
 	out := map[string]ownershipUse{}
 	var tokenStatus map[string]tokens.TokenStatus
-	if s.tokens != nil {
-		tokenStatus = s.tokens.Status()
+	if h.Tokens != nil {
+		tokenStatus = h.Tokens.Status()
 	}
 
-	for _, svc := range s.config.ServiceSnapshots() {
-		connID := s.config.connectionIDForService(svc.ID)
+	for _, svc := range h.Host.ServiceRows() {
+		connID := h.Host.ConnectionIDForService(svc.ID)
 		st := ownershipUse{}
 		if t, ok := tokenStatus[connID]; ok && t.HasToken {
 			st.inUse = true
 			st.detail = "connected"
-		} else if staticCredentialLabel(svc) != "" {
+		} else if svc.StaticCredentialLabel != "" {
 			st.inUse = true
 			st.detail = "connected"
 		}
@@ -184,22 +184,22 @@ func (s *Server) ownershipServiceUse() map[string]ownershipUse {
 		}
 		out[id] = st
 	}
-	if s.signal != nil && s.signal.Enabled() {
-		contacts, messages, err := s.signal.Counts()
+	if h.Signal != nil && h.Signal.Enabled() {
+		contacts, messages, err := h.Signal.Counts()
 		if err == nil {
 			markArchive(connectors.SignalServiceID, contacts+messages,
 				fmt.Sprintf("%d contacts, %d messages imported", contacts, messages))
 		}
 	}
-	if s.quicken != nil && s.quicken.Enabled() {
-		n, err := s.quicken.Count()
+	if h.Quicken != nil && h.Quicken.Enabled() {
+		n, err := h.Quicken.Count()
 		if err == nil {
 			markArchive(connectors.QuickenServiceID, n,
 				fmt.Sprintf("%d transactions imported", n))
 		}
 	}
-	if s.timeline != nil && s.timeline.Enabled() {
-		n, err := s.timeline.Count()
+	if h.Timeline != nil && h.Timeline.Enabled() {
+		n, err := h.Timeline.Count()
 		if err == nil {
 			markArchive(connectors.TimelineServiceID, n,
 				fmt.Sprintf("%d place visits imported", n))
@@ -211,11 +211,11 @@ func (s *Server) ownershipServiceUse() map[string]ownershipUse {
 // ownershipMailEvidence folds mail-archive ingest sources into the
 // messages view. Gmail enriches its connector row; Takeout is a source of
 // its own (issue #286, issue #139).
-func (s *Server) ownershipMailEvidence(sources map[string][]shared.OwnershipSource, routes map[string][]shared.OwnershipRoute) {
-	if s.mail == nil {
+func (h *Handlers) ownershipMailEvidence(sources map[string][]shared.OwnershipSource, routes map[string][]shared.OwnershipRoute) {
+	if h.Mail == nil {
 		return
 	}
-	st, err := s.mail.Status()
+	st, err := h.Mail.Status()
 	if err != nil {
 		return
 	}
@@ -307,7 +307,7 @@ func ownershipRoute(serviceID, name string, m connectors.ConnectionMaturity, kin
 
 // ownershipServiceName resolves the display name: per-instance config label
 // first, then the connector-declared registry (issue #254).
-func ownershipServiceName(svc Service, conn connectors.ServiceConnector) string {
+func ownershipServiceName(svc ServiceFacts, conn connectors.ServiceConnector) string {
 	if strings.TrimSpace(svc.Name) != "" {
 		return svc.Name
 	}
@@ -323,7 +323,7 @@ func ownershipCatalogName(id string) string {
 
 // ownershipRole labels the copy relationship for mirrored kinds, matching
 // the library source overview (issue #16).
-func ownershipRole(svc Service, kind string) string {
+func ownershipRole(svc ServiceFacts, kind string) string {
 	for _, k := range svc.CanonicalFor {
 		if k == kind {
 			return "canonical"
@@ -338,12 +338,12 @@ func ownershipRole(svc Service, kind string) string {
 
 // ownershipFreshnessByKind maps the copy-ledger freshness rollup onto kind
 // ids. The ledger is optional; a disabled ledger drops the field.
-func (s *Server) ownershipFreshnessByKind() map[string]*shared.OwnershipFreshness {
+func (h *Handlers) ownershipFreshnessByKind() map[string]*shared.OwnershipFreshness {
 	out := map[string]*shared.OwnershipFreshness{}
-	if s.copyLedger == nil {
+	if h.Copies == nil {
 		return out
 	}
-	for _, f := range s.copyLedger.FreshnessRollup() {
+	for _, f := range h.Copies.FreshnessRollup() {
 		f := f
 		out[f.Kind] = &shared.OwnershipFreshness{
 			InSync:      f.InSync,
@@ -363,28 +363,28 @@ func (s *Server) ownershipFreshnessByKind() map[string]*shared.OwnershipFreshnes
 //	GET    /v1/admin/ownership            → all kinds
 //	POST   /v1/admin/ownership/{kind}     → confirm {"note": "…"}
 //	DELETE /v1/admin/ownership/{kind}     → reopen (clear confirmation)
-func (s *Server) HandleAdminOwnership(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminOwnership(w http.ResponseWriter, r *http.Request) {
 	kind := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/ownership"), "/")
 	switch {
 	case kind == "" && r.Method == http.MethodGet:
-		shared.WriteJSON(w, map[string]any{"ownership": s.ownershipStatuses()})
+		shared.WriteJSON(w, map[string]any{"ownership": h.OwnershipStatuses()})
 	case kind != "" && r.Method == http.MethodPost:
-		s.handleOwnershipConfirm(w, r, kind)
+		h.handleOwnershipConfirm(w, r, kind)
 	case kind != "" && r.Method == http.MethodDelete:
-		s.handleOwnershipReopen(w, r, kind)
+		h.handleOwnershipReopen(w, r, kind)
 	default:
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
-func (s *Server) handleOwnershipConfirm(w http.ResponseWriter, r *http.Request, kind string) {
-	if library.LibraryKindByID(kind) == nil {
-		if _, ok := s.library().UDKSchemaForKind(kind); !ok {
+func (h *Handlers) handleOwnershipConfirm(w http.ResponseWriter, r *http.Request, kind string) {
+	if kinds.BuiltinKindByID(kind) == nil {
+		if _, ok := h.KindCatalog.UDKSchemaForKind(kind); !ok {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown kind "+kind)
 			return
 		}
 	}
-	if s.ownership == nil {
+	if h.Ownership == nil {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "ownership store disabled")
 		return
 	}
@@ -399,36 +399,36 @@ func (s *Server) handleOwnershipConfirm(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
-	if _, err := s.ownership.Confirm(kind, req.Note); err != nil {
+	if _, err := h.Ownership.Confirm(kind, req.Note); err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to save ownership confirmation")
 		return
 	}
-	s.writeOwnershipStatus(w, kind)
+	h.writeOwnershipStatus(w, kind)
 }
 
-func (s *Server) handleOwnershipReopen(w http.ResponseWriter, r *http.Request, kind string) {
-	if library.LibraryKindByID(kind) == nil {
-		if _, ok := s.library().UDKSchemaForKind(kind); !ok {
+func (h *Handlers) handleOwnershipReopen(w http.ResponseWriter, r *http.Request, kind string) {
+	if kinds.BuiltinKindByID(kind) == nil {
+		if _, ok := h.KindCatalog.UDKSchemaForKind(kind); !ok {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown kind "+kind)
 			return
 		}
 	}
-	if s.ownership == nil {
+	if h.Ownership == nil {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "ownership store disabled")
 		return
 	}
-	if _, err := s.ownership.Reopen(kind); err != nil {
+	if _, err := h.Ownership.Reopen(kind); err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to save ownership state")
 		return
 	}
-	s.writeOwnershipStatus(w, kind)
+	h.writeOwnershipStatus(w, kind)
 }
 
 // writeOwnershipStatus answers with the refreshed single-kind view so a
 // confirm/reopen does not need a second fetch (the onboarding-runner
 // pattern: recompute after applying the update).
-func (s *Server) writeOwnershipStatus(w http.ResponseWriter, kind string) {
-	for _, st := range s.ownershipStatuses() {
+func (h *Handlers) writeOwnershipStatus(w http.ResponseWriter, kind string) {
+	for _, st := range h.OwnershipStatuses() {
 		if st.Kind == kind {
 			shared.WriteJSON(w, st)
 			return

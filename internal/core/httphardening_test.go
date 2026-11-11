@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"crypto/subtle"
+	"github.com/fudomunro/aegis/internal/shared"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -127,12 +128,12 @@ func TestHandlePreRequest_OversizedBodyDoesNotBufferWholePayload(t *testing.T) {
 func TestHandleAdminPermissions_OversizedBodyReturns413(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	payload := bytes.Repeat([]byte("p"), maxAdminBodyBytes+1024)
+	payload := bytes.Repeat([]byte("p"), shared.MaxAdminBodyBytes+1024)
 	req := httptest.NewRequest("PUT", "/v1/admin/data-grants", bytes.NewReader(payload))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdminDataGrants))(w, req)
+	srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.admin().HandleAdminDataGrants))(w, req)
 
 	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413, body = %s", w.Code, w.Body.String())
@@ -141,7 +142,7 @@ func TestHandleAdminPermissions_OversizedBodyReturns413(t *testing.T) {
 
 func TestAdminShell_RequiresAuth(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	handler := srv.AuthMiddleware(srv.HandleAdmin)
+	handler := srv.AuthMiddleware(srv.admin().HandleAdmin)
 
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()

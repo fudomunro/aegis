@@ -1,10 +1,9 @@
-package core
+package admin
 
 import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -91,7 +89,7 @@ type AdminSummary struct {
 // Same aggregate pipeline and JSON shape as the agent /v1/library/{kind}
 // endpoints, but access is not recorded on the Home access-count stats
 // (issue #62). Admin browsing must not look like agent traffic.
-func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -101,17 +99,17 @@ func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return
 	}
-	k, ok := s.library().RegistryKind(kindID)
+	k, ok := h.KindCatalog.RegistryKind(kindID)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return
 	}
-	handler := library.ListHandler(k)
+	handler := listHandlerFor(k)
 	if handler == nil {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return
 	}
-	handler(w, withSkipAccessMetrics(r))
+	handler(w, h.Host.WithSkipAccessMetrics(r))
 }
 
 // adminShellPaths are friendly SPA routes (issue #150) plus the legacy
@@ -139,7 +137,7 @@ var adminShellPaths = map[string]bool{
 // contains no secrets or live data — only markup and client JS. It is still
 // wrapped in AuthMiddleware so the API surface is not advertised to
 // unauthenticated peers (issue #98). OAuth callback pages remain public.
-func (s *Server) HandleAdmin(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdmin(w http.ResponseWriter, r *http.Request) {
 	if !adminShellPaths[r.URL.Path] {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 		return
@@ -157,14 +155,14 @@ func (s *Server) HandleAdmin(w http.ResponseWriter, r *http.Request) {
 
 // HandleAdminSummary returns redacted service, token, and cache overview data.
 // GET /v1/admin/summary
-func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	tokens := s.tokens.Status()
-	snapshots := s.config.ServiceSnapshots()
+	tokens := h.Tokens.Status()
+	snapshots := h.Host.ServiceRows()
 	services := make([]AdminService, 0, len(snapshots))
 	for _, svc := range snapshots {
 		// Local import stores are file-based (Advanced tab), not configured
@@ -178,26 +176,24 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			Action:       svc.Action,
 			Endpoint:     svc.Endpoint,
 			Aliases:      svc.Aliases,
-			CacheTTL:     svc.CacheTTL.String(),
+			CacheTTL:     svc.CacheTTL,
 			Description:  svc.Description,
 			CanonicalFor: svc.CanonicalFor,
 			HasOAuth:     svc.Connection != "",
-			HasAPIKey:    svc.HasStaticAPIKey(),
-			ConnectionID: s.config.connectionIDForService(svc.ID),
+			HasAPIKey:    svc.HasStaticAPIKey,
+			ConnectionID: h.Host.ConnectionIDForService(svc.ID),
 			ProxyPath:    "/v1/services/" + svc.ID,
 			HasPlaylist:  false,
 		}
-		if connectionID, conn := s.config.ConnectionForService(svc.ID); connectionID != "" {
+		if connectionID, hasClientID, hasSecret := h.Host.ConnectionSecretState(svc.ID); connectionID != "" {
 			item.ConnectionID = connectionID
 			item.HasOAuth = true
-			if conn != nil {
-				item.HasClientID = conn.ClientID != ""
-				item.HasSecret = conn.ClientSecret != ""
-				item.OAuthScopes = s.config.requiredScopes(svc.ID)
-			}
+			item.HasClientID = hasClientID
+			item.HasSecret = hasSecret
+			item.OAuthScopes = h.Host.RequiredScopes(svc.ID)
 			item.LoginPath = "/v1/auth/" + svc.ID + "/login"
 		}
-		if connector, ok := s.connectors[svc.ID]; ok {
+		if connector, ok := h.Connectors[svc.ID]; ok {
 			if _, isProvider := connector.(kinds.PlaylistProvider); isProvider {
 				item.HasPlaylist = true
 			}
@@ -242,20 +238,20 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 		services = append(services, item)
 	}
 
-	live, total, bytes := s.cacheStats()
-	allowed := s.allowedLogins
+	live, total, bytes := h.cacheStats()
+	allowed := h.Host.RuntimeFacts().AllowedLogins
 	if allowed == nil {
 		allowed = []string{}
 	}
 
 	resp := AdminSummary{
 		Runtime: AdminRuntime{
-			AuthMode:         s.authMode,
-			BaseURL:          s.baseURL,
-			ApertureURL:      s.apertureURL,
-			APIKeyConfigured: s.apiKey != "",
+			AuthMode:         h.Host.RuntimeFacts().AuthMode,
+			BaseURL:          h.BaseURL,
+			ApertureURL:      h.Host.RuntimeFacts().ApertureURL,
+			APIKeyConfigured: h.Host.RuntimeFacts().APIKeyConfigured,
 			AllowedLogins:    allowed,
-			DataDir:          s.dataDir,
+			DataDir:          h.DataDir,
 		},
 		Services: services,
 		Cache: AdminCacheStats{
@@ -271,17 +267,17 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 
 // HandleAdminCache lists in-memory cache entries.
 // GET /v1/admin/cache
-func (s *Server) HandleAdminCache(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminCache(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	items := s.cacheSnapshot()
+	items := h.cacheSnapshot()
 	if items == nil {
 		items = []shared.CacheItem{}
 	}
-	live, total, bytes := s.cacheStats()
+	live, total, bytes := h.cacheStats()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
@@ -294,13 +290,13 @@ func (s *Server) HandleAdminCache(w http.ResponseWriter, r *http.Request) {
 
 // HandleAdminCacheClear wipes the response cache.
 // POST /v1/admin/cache/clear
-func (s *Server) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	s.invalidateAllCaches()
-	withPeerLog(slog.With("handler", "admin_cache_clear"), r).Info("admin cache cleared")
+	h.Host.InvalidateAllCaches()
+	h.Host.Logger(r, "admin_cache_clear").Info("admin cache cleared")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "cleared"})
@@ -316,20 +312,20 @@ type adminDataGrantsRequest struct {
 //
 //	GET /v1/admin/data-grants
 //	PUT /v1/admin/data-grants   {"data_grants":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
-func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		policies := s.config.DataGrants()
+		policies := h.Host.DataGrants()
 		if policies == nil {
 			policies = policy.DataGrants{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"version":     dataGrantsFileVersion,
+			"version":     h.Host.DataGrantsFormatVersion(),
 			"data_grants": policies,
 		})
 	case http.MethodPut:
-		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, shared.MaxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -344,22 +340,22 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 		if policies == nil {
 			policies = policy.DataGrants{}
 		}
-		if err := s.config.SetDataGrants(policies); err != nil {
-			withPeerLog(slog.With("handler", "admin_data_grants"), r).
+		if err := h.Host.SetDataGrants(policies); err != nil {
+			h.Host.Logger(r, "admin_data_grants").
 				Warn("failed to save data grants", "error", err)
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.invalidateCaches()
-		withPeerLog(slog.With("handler", "admin_data_grants"), r).
+		h.Host.InvalidateCaches()
+		h.Host.Logger(r, "admin_data_grants").
 			Info("data grants updated", "types", len(policies))
-		saved := s.config.DataGrants()
+		saved := h.Host.DataGrants()
 		if saved == nil {
 			saved = policy.DataGrants{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"version":     dataGrantsFileVersion,
+			"version":     h.Host.DataGrantsFormatVersion(),
 			"data_grants": saved,
 			"status":      "saved",
 		})
@@ -373,14 +369,14 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 //
 // GET  /v1/admin/hook-health
 // POST /v1/admin/hook-health/check   body: Aperture policy or hooks JSON
-func (s *Server) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		rep := s.hookHealth.Snapshot(s.baseURL)
+		rep := h.HookHealth.Snapshot(h.BaseURL)
 		hookhealth.SortIssues(rep.Issues)
 		shared.WriteJSON(w, rep)
 	case http.MethodPost:
-		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, shared.MaxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -388,7 +384,7 @@ func (s *Server) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
 			shared.WriteJSONError(w, http.StatusBadRequest, "paste Aperture policy/hooks JSON in the request body")
 			return
 		}
-		rep := s.CheckApertureConfig(body)
+		rep := h.HookHealth.CheckApertureConfig(body, h.BaseURL)
 		hookhealth.SortIssues(rep.Issues)
 		shared.WriteJSON(w, rep)
 	default:

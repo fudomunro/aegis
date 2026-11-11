@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/apps"
+	"github.com/fudomunro/aegis/internal/admin/apps"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -70,7 +70,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/admin/apps", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminApps)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminApps)(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("admin status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -138,7 +138,7 @@ func TestAdminApps_CRUD(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/admin/apps", strings.NewReader(body))
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminApps)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminApps)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("create status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -157,7 +157,7 @@ func TestAdminApps_CRUD(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/admin/apps", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminApps)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminApps)(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "eco") {
 		t.Fatalf("list: %d %s", w.Code, w.Body.String())
 	}
@@ -169,7 +169,7 @@ func TestAdminApps_CRUD(t *testing.T) {
 	req = httptest.NewRequest("PATCH", "/v1/admin/apps/eco", strings.NewReader(`{"scopes":{"events":"read"}}`))
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminApps)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminApps)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("patch: %d %s", w.Code, w.Body.String())
 	}
@@ -178,7 +178,7 @@ func TestAdminApps_CRUD(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/admin/apps/eco/rotate", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminApps)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminApps)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("rotate: %d %s", w.Code, w.Body.String())
 	}
@@ -193,7 +193,7 @@ func TestAdminApps_CRUD(t *testing.T) {
 	req = httptest.NewRequest("DELETE", "/v1/admin/apps/eco", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminApps)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminApps)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("delete: %d %s", w.Code, w.Body.String())
 	}

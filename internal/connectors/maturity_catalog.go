@@ -391,3 +391,13 @@ func paperlessMaturity() ConnectionMaturity {
 		},
 	}
 }
+
+// MaturityByService indexes the catalog by connector ID.
+func MaturityByService() map[string]ConnectionMaturity {
+	cat := ConnectionMaturityCatalog()
+	out := make(map[string]ConnectionMaturity, len(cat))
+	for _, m := range cat {
+		out[m.Service] = m
+	}
+	return out
+}

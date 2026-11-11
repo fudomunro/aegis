@@ -170,7 +170,7 @@ func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/v1/admin/timeline/status", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdminTimeline(w, req)
+	srv.admin().HandleAdminTimeline(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -182,7 +182,7 @@ func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"path": path})
 	req2 := httptest.NewRequest("POST", "/v1/admin/timeline/import", bytes.NewReader(body))
 	w2 := httptest.NewRecorder()
-	srv.HandleAdminTimeline(w2, req2)
+	srv.admin().HandleAdminTimeline(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("import status = %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -196,19 +196,19 @@ func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 
 	req3 := httptest.NewRequest("PUT", "/v1/admin/timeline/status", nil)
 	w3 := httptest.NewRecorder()
-	srv.HandleAdminTimeline(w3, req3)
+	srv.admin().HandleAdminTimeline(w3, req3)
 	if w3.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("put status = %d", w3.Code)
 	}
 	req4 := httptest.NewRequest("GET", "/v1/admin/timeline/nope", nil)
 	w4 := httptest.NewRecorder()
-	srv.HandleAdminTimeline(w4, req4)
+	srv.admin().HandleAdminTimeline(w4, req4)
 	if w4.Code != http.StatusNotFound {
 		t.Fatalf("nope = %d", w4.Code)
 	}
 	req5 := httptest.NewRequest("POST", "/v1/admin/timeline/import", bytes.NewReader([]byte(`{"path":""}`)))
 	w5 := httptest.NewRecorder()
-	srv.HandleAdminTimeline(w5, req5)
+	srv.admin().HandleAdminTimeline(w5, req5)
 	if w5.Code != http.StatusBadRequest {
 		t.Fatalf("empty path = %d", w5.Code)
 	}

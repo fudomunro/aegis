@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/admin/scopes"
 	"github.com/fudomunro/aegis/internal/core/sampledata"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 func TestResolveDemoMode(t *testing.T) {

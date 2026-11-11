@@ -1,4 +1,4 @@
-package core
+package admin
 
 import (
 	"net/http"
@@ -8,16 +8,16 @@ import (
 
 // HandleAdminQuicken serves /v1/admin/quicken/* (issue #141). The store
 // declares its admin copy via connectors.ImportAdmin (issue #254).
-func (s *Server) HandleAdminQuicken(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminQuicken(w http.ResponseWriter, r *http.Request) {
 	// A typed-nil behind ImportStore is not nil and would panic on call.
 	var store connectors.ImportStore
-	if s.quicken != nil {
-		store = s.quicken
+	if h.Quicken != nil {
+		store = h.Quicken
 	}
-	s.HandleAdminImportStore(w, r, importStoreAdmin{
-		prefix:    "/v1/admin/quicken",
-		serviceID: connectors.QuickenServiceID,
-		store:     store,
-		admin:     s.quicken.Admin(),
+	h.HandleAdminImportStore(w, r, ImportStoreAdmin{
+		Prefix:    "/v1/admin/quicken",
+		ServiceID: connectors.QuickenServiceID,
+		Store:     store,
+		Admin:     h.Quicken.Admin(),
 	})
 }

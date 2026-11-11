@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
@@ -596,11 +597,11 @@ func TestHandleAdminSync_ReportsFreshnessAndSchedules(t *testing.T) {
 
 	req := adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSync)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
 	}
-	var got SyncStatus
+	var got admin.SyncStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -626,7 +627,7 @@ func TestHandleAdminSyncSchedule_Toggle(t *testing.T) {
 	req := adminRequest(http.MethodPost,
 		fmt.Sprintf("/v1/admin/sync/schedules/%d/disable", sc.ID), "admin-key", "")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncSchedule)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("disable status = %d, body %s", w.Code, w.Body.String())
 	}
@@ -639,7 +640,7 @@ func TestHandleAdminSyncSchedule_Toggle(t *testing.T) {
 	req = adminRequest(http.MethodPost,
 		fmt.Sprintf("/v1/admin/sync/schedules/%d/enable", sc.ID), "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncSchedule)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("enable status = %d", w.Code)
 	}
@@ -652,7 +653,7 @@ func TestHandleAdminSyncSchedule_Toggle(t *testing.T) {
 	} {
 		req = adminRequest(http.MethodPost, path, "admin-key", "")
 		w = httptest.NewRecorder()
-		srv.AdminMiddleware(srv.HandleAdminSyncSchedule)(w, req)
+		srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
 		if w.Code < 400 {
 			t.Fatalf("%s = %d, want an error", path, w.Code)
 		}
@@ -660,7 +661,7 @@ func TestHandleAdminSyncSchedule_Toggle(t *testing.T) {
 
 	req = adminRequest(http.MethodGet, fmt.Sprintf("/v1/admin/sync/schedules/%d/disable", sc.ID), "admin-key", "")
 	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncSchedule)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET = %d, want 405", w.Code)
 	}
@@ -670,7 +671,7 @@ func TestHandleAdminSyncSchedule_DisabledStore(t *testing.T) {
 	srv := syncAdminServer(t)
 	req := adminRequest(http.MethodPost, "/v1/admin/sync/schedules/1/disable", "admin-key", "")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncSchedule)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminSyncSchedule)(w, req)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", w.Code)
 	}

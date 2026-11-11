@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/fudomunro/aegis/internal/admin/apps"
+	"github.com/fudomunro/aegis/internal/admin/scopes"
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -136,12 +136,12 @@ type mailArchive struct{ s *Server }
 
 // Available implements kinds.MailArchive.
 func (a mailArchive) Available() bool {
-	return a.s.mail != nil && a.s.mailReadable()
+	return a.s.mail != nil && a.s.library().MailReadable()
 }
 
 // Readable implements kinds.MailArchive.
 func (a mailArchive) Readable(r *http.Request) bool {
-	return a.s.mail != nil && a.s.mailReadableFor(r)
+	return a.s.mail != nil && a.s.library().MailReadableFor(r)
 }
 
 // List implements kinds.MailArchive (issue #311): the capped collection

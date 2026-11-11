@@ -23,15 +23,15 @@ func registerRoutes(mux *http.ServeMux, srv *Server, fakeUpstream *connectors.Fa
 	mux.HandleFunc("HEAD /healthz", srv.HandleHealthz)
 	mux.HandleFunc("GET /readyz", srv.HandleReadyz)
 	mux.HandleFunc("HEAD /readyz", srv.HandleReadyz)
-	mux.HandleFunc("GET /metrics", srv.AdminMiddleware(srv.HandleMetrics))
-	mux.HandleFunc("HEAD /metrics", srv.AdminMiddleware(srv.HandleMetrics))
+	mux.HandleFunc("GET /metrics", srv.AdminMiddleware(srv.admin().HandleMetrics))
+	mux.HandleFunc("HEAD /metrics", srv.AdminMiddleware(srv.admin().HandleMetrics))
 
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(withBodyLimit(maxHookBodyBytes, srv.HandlePreRequest)))
 
 	// Third-party grant demo (issue #131). Consent GET + demo page are public
 	// like OAuth authorize; grant POST and token exchange have their own rules.
-	mux.HandleFunc("GET /demo/third-party", srv.HandleThirdPartyDemo)
-	mux.HandleFunc("HEAD /demo/third-party", srv.HandleThirdPartyDemo)
+	mux.HandleFunc("GET /demo/third-party", srv.admin().HandleThirdPartyDemo)
+	mux.HandleFunc("HEAD /demo/third-party", srv.admin().HandleThirdPartyDemo)
 
 	// Dev-only injectable fake provider (issue #86) for driving the
 	// sync-maintenance loop with synthetic drift. Data paths are open like
@@ -43,11 +43,11 @@ func registerRoutes(mux *http.ServeMux, srv *Server, fakeUpstream *connectors.Fa
 
 	// Auth/token routes carry credential exchange — brute-force damped
 	// (issue #253) per client IP.
-	mux.HandleFunc("GET /v1/apps/authorize", srv.rateLimitAuth(srv.HandleAppAuthorize))
+	mux.HandleFunc("GET /v1/apps/authorize", srv.rateLimitAuth(srv.admin().HandleAppAuthorize))
 	// Minting an app token is admin-equivalent (issue #181).
-	mux.HandleFunc("POST /v1/apps/authorize", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAppAuthorize)))
-	mux.HandleFunc("POST /v1/apps/token", srv.rateLimitAuth(withBodyLimit(maxAdminBodyBytes, srv.HandleAppToken)))
-	mux.HandleFunc("POST /v1/apps/revoke", srv.rateLimitAuth(withBodyLimit(maxAdminBodyBytes, srv.HandleAppRevoke)))
+	mux.HandleFunc("POST /v1/apps/authorize", srv.AdminMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.admin().HandleAppAuthorize)))
+	mux.HandleFunc("POST /v1/apps/token", srv.rateLimitAuth(withBodyLimit(shared.MaxAdminBodyBytes, srv.admin().HandleAppToken)))
+	mux.HandleFunc("POST /v1/apps/revoke", srv.rateLimitAuth(withBodyLimit(shared.MaxAdminBodyBytes, srv.admin().HandleAppRevoke)))
 
 	for path, handler := range srv.library().RouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
@@ -55,11 +55,11 @@ func registerRoutes(mux *http.ServeMux, srv *Server, fakeUpstream *connectors.Fa
 	// Library writes are authorized by the request key's data grant (a
 	// write level unlocks them); the admin credential stays reserved for
 	// policy edits, OAuth, and app registration.
-	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.library().HandleLibraryMirror)))
+	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandleLibraryMirror)))
 	// Photo share / ownership-claim PoC (issue #20).
-	mux.HandleFunc("POST /v1/library/photos/share", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.library().HandlePhotoShare)))
-	mux.HandleFunc("POST /v1/library/links", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.library().HandleEntityLinks)))
-	mux.HandleFunc("DELETE /v1/library/links/", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.library().HandleEntityLinks)))
+	mux.HandleFunc("POST /v1/library/photos/share", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandlePhotoShare)))
+	mux.HandleFunc("POST /v1/library/links", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandleEntityLinks)))
+	mux.HandleFunc("DELETE /v1/library/links/", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandleEntityLinks)))
 
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.library().HandleServiceProxy)))
 
@@ -95,8 +95,8 @@ func registerAuthRoutes(mux *http.ServeMux, srv *Server) {
 // Every route carries AdminMiddleware + body limit; the wildcard routes
 // delegate sub-path parsing to their handlers exactly as before.
 func registerAdminRoutes(mux *http.ServeMux, srv *Server) {
-	admin := func(h http.HandlerFunc) http.HandlerFunc {
-		return srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, h))
+	adminOnly := func(h http.HandlerFunc) http.HandlerFunc {
+		return srv.AdminMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, h))
 	}
 
 	// Admin shell (issues #98, #181): the SPA is markup only, but
@@ -115,57 +115,57 @@ func registerAdminRoutes(mux *http.ServeMux, srv *Server) {
 		"/advanced",
 		"/advanced/{$}",
 	} {
-		mux.HandleFunc("GET "+path, admin(srv.HandleAdmin))
-		mux.HandleFunc("HEAD "+path, admin(srv.HandleAdmin))
+		mux.HandleFunc("GET "+path, adminOnly(srv.admin().HandleAdmin))
+		mux.HandleFunc("HEAD "+path, adminOnly(srv.admin().HandleAdmin))
 	}
 
 	// Admin shell at /v1/admin — registered without method constraints to
 	// match the former registration (the handler returns 405 internally).
-	mux.HandleFunc("/v1/admin", admin(srv.HandleAdmin))
-	mux.HandleFunc("/v1/admin/{$}", admin(srv.HandleAdmin))
+	mux.HandleFunc("/v1/admin", adminOnly(srv.admin().HandleAdmin))
+	mux.HandleFunc("/v1/admin/{$}", adminOnly(srv.admin().HandleAdmin))
 
 	// Fixed admin endpoints. Method constraints are omitted here because
 	// the catch-all fallback below would swallow mux-level 405s; handlers
 	// keep their internal method switches (issue #274).
-	mux.HandleFunc("/v1/admin/summary", admin(srv.HandleAdminSummary))
-	mux.HandleFunc("/v1/admin/flow", admin(srv.HandleAdminFlow))
-	mux.HandleFunc("/v1/admin/cache", admin(srv.HandleAdminCache))
-	mux.HandleFunc("/v1/admin/cache/clear", admin(srv.HandleAdminCacheClear))
-	mux.HandleFunc("/v1/admin/hook-health", admin(srv.HandleAdminHookHealth))
-	mux.HandleFunc("/v1/admin/maintenance/signals", admin(srv.HandleAdminMaintenanceSignals))
-	mux.HandleFunc("/v1/admin/mail/status", admin(srv.HandleAdminMailStatus))
-	mux.HandleFunc("/v1/admin/search/status", admin(srv.HandleAdminSearchStatus))
-	mux.HandleFunc("/v1/admin/mail/sync", admin(srv.HandleAdminMailSync))
-	mux.HandleFunc("/v1/admin/mail/import", admin(srv.HandleAdminMailImport))
-	mux.HandleFunc("/v1/admin/sync", admin(srv.HandleAdminSync))
-	mux.HandleFunc("/v1/admin/sync/pause", admin(srv.HandleAdminSyncPause))
-	mux.HandleFunc("/v1/admin/sync/resume", admin(srv.HandleAdminSyncResume))
-	mux.HandleFunc("/v1/admin/sync/schedules/{id}/enable", admin(srv.HandleAdminSyncSchedule))
-	mux.HandleFunc("/v1/admin/sync/schedules/{id}/disable", admin(srv.HandleAdminSyncSchedule))
-	mux.HandleFunc("/v1/admin/sync/{id}/cancel", admin(srv.HandleAdminSyncCancel))
-	mux.HandleFunc("/v1/admin/library/{kind}", admin(srv.HandleAdminLibrary))
-	mux.HandleFunc("/v1/admin/permissions", admin(srv.HandleAdminPermissionsOverview))
-	mux.HandleFunc("/v1/admin/data-grants", admin(srv.HandleAdminDataGrants))
-	mux.HandleFunc("/v1/admin/ownership", admin(srv.HandleAdminOwnership))
-	mux.HandleFunc("/v1/admin/ownership/{path...}", admin(srv.HandleAdminOwnership))
-	mux.HandleFunc("/v1/admin/data-scopes", admin(srv.HandleAdminDataScopes))
-	mux.HandleFunc("/v1/admin/data-scopes/{path...}", admin(srv.HandleAdminDataScopes))
-	mux.HandleFunc("/v1/admin/apps", admin(srv.HandleAdminApps))
-	mux.HandleFunc("/v1/admin/apps/{path...}", admin(srv.HandleAdminApps))
-	mux.HandleFunc("/v1/admin/setup/{path...}", admin(srv.handleAdminOnboarding))
-	mux.HandleFunc("/v1/admin/quicken", admin(srv.HandleAdminQuicken))
-	mux.HandleFunc("/v1/admin/quicken/{path...}", admin(srv.HandleAdminQuicken))
-	mux.HandleFunc("/v1/admin/timeline", admin(srv.HandleAdminTimeline))
-	mux.HandleFunc("/v1/admin/timeline/{path...}", admin(srv.HandleAdminTimeline))
-	mux.HandleFunc("/v1/admin/signal", admin(srv.HandleAdminSignal))
-	mux.HandleFunc("/v1/admin/signal/{path...}", admin(srv.HandleAdminSignal))
-	mux.HandleFunc("/v1/admin/udk", admin(srv.HandleAdminUDK))
-	mux.HandleFunc("/v1/admin/udk/{path...}", admin(srv.HandleAdminUDK))
+	mux.HandleFunc("/v1/admin/summary", adminOnly(srv.admin().HandleAdminSummary))
+	mux.HandleFunc("/v1/admin/flow", adminOnly(srv.admin().HandleAdminFlow))
+	mux.HandleFunc("/v1/admin/cache", adminOnly(srv.admin().HandleAdminCache))
+	mux.HandleFunc("/v1/admin/cache/clear", adminOnly(srv.admin().HandleAdminCacheClear))
+	mux.HandleFunc("/v1/admin/hook-health", adminOnly(srv.admin().HandleAdminHookHealth))
+	mux.HandleFunc("/v1/admin/maintenance/signals", adminOnly(srv.HandleAdminMaintenanceSignals))
+	mux.HandleFunc("/v1/admin/mail/status", adminOnly(srv.admin().HandleAdminMailStatus))
+	mux.HandleFunc("/v1/admin/search/status", adminOnly(srv.admin().HandleAdminSearchStatus))
+	mux.HandleFunc("/v1/admin/mail/sync", adminOnly(srv.admin().HandleAdminMailSync))
+	mux.HandleFunc("/v1/admin/mail/import", adminOnly(srv.admin().HandleAdminMailImport))
+	mux.HandleFunc("/v1/admin/sync", adminOnly(srv.admin().HandleAdminSync))
+	mux.HandleFunc("/v1/admin/sync/pause", adminOnly(srv.admin().HandleAdminSyncPause))
+	mux.HandleFunc("/v1/admin/sync/resume", adminOnly(srv.admin().HandleAdminSyncResume))
+	mux.HandleFunc("/v1/admin/sync/schedules/{id}/enable", adminOnly(srv.admin().HandleAdminSyncSchedule))
+	mux.HandleFunc("/v1/admin/sync/schedules/{id}/disable", adminOnly(srv.admin().HandleAdminSyncSchedule))
+	mux.HandleFunc("/v1/admin/sync/{id}/cancel", adminOnly(srv.admin().HandleAdminSyncCancel))
+	mux.HandleFunc("/v1/admin/library/{kind}", adminOnly(srv.admin().HandleAdminLibrary))
+	mux.HandleFunc("/v1/admin/permissions", adminOnly(srv.admin().HandleAdminPermissionsOverview))
+	mux.HandleFunc("/v1/admin/data-grants", adminOnly(srv.admin().HandleAdminDataGrants))
+	mux.HandleFunc("/v1/admin/ownership", adminOnly(srv.admin().HandleAdminOwnership))
+	mux.HandleFunc("/v1/admin/ownership/{path...}", adminOnly(srv.admin().HandleAdminOwnership))
+	mux.HandleFunc("/v1/admin/data-scopes", adminOnly(srv.admin().HandleAdminDataScopes))
+	mux.HandleFunc("/v1/admin/data-scopes/{path...}", adminOnly(srv.admin().HandleAdminDataScopes))
+	mux.HandleFunc("/v1/admin/apps", adminOnly(srv.admin().HandleAdminApps))
+	mux.HandleFunc("/v1/admin/apps/{path...}", adminOnly(srv.admin().HandleAdminApps))
+	mux.HandleFunc("/v1/admin/setup/{path...}", adminOnly(srv.admin().HandleAdminOnboarding))
+	mux.HandleFunc("/v1/admin/quicken", adminOnly(srv.admin().HandleAdminQuicken))
+	mux.HandleFunc("/v1/admin/quicken/{path...}", adminOnly(srv.admin().HandleAdminQuicken))
+	mux.HandleFunc("/v1/admin/timeline", adminOnly(srv.admin().HandleAdminTimeline))
+	mux.HandleFunc("/v1/admin/timeline/{path...}", adminOnly(srv.admin().HandleAdminTimeline))
+	mux.HandleFunc("/v1/admin/signal", adminOnly(srv.admin().HandleAdminSignal))
+	mux.HandleFunc("/v1/admin/signal/{path...}", adminOnly(srv.admin().HandleAdminSignal))
+	mux.HandleFunc("/v1/admin/udk", adminOnly(srv.admin().HandleAdminUDK))
+	mux.HandleFunc("/v1/admin/udk/{path...}", adminOnly(srv.admin().HandleAdminUDK))
 
 	// Fallback: unlisted /v1/admin/* paths answer 404 (the former
 	// handleAdminRoutes default case). Pattern specificity ensures every
 	// registered route above wins over this catch-all.
-	mux.HandleFunc("/v1/admin/", admin(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/admin/", adminOnly(func(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}))
 }

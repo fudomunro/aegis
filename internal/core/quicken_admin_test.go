@@ -28,7 +28,7 @@ func TestAdminQuicken_ImportFlow(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/v1/admin/quicken/status", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdminQuicken(w, req)
+	srv.admin().HandleAdminQuicken(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d", w.Code)
 	}
@@ -42,7 +42,7 @@ func TestAdminQuicken_ImportFlow(t *testing.T) {
 
 	req2 := httptest.NewRequest("POST", "/v1/admin/quicken/import", strings.NewReader(`{"path":"`+qif+`"}`))
 	w2 := httptest.NewRecorder()
-	srv.HandleAdminQuicken(w2, req2)
+	srv.admin().HandleAdminQuicken(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("import %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -60,7 +60,7 @@ func TestAdminQuicken_ImportFlow(t *testing.T) {
 	// Bad path
 	req3 := httptest.NewRequest("POST", "/v1/admin/quicken/import", strings.NewReader(`{"path":""}`))
 	w3 := httptest.NewRecorder()
-	srv.HandleAdminQuicken(w3, req3)
+	srv.admin().HandleAdminQuicken(w3, req3)
 	if w3.Code != http.StatusBadRequest {
 		t.Fatalf("empty path status %d", w3.Code)
 	}

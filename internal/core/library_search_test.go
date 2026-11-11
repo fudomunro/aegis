@@ -3,17 +3,17 @@ package core
 import (
 	"encoding/json"
 	"errors"
+	"github.com/fudomunro/aegis/internal/admin"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/admin/scopes"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/library"
-	"github.com/fudomunro/aegis/internal/library/search"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -316,7 +316,7 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var st search.Status
+	var st admin.SearchIndexStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatalf("status json: %v", err)
 	}
@@ -326,7 +326,7 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 	if st.Path == "" {
 		t.Fatal("status must include the index path")
 	}
-	var contacts, tracks *search.KindStatus
+	var contacts, tracks *admin.SearchKindStatus
 	for i := range st.Kinds {
 		switch st.Kinds[i].ID {
 		case "contacts":
@@ -351,11 +351,11 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/admin/search/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminSearchStatus)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminSearchStatus)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("disabled status = %d body=%s", w.Code, w.Body.String())
 	}
-	st = search.Status{}
+	st = admin.SearchIndexStatus{}
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatal(err)
 	}

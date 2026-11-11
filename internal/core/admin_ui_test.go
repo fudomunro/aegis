@@ -13,7 +13,7 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -206,7 +206,7 @@ func TestHandleSetup_Removed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	if strings.Contains(w.Body.String(), "/v1/setup") {
 		t.Fatal("admin HTML must not reference removed /v1/setup wizard")
 	}
@@ -220,7 +220,7 @@ func TestAdminHTML_OwnershipPanel(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}

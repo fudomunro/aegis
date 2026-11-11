@@ -3,6 +3,9 @@ package kinds
 import (
 	"context"
 	"errors"
+	"github.com/fudomunro/aegis/internal/shared"
+	"sort"
+	"strings"
 )
 
 // ErrUnauthorized is returned by library providers when a service has no valid token.
@@ -389,4 +392,74 @@ type CalendarEventWriteProvider interface {
 	// PlaceEvents creates or updates the given events. Return
 	// ErrUnauthorized when no valid token is available.
 	PlaceEvents(ctx context.Context, events []CalendarEvent) (PlaceEntitiesResult, error)
+}
+
+// ProvidedTypes lists the library kinds a provider implementation supplies
+// (the permission keys Aegis merges across services, issue #183).
+func ProvidedTypes(conn any) []string {
+	// Library kinds Aegis merges across services (permission keys).
+	// Derived from the registry (issue #183).
+	libraryTypes := map[string]bool{}
+	for _, id := range BuiltinKindIDs() {
+		libraryTypes[id] = true
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" || name == shared.DefaultKey || seen[name] {
+			return
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+
+	if _, ok := conn.(PlaylistProvider); ok {
+		add("playlists")
+	}
+	if _, ok := conn.(LikedTrackProvider); ok {
+		add("tracks")
+	}
+	if _, ok := conn.(AlbumProvider); ok {
+		add("albums")
+	}
+	if _, ok := conn.(ArtistProvider); ok {
+		add("artists")
+	}
+	if _, ok := conn.(ContactProvider); ok {
+		add("contacts")
+	}
+	if _, ok := conn.(PhotoProvider); ok {
+		add("photos")
+	}
+	if _, ok := conn.(CalendarEventProvider); ok {
+		add("events")
+	}
+	if _, ok := conn.(MessageProvider); ok {
+		add("messages")
+	}
+	if _, ok := conn.(TransactionProvider); ok {
+		add("transactions")
+	}
+	if _, ok := conn.(PlaceVisitProvider); ok {
+		add("places")
+	}
+	if _, ok := conn.(DocumentProvider); ok {
+		add("documents")
+	}
+
+	// Advertised capability names, limited to library kinds (issue #160).
+	type named interface {
+		Capabilities() shared.ServiceCapabilities
+	}
+	if c, ok := conn.(named); ok {
+		for _, dt := range c.Capabilities().Kinds {
+			if libraryTypes[dt.Name] {
+				add(dt.Name)
+			}
+		}
+	}
+
+	sort.Strings(out)
+	return out
 }

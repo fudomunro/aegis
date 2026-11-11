@@ -61,7 +61,7 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	snap := srv.metricsSnapshot(time.Hour)
+	snap := srv.admin().MetricsSnapshot(time.Hour)
 	st := snap.Services["spotify"]
 	if st.Hits != 1 {
 		t.Fatalf("spotify hits = %d, want 1", st.Hits)
@@ -84,7 +84,7 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 	if w2.Header().Get("X-Aegis-Cache") != "hit" {
 		t.Fatalf("cache header = %q, want hit", w2.Header().Get("X-Aegis-Cache"))
 	}
-	snap = srv.metricsSnapshot(time.Hour)
+	snap = srv.admin().MetricsSnapshot(time.Hour)
 	st = snap.Services["spotify"]
 	if st.Hits != 2 || st.CacheHits != 1 || st.CacheMiss != 1 {
 		t.Fatalf("after cache hit stats = %+v, want hits 2 cache 1/1", st)
@@ -114,7 +114,7 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	snap := srv.metricsSnapshot(time.Hour)
+	snap := srv.admin().MetricsSnapshot(time.Hour)
 	if snap.Libraries["playlists"].Hits != 1 {
 		t.Fatalf("library hits = %d, want 1", snap.Libraries["playlists"].Hits)
 	}
@@ -141,7 +141,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminLibrary)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminLibrary)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -149,7 +149,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 		t.Fatalf("expected playlists payload, body=%s", w.Body.String())
 	}
 
-	snap := srv.metricsSnapshot(time.Hour)
+	snap := srv.admin().MetricsSnapshot(time.Hour)
 	if snap.Libraries["playlists"].Hits != 0 {
 		t.Fatalf("library hits after admin view = %d, want 0", snap.Libraries["playlists"].Hits)
 	}
@@ -164,14 +164,14 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 	req2 := httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)
 	req2.Header.Set("X-Api-Key", "test-key")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminLibrary)(w2, req2)
+	srv.AuthMiddleware(srv.admin().HandleAdminLibrary)(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("cached admin status = %d body=%s", w2.Code, w2.Body.String())
 	}
 	if w2.Header().Get("X-Aegis-Cache") != "hit" {
 		t.Fatalf("cache header = %q, want hit", w2.Header().Get("X-Aegis-Cache"))
 	}
-	snap = srv.metricsSnapshot(time.Hour)
+	snap = srv.admin().MetricsSnapshot(time.Hour)
 	if snap.TotalHits != 0 || snap.Libraries["playlists"].Hits != 0 {
 		t.Fatalf("metrics after admin cache hit = total %d libraries %v, want all zero",
 			snap.TotalHits, snap.Libraries)
@@ -185,7 +185,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 	if w3.Code != http.StatusOK {
 		t.Fatalf("agent status = %d body=%s", w3.Code, w3.Body.String())
 	}
-	snap = srv.metricsSnapshot(time.Hour)
+	snap = srv.admin().MetricsSnapshot(time.Hour)
 	if snap.Libraries["playlists"].Hits != 1 {
 		t.Fatalf("library hits after agent view = %d, want 1", snap.Libraries["playlists"].Hits)
 	}
@@ -202,7 +202,7 @@ func TestHandleAdminLibrary_UnknownKind(t *testing.T) {
 		req := httptest.NewRequest("GET", path, nil)
 		req.Header.Set("X-Api-Key", "test-key")
 		w := httptest.NewRecorder()
-		srv.AuthMiddleware(srv.HandleAdminLibrary)(w, req)
+		srv.AuthMiddleware(srv.admin().HandleAdminLibrary)(w, req)
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("%s status = %d, want 404 body=%s", path, w.Code, w.Body.String())
 		}
@@ -211,7 +211,7 @@ func TestHandleAdminLibrary_UnknownKind(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/admin/library/playlists", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminLibrary)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminLibrary)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("method status = %d, want 405", w.Code)
 	}

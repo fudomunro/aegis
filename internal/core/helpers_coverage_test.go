@@ -118,17 +118,17 @@ func TestTokenDisplayName(t *testing.T) {
 		},
 	}, "https://aegis.example.com")
 
-	if got := srv.tokenDisplayName("google"); got != "Google Workspace" {
+	if got := srv.admin().TokenDisplayName("google"); got != "Google Workspace" {
 		t.Fatalf("connection name = %q", got)
 	}
-	if got := srv.tokenDisplayName("spotify"); got != "Spotify" {
+	if got := srv.admin().TokenDisplayName("spotify"); got != "Spotify" {
 		t.Fatalf("service name = %q", got)
 	}
-	if got := srv.tokenDisplayName("youtube-music"); got != "Youtube Music" {
+	if got := srv.admin().TokenDisplayName("youtube-music"); got != "Youtube Music" {
 		// Title-case each dash-separated token: "youtube" → "Youtube", "music" → "Music"
 		t.Fatalf("fallback name = %q", got)
 	}
-	if got := srv.tokenDisplayName(""); got != "connection" {
+	if got := srv.admin().TokenDisplayName(""); got != "connection" {
 		t.Fatalf("empty name = %q", got)
 	}
 }

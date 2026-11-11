@@ -1,10 +1,6 @@
 package core
 
-import (
-	"sort"
-
-	"github.com/fudomunro/aegis/internal/shared"
-)
+import ()
 
 // invalidateLibrary drops cached library aggregates and search views.
 // MusicBrainz MBID lookups live in s.mbCache and survive (issue #273).
@@ -43,19 +39,4 @@ func (s *Server) invalidateCaches() {
 func (s *Server) invalidateAllCaches() {
 	s.invalidateCaches()
 	s.mbCache.Clear()
-}
-
-// cacheStats sums the response cache and the MBID cache for admin views.
-func (s *Server) cacheStats() (live, total, bytes int) {
-	l1, t1, b1 := s.cache.Stats()
-	l2, t2, b2 := s.mbCache.Stats()
-	return l1 + l2, t1 + t2, b1 + b2
-}
-
-// cacheSnapshot lists both caches' entries (MBID keys keep their "mbid:"
-// prefix) so the admin cache view stays complete after the split (issue #273).
-func (s *Server) cacheSnapshot() []shared.CacheItem {
-	items := append(s.cache.Snapshot(), s.mbCache.Snapshot()...)
-	sort.Slice(items, func(i, j int) bool { return items[i].Key < items[j].Key })
-	return items
 }

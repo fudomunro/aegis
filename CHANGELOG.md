@@ -20,6 +20,23 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **The management surface leaves the hub (issue #358, P3).** `internal/admin`
+  now owns the `/v1/admin/*` surface end to end: the admin UI shell and its
+  embedded markup, setup flows, admin-owned writes (data grants, apps, data
+  scopes, UDK overlay, connections, ownership), and the admin read models
+  over sync jobs, search, mail, metrics, and the import stores. The app
+  registry and data-scope store move under it (`admin/apps`, `admin/scopes`);
+  the maturity catalog completes its home in `internal/connectors` and the
+  provider-introspection helper lands in `internal/kinds`. The hub keeps the
+  perimeter and implements `admin.Host`: config and connection views,
+  hub-persisted writes (the `StateUpdate` seam), CSRF, cache invalidation,
+  and the one shared mail-ingest walk. The two surfaces never import each
+  other — the admin pages read the data plane's kind catalog through a
+  narrow interface the hub wires. `internal/core/udk` stays a hub-adjacent
+  engine (the data plane consumes it), and the maintenance capture split
+  defers to the sync phase with its engine. Recorded refinements are in
+  `docs/restructure-packaging.md`. No product behavior change.
+
 - **The agent data plane leaves the hub (issue #358, P2).** `internal/library`
   now owns everything about serving library data to agents: the fixed
   `/v1/library/*` write and maintenance routes (mirror, photo share, entity

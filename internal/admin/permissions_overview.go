@@ -1,9 +1,8 @@
-package core
+package admin
 
 import (
 	"net/http"
 	"sort"
-	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
@@ -13,11 +12,11 @@ import (
 
 // Sync accessor IDs in the holistic permissions view (issue #160).
 const (
-	syncMailID     = "sync:mail-archive"
+	SyncMailID     = "sync:mail-archive"
 	syncCopyID     = "sync:copy-ledger"
-	syncTimelineID = "sync:timeline"
-	syncQuickenID  = "sync:quicken"
-	syncSignalID   = "sync:signal"
+	SyncTimelineID = "sync:timeline"
+	SyncQuickenID  = "sync:quicken"
+	SyncSignalID   = "sync:signal"
 )
 
 // agentAccessorID is the primary LLM-agent row (type-owned policy).
@@ -28,9 +27,9 @@ const agentAccessorID = "agent"
 // only the other accessors (apps, sync pipelines) that apply to that kind.
 // The admin map shows what each accessor has accessed; this view shows
 // what each is allowed to access.
-func (s *Server) permissionsOverview() policy.PermissionsOverview {
+func (h *Handlers) PermissionsOverview() policy.PermissionsOverview {
 	preferred := make([]string, 0, 16)
-	for _, kind := range s.library().AllLibraryKinds() {
+	for _, kind := range h.KindCatalog.AllLibraryKinds() {
 		key := kind.PermType
 		if key == "" {
 			key = kind.ID
@@ -38,16 +37,16 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		preferred = append(preferred, key)
 	}
 
-	policies := s.config.DataGrants()
+	policies := h.Host.DataGrants()
 	var extra []string
 	extra = append(extra, policy.ExtraPolicyKeys(policies)...)
-	if s.apps != nil {
-		for _, app := range s.apps.List() {
+	if h.Apps != nil {
+		for _, app := range h.Apps.List() {
 			extra = append(extra, policy.ExtraPermissionKeys(app.Scopes)...)
 		}
 	}
 
-	kinds := policy.OverviewKinds(preferred, extra)
+	kindList := policy.OverviewKinds(preferred, extra)
 	accessors := make([]policy.Accessor, 0, 8)
 
 	// Agents: type-owned policy is primary (issue #148).
@@ -56,14 +55,14 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		Kind:   policy.AccessorAgent,
 		Label:  "LLM agents",
 		Detail: "Agents reaching Aegis through Aperture or direct proxy/library calls. One grant map per key, deny-by-default.",
-		Levels: policy.AgentOverviewLevels(policies, kinds),
+		Levels: policy.AgentOverviewLevels(policies, kindList),
 		// Edited via the data-grant form in the data grants editor.
 		Editable: true,
 	})
 
 	// Third-party apps (issue #131).
-	if s.apps != nil {
-		apps := s.apps.List()
+	if h.Apps != nil {
+		apps := h.Apps.List()
 		sort.Slice(apps, func(i, j int) bool {
 			if apps[i].Name != apps[j].Name {
 				return apps[i].Name < apps[j].Name
@@ -75,7 +74,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			for k, v := range app.Scopes {
 				scopes[k] = v
 			}
-			levels, explicit := policy.AppOverviewLevels(scopes, kinds)
+			levels, explicit := policy.AppOverviewLevels(scopes, kindList)
 			accessors = append(accessors, policy.Accessor{
 				ID:       "app:" + app.ID,
 				Kind:     policy.AccessorApp,
@@ -93,9 +92,9 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 	// Aegis-internal sync pipelines (issue #160). Levels describe what the
 	// pipeline may store — not agent visibility. Only named types are
 	// relevant under a kind row.
-	if s.mail != nil {
+	if h.Mail != nil {
 		accessors = append(accessors, policy.Accessor{
-			ID:       syncMailID,
+			ID:       SyncMailID,
 			Kind:     policy.AccessorSync,
 			Label:    "Mail archive sync",
 			Detail:   "Mail ingest into the local mail archive (live sync and export import). Message bodies stay on the source; Aegis keeps a compressed search copy.",
@@ -103,12 +102,12 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			Explicit: map[string]bool{"messages": true},
 		})
 	}
-	if s.copyLedger != nil {
+	if h.Copies != nil {
 		// Copy ledger stamps provenance for mirror writes across types.
 		// No fixed type list — show only when a kind has copy activity.
 		levels := map[string]string{}
 		explicit := map[string]bool{}
-		for _, rec := range s.copyLedger.List(copies.Filter{}) {
+		for _, rec := range h.Copies.List(copies.Filter{}) {
 			if rec.Kind == "" {
 				continue
 			}
@@ -124,9 +123,9 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			Explicit: explicit,
 		})
 	}
-	if s.timeline != nil {
+	if h.Timeline != nil {
 		accessors = append(accessors, policy.Accessor{
-			ID:       syncTimelineID,
+			ID:       SyncTimelineID,
 			Kind:     policy.AccessorSync,
 			Label:    "Timeline import",
 			Detail:   "Google Timeline export ingest into the local places store.",
@@ -134,9 +133,9 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			Explicit: map[string]bool{"places": true},
 		})
 	}
-	if s.quicken != nil {
+	if h.Quicken != nil {
 		accessors = append(accessors, policy.Accessor{
-			ID:       syncQuickenID,
+			ID:       SyncQuickenID,
 			Kind:     policy.AccessorSync,
 			Label:    "Quicken import",
 			Detail:   "QIF/QFX/OFX import into the local transaction store.",
@@ -144,9 +143,9 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			Explicit: map[string]bool{"transactions": true},
 		})
 	}
-	if s.signal != nil {
+	if h.Signal != nil {
 		accessors = append(accessors, policy.Accessor{
-			ID:     syncSignalID,
+			ID:     SyncSignalID,
 			Kind:   policy.AccessorSync,
 			Label:  "Signal import",
 			Detail: "File-based Signal export ingest into the local contacts/messages store. Attachments are never stored.",
@@ -161,15 +160,15 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 	// Services Aegis syncs this data with (issue #160). Read-only rows so
 	// operators can see Spotify / YouTube Music under playlists, etc.
 	// Capability and provider interfaces decide relevance per type.
-	for _, svc := range s.config.ServiceSnapshots() {
+	for _, svc := range h.Host.ServiceRows() {
 		if svc.Action == "block" {
 			continue
 		}
-		conn, ok := s.connectors[svc.ID]
+		conn, ok := h.Connectors[svc.ID]
 		if !ok || conn == nil {
 			continue
 		}
-		provided := serviceProvidedTypes(conn)
+		provided := kinds.ProvidedTypes(conn)
 		if len(provided) == 0 {
 			continue
 		}
@@ -204,7 +203,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		if accessors[i].Levels == nil {
 			accessors[i].Levels = map[string]string{}
 		}
-		for _, dt := range kinds {
+		for _, dt := range kindList {
 			if _, ok := accessors[i].Levels[dt]; !ok {
 				accessors[i].Levels[dt] = shared.AccessNone
 			}
@@ -212,8 +211,8 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 	}
 
 	return policy.PermissionsOverview{
-		Kinds: kinds,
-		Rows:  policy.BuildKindAccess(kinds, accessors),
+		Kinds: kindList,
+		Rows:  policy.BuildKindAccess(kindList, accessors),
 	}
 }
 
@@ -221,73 +220,6 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 // syncs (issue #160): unified-library provider interfaces first. Capability
 // names are ignored except for those same library kinds, so proxy-only
 // surfaces (player, search) do not invent service rows under a type.
-func serviceProvidedTypes(conn any) []string {
-	// Library kinds Aegis merges across services (permission keys).
-	// Derived from the registry (issue #183).
-	libraryTypes := map[string]bool{}
-	for _, id := range kinds.BuiltinKindIDs() {
-		libraryTypes[id] = true
-	}
-	seen := map[string]bool{}
-	var out []string
-	add := func(name string) {
-		name = strings.TrimSpace(name)
-		if name == "" || name == shared.DefaultKey || seen[name] {
-			return
-		}
-		seen[name] = true
-		out = append(out, name)
-	}
-
-	if _, ok := conn.(kinds.PlaylistProvider); ok {
-		add("playlists")
-	}
-	if _, ok := conn.(kinds.LikedTrackProvider); ok {
-		add("tracks")
-	}
-	if _, ok := conn.(kinds.AlbumProvider); ok {
-		add("albums")
-	}
-	if _, ok := conn.(kinds.ArtistProvider); ok {
-		add("artists")
-	}
-	if _, ok := conn.(kinds.ContactProvider); ok {
-		add("contacts")
-	}
-	if _, ok := conn.(kinds.PhotoProvider); ok {
-		add("photos")
-	}
-	if _, ok := conn.(kinds.CalendarEventProvider); ok {
-		add("events")
-	}
-	if _, ok := conn.(kinds.MessageProvider); ok {
-		add("messages")
-	}
-	if _, ok := conn.(kinds.TransactionProvider); ok {
-		add("transactions")
-	}
-	if _, ok := conn.(kinds.PlaceVisitProvider); ok {
-		add("places")
-	}
-	if _, ok := conn.(kinds.DocumentProvider); ok {
-		add("documents")
-	}
-
-	// Advertised capability names, limited to library kinds (issue #160).
-	type named interface {
-		Capabilities() shared.ServiceCapabilities
-	}
-	if c, ok := conn.(named); ok {
-		for _, dt := range c.Capabilities().Kinds {
-			if libraryTypes[dt.Name] {
-				add(dt.Name)
-			}
-		}
-	}
-
-	sort.Strings(out)
-	return out
-}
 
 // HandleAdminPermissionsOverview returns the kind-centric permissions
 // editor model (issue #160).
@@ -297,10 +229,10 @@ func serviceProvidedTypes(conn any) []string {
 // One entry per kind with its agent level and the non-agent accessors
 // (apps, sync) that are relevant to that kind. The admin map remains the
 // "what they have accessed" view; this endpoint is "what they may access".
-func (s *Server) HandleAdminPermissionsOverview(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminPermissionsOverview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	shared.WriteJSON(w, s.permissionsOverview())
+	shared.WriteJSON(w, h.PermissionsOverview())
 }

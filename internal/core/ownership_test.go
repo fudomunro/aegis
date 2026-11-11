@@ -30,7 +30,7 @@ func TestOwnershipStatuses_ConnectedServiceIsUnderManagement(t *testing.T) {
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
 	srv.tokens.Tokens["spotify"] = &tokens.OAuthToken{AccessToken: "at"}
 
-	statuses := srv.ownershipStatuses()
+	statuses := srv.admin().OwnershipStatuses()
 	byKind := ownershipByKind(t, statuses)
 
 	playlists := byKind["playlists"]
@@ -62,7 +62,7 @@ func TestOwnershipStatuses_EmptyArchiveStoreStaysARoute(t *testing.T) {
 	srv.signal = store
 	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(store)
 
-	byKind := ownershipByKind(t, srv.ownershipStatuses())
+	byKind := ownershipByKind(t, srv.admin().OwnershipStatuses())
 	assertOwnershipRoute(t, byKind["messages"].UnusedRoutes, connectors.SignalServiceID)
 	assertOwnershipRoute(t, byKind["contacts"].UnusedRoutes, connectors.SignalServiceID)
 	if len(byKind["messages"].UnderManagement) != 0 {
@@ -75,7 +75,7 @@ func TestOwnershipStatuses_EmptyArchiveStoreStaysARoute(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	byKind = ownershipByKind(t, srv.ownershipStatuses())
+	byKind = ownershipByKind(t, srv.admin().OwnershipStatuses())
 	assertOwnershipSource(t, byKind["messages"].UnderManagement, connectors.SignalServiceID)
 	if hasRoute(byKind["messages"].UnusedRoutes, connectors.SignalServiceID) {
 		t.Fatal("imported signal store must not stay an unused route")
@@ -91,7 +91,7 @@ func TestOwnershipStatuses_MailEvidence(t *testing.T) {
 	srv.mail = mailArch
 
 	// No Takeout path and no rows: Takeout stays a route.
-	byKind := ownershipByKind(t, srv.ownershipStatuses())
+	byKind := ownershipByKind(t, srv.admin().OwnershipStatuses())
 	assertOwnershipRoute(t, byKind["messages"].UnusedRoutes, connectors.TakeoutServiceID)
 
 	// Gmail is not connected, so it is a route too — until the archive
@@ -102,7 +102,7 @@ func TestOwnershipStatuses_MailEvidence(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	byKind = ownershipByKind(t, srv.ownershipStatuses())
+	byKind = ownershipByKind(t, srv.admin().OwnershipStatuses())
 	assertOwnershipSource(t, byKind["messages"].UnderManagement, connectors.GoogleGmailServiceID)
 
 	// Importing Takeout rows moves Takeout from route to source.
@@ -112,7 +112,7 @@ func TestOwnershipStatuses_MailEvidence(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert takeout: %v", err)
 	}
-	byKind = ownershipByKind(t, srv.ownershipStatuses())
+	byKind = ownershipByKind(t, srv.admin().OwnershipStatuses())
 	assertOwnershipSource(t, byKind["messages"].UnderManagement, connectors.TakeoutServiceID)
 	if hasRoute(byKind["messages"].UnusedRoutes, connectors.TakeoutServiceID) {
 		t.Fatal("takeout with rows must not stay an unused route")
@@ -136,7 +136,7 @@ func TestOwnershipStatuses_FreshnessPassthrough(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert copy: %v", err)
 	}
-	byKind := ownershipByKind(t, srv.ownershipStatuses())
+	byKind := ownershipByKind(t, srv.admin().OwnershipStatuses())
 	f := byKind["playlists"].Freshness
 	if f == nil || f.Total != 1 {
 		t.Fatalf("freshness = %+v, want a 1-row rollup", f)
@@ -152,7 +152,7 @@ func TestHandleAdminOwnership_ConfirmReopen(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/ownership", nil)
 	req.Header.Set("X-Api-Key", "test-key")
-	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminOwnership)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -170,7 +170,7 @@ func TestHandleAdminOwnership_ConfirmReopen(t *testing.T) {
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/admin/ownership/messages", strings.NewReader(`{"note":"all of it"}`))
 	req.Header.Set("X-Api-Key", "test-key")
-	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminOwnership)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("POST status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -186,7 +186,7 @@ func TestHandleAdminOwnership_ConfirmReopen(t *testing.T) {
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodDelete, "/v1/admin/ownership/messages", nil)
 	req.Header.Set("X-Api-Key", "test-key")
-	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminOwnership)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("DELETE status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -201,7 +201,7 @@ func TestHandleAdminOwnership_ConfirmReopen(t *testing.T) {
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/admin/ownership/not-a-kind", strings.NewReader(`{}`))
 	req.Header.Set("X-Api-Key", "test-key")
-	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminOwnership)(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown kind status = %d, want 404", w.Code)
 	}
@@ -210,7 +210,7 @@ func TestHandleAdminOwnership_ConfirmReopen(t *testing.T) {
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPut, "/v1/admin/ownership", nil)
 	req.Header.Set("X-Api-Key", "test-key")
-	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminOwnership)(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("PUT status = %d, want 405", w.Code)
 	}
@@ -222,7 +222,7 @@ func TestHandleAdminOwnership_RequiresAuth(t *testing.T) {
 	srv.ownership = mustOwnershipStore(t, "")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/ownership", nil)
-	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminOwnership)(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated status = %d, want 401", w.Code)
 	}
@@ -242,7 +242,7 @@ func TestOwnershipRoutes_ActionsMatchSeams(t *testing.T) {
 	srv.connectors[connectors.QuickenServiceID] = connectors.NewQuickenConnector(nil)
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
-	byKind := ownershipByKind(t, srv.ownershipStatuses())
+	byKind := ownershipByKind(t, srv.admin().OwnershipStatuses())
 	actions := map[string]shared.OwnershipAction{}
 	for _, rt := range byKind["photos"].UnusedRoutes {
 		actions[rt.ServiceID] = rt.Action
@@ -266,72 +266,6 @@ func TestOwnershipRoutes_ActionsMatchSeams(t *testing.T) {
 
 // --- helpers ---
 
-// TestOwnershipStartDeclarationsAreReal pins the connector-declared
-// call-to-action (issue #165 phase 2) against the seams it names: "setup"
-// connectors implement Onboarder, "import" sources expose an import panel,
-// everything else is "connect". Core reads these declarations and never
-// derives the action, so a wrong one is the only thing left to catch.
-func TestOwnershipStartDeclarationsAreReal(t *testing.T) {
-	conns := map[string]connectors.ServiceConnector{}
-	for _, c := range maturityTestConnectors() {
-		conns[c.id] = c.conn
-	}
-	for _, m := range ConnectionMaturityCatalog() {
-		conn := conns[m.Service]
-		if conn == nil {
-			t.Fatalf("catalog entry %q has no connector under test", m.Service)
-		}
-		start := m.Start
-		if start.Label == "" {
-			t.Errorf("connector %q: Start.Label is empty", m.Service)
-		}
-		_, isOnboarder := conn.(connectors.Onboarder)
-		isImportStore := false
-		switch conn.(type) {
-		case *connectors.SignalConnector, *connectors.QuickenConnector, *connectors.TimelineConnector:
-			// Local import stores: their admin import panel is the seam
-			// an "import" action names (issue #266).
-			isImportStore = true
-		}
-		switch {
-		case isOnboarder && isImportStore:
-			t.Errorf("connector %q is both Onboarder and an import store; Start.Kind cannot be honest", m.Service)
-		case isOnboarder:
-			if start.Kind != shared.OwnershipActionSetup {
-				t.Errorf("connector %q implements Onboarder but Start.Kind = %q, want %q", m.Service, start.Kind, shared.OwnershipActionSetup)
-			}
-		case isImportStore:
-			if start.Kind != shared.OwnershipActionImport {
-				t.Errorf("connector %q is an import store but Start.Kind = %q, want %q", m.Service, start.Kind, shared.OwnershipActionImport)
-			}
-		default:
-			if start.Kind != shared.OwnershipActionConnect {
-				t.Errorf("connector %q has no setup or import seam but Start.Kind = %q, want %q", m.Service, start.Kind, shared.OwnershipActionConnect)
-			}
-		}
-	}
-}
-
-// TestOwnershipStartCoversIngestOnlySources pins the ingest-only route
-// declarations: a MailSource outside the maturity catalog must declare its
-// own Start so core never has to invent one.
-func TestOwnershipStartCoversIngestOnlySources(t *testing.T) {
-	start := connectors.MailSourceFor(connectors.TakeoutServiceID).Start
-	if start == nil {
-		t.Fatal("takeout MailSource has no Start declaration")
-	}
-	if start.Kind != shared.OwnershipActionImport {
-		t.Fatalf("takeout Start.Kind = %q, want %q", start.Kind, shared.OwnershipActionImport)
-	}
-	if start.Label == "" {
-		t.Fatal("takeout Start.Label is empty")
-	}
-	// Gmail is a connection first; its Start lives on the maturity row.
-	if got := connectors.MailSourceFor(connectors.GoogleGmailServiceID).Start; got != nil {
-		t.Fatal("gmail MailSource must not override the maturity Start")
-	}
-}
-
 // TestHandleAdminOwnership_BrowserWritePath pins the tailnet-browser write
 // path: ambient identity, same-origin proof, and a JSON content type. The
 // API-key path skips the CSRF guard, so a handler test without this path
@@ -350,7 +284,7 @@ func TestHandleAdminOwnership_BrowserWritePath(t *testing.T) {
 	req.Header.Set("Origin", "https://aegis.example.com")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminOwnership)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("same-origin JSON write: %d %s", w.Code, w.Body.String())
 	}
@@ -363,7 +297,7 @@ func TestHandleAdminOwnership_BrowserWritePath(t *testing.T) {
 	req.Header.Set("Origin", "https://aegis.example.com")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminOwnership)(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("text/plain write: %d, want 403 (fetch defaults a string body to text/plain)", w.Code)
 	}
@@ -373,7 +307,7 @@ func TestHandleAdminOwnership_BrowserWritePath(t *testing.T) {
 	req.Header.Set("Origin", "https://aegis.example.com")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminOwnership)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("same-origin DELETE: %d %s", w.Code, w.Body.String())
 	}

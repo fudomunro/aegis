@@ -1,4 +1,4 @@
-package core
+package admin
 
 import (
 	"context"
@@ -21,16 +21,16 @@ import (
 // post-save state. Responses are built from explicit DTOs: a StateUpdate
 // carries secret values and must never be serialized back.
 
-// onboardingView is GET /v1/admin/setup/{id}: the declared contract plus the
+// OnboardingView is GET /v1/admin/setup/{id}: the declared contract plus the
 // live view the panel renders.
-type onboardingView struct {
+type OnboardingView struct {
 	Spec   shared.OnboardingSpec   `json:"spec"`
 	Status shared.OnboardingStatus `json:"status"`
 }
 
-// onboardingActionResult is POST /v1/admin/setup/{id}/{action}: the refreshed
+// OnboardingActionResult is POST /v1/admin/setup/{id}/{action}: the refreshed
 // view plus the action's own diagnosis.
-type onboardingActionResult struct {
+type OnboardingActionResult struct {
 	Spec   shared.OnboardingSpec   `json:"spec"`
 	Status shared.OnboardingStatus `json:"status"`
 	Probe  *shared.ProbeResult     `json:"probe,omitempty"`
@@ -44,7 +44,7 @@ type onboardingActionResult struct {
 //
 // Registered under AdminMiddleware: setup writes tokens and config, so it
 // stays behind the admin perimeter and out of the agent-facing allowlist.
-func (s *Server) handleAdminOnboarding(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminOnboarding(w http.ResponseWriter, r *http.Request) {
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/setup/"), "/")
 	if rest == "" {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
@@ -55,7 +55,7 @@ func (s *Server) handleAdminOnboarding(w http.ResponseWriter, r *http.Request) {
 		id, action = rest[:i], strings.Trim(rest[i+1:], "/")
 	}
 
-	ob, ok := s.onboarder(id)
+	ob, ok := h.onboarder(id)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusNotFound, "no setup flow for service "+id)
 		return
@@ -63,17 +63,17 @@ func (s *Server) handleAdminOnboarding(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case action == "" && r.Method == http.MethodGet:
-		s.writeOnboardingView(w, r.Context(), ob)
+		h.writeOnboardingView(w, r.Context(), ob)
 	case action != "" && r.Method == http.MethodPost:
-		s.runOnboardingAction(w, r, ob, action)
+		h.runOnboardingAction(w, r, ob, action)
 	default:
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
 // onboarder resolves a registered connector that drives its own setup.
-func (s *Server) onboarder(id string) (connectors.Onboarder, bool) {
-	conn, ok := s.connectors[id]
+func (h *Handlers) onboarder(id string) (connectors.Onboarder, bool) {
+	conn, ok := h.Connectors[id]
 	if !ok {
 		return nil, false
 	}
@@ -82,17 +82,17 @@ func (s *Server) onboarder(id string) (connectors.Onboarder, bool) {
 }
 
 // writeOnboardingView answers with the declared contract and live status.
-func (s *Server) writeOnboardingView(w http.ResponseWriter, ctx context.Context, ob connectors.Onboarder) {
+func (h *Handlers) writeOnboardingView(w http.ResponseWriter, ctx context.Context, ob connectors.Onboarder) {
 	spec := ob.Onboarding()
-	shared.WriteJSON(w, onboardingView{
+	shared.WriteJSON(w, OnboardingView{
 		Spec:   spec,
-		Status: s.onboardingStatus(ctx, spec, ob),
+		Status: h.onboardingStatus(ctx, spec, ob),
 	})
 }
 
 // runOnboardingAction executes one declared verb, persists whatever state
 // changes the connector asked for, then answers with the refreshed view.
-func (s *Server) runOnboardingAction(w http.ResponseWriter, r *http.Request, ob connectors.Onboarder, action string) {
+func (h *Handlers) runOnboardingAction(w http.ResponseWriter, r *http.Request, ob connectors.Onboarder, action string) {
 	var in shared.OnboardingInput
 	if r.Body != nil {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -117,13 +117,13 @@ func (s *Server) runOnboardingAction(w http.ResponseWriter, r *http.Request, ob 
 		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.applyOnboardingUpdates(spec, result.Updates); err != nil {
+	if err := h.applyOnboardingUpdates(spec, result.Updates); err != nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	shared.WriteJSON(w, onboardingActionResult{
+	shared.WriteJSON(w, OnboardingActionResult{
 		Spec:   spec,
-		Status: s.onboardingStatus(r.Context(), spec, ob),
+		Status: h.onboardingStatus(r.Context(), spec, ob),
 		Probe:  result.Probe,
 		Detail: result.Detail,
 	})
@@ -134,7 +134,7 @@ func (s *Server) runOnboardingAction(w http.ResponseWriter, r *http.Request, ob 
 // and it goes through the same SetServiceConnection seam the Immich/YNAB
 // admin saves used: secrets into the encrypted store first, overlay second,
 // aegis.json never rewritten.
-func (s *Server) applyOnboardingUpdates(spec shared.OnboardingSpec, updates []shared.StateUpdate) error {
+func (h *Handlers) applyOnboardingUpdates(spec shared.OnboardingSpec, updates []shared.StateUpdate) error {
 	if len(updates) == 0 {
 		return nil
 	}
@@ -143,21 +143,7 @@ func (s *Server) applyOnboardingUpdates(spec shared.OnboardingSpec, updates []sh
 		if u.Connection == nil {
 			continue
 		}
-		entry := serviceConnectionEntry{
-			Name:              spec.Connection.Name,
-			Action:            spec.Connection.Action,
-			Description:       spec.Connection.Description,
-			CacheTTL:          spec.Connection.CacheTTL,
-			Aliases:           spec.Connection.Aliases,
-			Endpoint:          u.Connection.Endpoint,
-			Headers:           map[string]string{}, // non-nil: static-credential path
-			CanonicalFor:      u.Connection.CanonicalFor,
-			ClearCanonicalFor: u.Connection.ClearCanonicalFor,
-		}
-		for k, v := range u.Connection.SecretHeaders {
-			entry.Headers[k] = v
-		}
-		if err := s.config.SetServiceConnection(spec.ServiceID, entry); err != nil {
+		if err := h.Host.SetConnection(spec.ServiceID, spec.Connection, *u.Connection); err != nil {
 			return err
 		}
 		touched = true
@@ -169,7 +155,7 @@ func (s *Server) applyOnboardingUpdates(spec shared.OnboardingSpec, updates []sh
 		// The VIP wizard's credential and selections take the same path the
 		// admin save used: secret into the encrypted store, settings into the
 		// overlay's "tailscale" block (issue #124).
-		if err := s.config.SetTailscaleAdmin(tailscaleAdminEntry{
+		if err := h.Host.SetTailscaleAdminSettings(shared.TailscaleAdminUpdate{
 			APIKey:       u.TailscaleAdmin.APIKey,
 			Tailnet:      u.TailscaleAdmin.Tailnet,
 			HostDeviceID: u.TailscaleAdmin.HostDeviceID,
@@ -181,7 +167,7 @@ func (s *Server) applyOnboardingUpdates(spec shared.OnboardingSpec, updates []sh
 	}
 	if touched {
 		// Library listings must not serve the old connection's view.
-		s.invalidateService(spec.ServiceID)
+		h.Host.InvalidateService(spec.ServiceID)
 	}
 	return nil
 }
@@ -189,7 +175,7 @@ func (s *Server) applyOnboardingUpdates(spec shared.OnboardingSpec, updates []sh
 // onboardingStatus derives the live view and strips secret values before
 // anything is serialized. Connectors are expected to leave Secret fields
 // empty; this is the belt to that suspenders.
-func (s *Server) onboardingStatus(ctx context.Context, spec shared.OnboardingSpec, ob connectors.Onboarder) shared.OnboardingStatus {
+func (h *Handlers) onboardingStatus(ctx context.Context, spec shared.OnboardingSpec, ob connectors.Onboarder) shared.OnboardingStatus {
 	status := ob.OnboardingStatus(ctx)
 	for _, f := range spec.Fields {
 		if !f.Secret {

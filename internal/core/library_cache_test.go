@@ -259,7 +259,7 @@ func TestHandleAdminCacheClear_FlushesBothCaches(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	if live, total, _ := srv.cacheStats(); live != 0 || total != 0 {
+	if live, total, _ := srv.cache.Stats(); live != 0 || total != 0 {
 		t.Fatalf("after admin clear live=%d total=%d, want 0/0", live, total)
 	}
 }

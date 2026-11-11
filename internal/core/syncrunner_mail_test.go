@@ -232,19 +232,19 @@ func TestMailIngestRunner_TakeoutStep(t *testing.T) {
 
 func TestMailIngestFor_Wired(t *testing.T) {
 	srv, _, _ := mailRunnerServer(t, gmailListThenEmpty("m1"))
-	if srv.mailIngestFor(connectors.GoogleGmailServiceID) == nil {
+	if srv.admin().MailIngests[connectors.GoogleGmailServiceID] == nil {
 		t.Fatal("google-gmail must build an ingest")
 	}
-	if srv.mailIngestFor(connectors.TakeoutServiceID) == nil {
+	if srv.admin().MailIngests[connectors.TakeoutServiceID] == nil {
 		t.Fatal("takeout must build an ingest")
 	}
-	if srv.mailIngestFor("nope") != nil {
+	if srv.admin().MailIngests["nope"] != nil {
 		t.Fatal("unknown service must not build an ingest")
 	}
 	// A connector that does not implement MailIngest yields nil.
 	srv.connectors["quickenish"] = connectors.NewQuickenConnector(nil)
 	srv.wireMailIngests()
-	if srv.mailIngestFor("quickenish") != nil {
+	if srv.admin().MailIngests["quickenish"] != nil {
 		t.Fatal("non-Gmail connector must not build a mail ingest")
 	}
 }

@@ -1,13 +1,12 @@
-package core
+package admin
 
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/admin/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -22,8 +21,8 @@ import (
 //
 // Plaintext invite tokens are returned only from create and rotate; only the
 // SHA-256 hash is stored.
-func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
-	if s.scopes == nil {
+func (h *Handlers) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
+	if h.Scopes == nil {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "data scopes disabled")
 		return
 	}
@@ -33,9 +32,9 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		switch r.Method {
 		case http.MethodGet:
-			shared.WriteJSON(w, map[string]any{"data_scopes": s.scopes.List()})
+			shared.WriteJSON(w, map[string]any{"data_scopes": h.Scopes.List()})
 		case http.MethodPost:
-			body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
+			body, ok := shared.ReadBodyLimited(w, r, shared.MaxAdminBodyBytes)
 			if !ok {
 				return
 			}
@@ -44,15 +43,15 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
-			view, token, err := s.scopes.Create(req)
+			view, token, err := h.Scopes.Create(req)
 			if err != nil {
-				withPeerLog(slog.With("handler", "admin_data_scopes"), r).
+				h.Host.Logger(r, "admin_data_scopes").
 					Warn("failed to mint invite token", "scope_id", req.ID, "error", err)
 				shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			s.invalidateCaches()
-			withPeerLog(slog.With("handler", "admin_data_scopes"), r).
+			h.Host.InvalidateCaches()
+			h.Host.Logger(r, "admin_data_scopes").
 				Info("invite token minted", "scope_id", view.ID, "dataset", view.Dataset)
 			shared.WriteJSON(w, map[string]any{
 				"scope":        view,
@@ -84,13 +83,13 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		view, token, err := s.scopes.Rotate(id)
+		view, token, err := h.Scopes.Rotate(id)
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.invalidateCaches()
-		withPeerLog(slog.With("handler", "admin_data_scopes"), r).
+		h.Host.InvalidateCaches()
+		h.Host.Logger(r, "admin_data_scopes").
 			Info("invite token rotated", "scope_id", id)
 		shared.WriteJSON(w, map[string]any{
 			"scope":        view,
@@ -98,14 +97,14 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 			"note":         "Store this invite token now — it is not shown again. The previous token is invalid.",
 		})
 	case r.Method == http.MethodGet:
-		view, ok := s.scopes.View(id)
+		view, ok := h.Scopes.View(id)
 		if !ok {
 			shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("data scope %q not found", id))
 			return
 		}
 		shared.WriteJSON(w, map[string]any{"scope": view})
 	case r.Method == http.MethodPatch || r.Method == http.MethodPut:
-		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, shared.MaxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -114,13 +113,13 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
-		view, err := s.scopes.Update(id, req)
+		view, err := h.Scopes.Update(id, req)
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.invalidateCaches()
-		withPeerLog(slog.With("handler", "admin_data_scopes"), r).
+		h.Host.InvalidateCaches()
+		h.Host.Logger(r, "admin_data_scopes").
 			Info("data scope updated", "scope_id", id, "disabled", view.Disabled)
 		shared.WriteJSON(w, map[string]any{"scope": view, "status": "saved"})
 	default:

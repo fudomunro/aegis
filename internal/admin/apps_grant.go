@@ -1,17 +1,19 @@
-package core
+package admin
 
 import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/core/apps"
+	"github.com/fudomunro/aegis/internal/admin/apps"
 	"github.com/fudomunro/aegis/internal/shared"
 )
+
+// csrfTokenPlaceholder is substituted once per GET /v1/apps/authorize render.
+const csrfTokenPlaceholder = "{{CSRF_TOKEN}}"
 
 //go:embed web/app_authorize.html
 var appAuthorizeHTML string
@@ -26,7 +28,7 @@ var thirdPartyDemoHTML string
 // POST /v1/apps/authorize  (authenticated; same params as form or JSON)
 //
 // POST redirects to redirect_uri with a one-time code (issue #131).
-func (s *Server) HandleAppAuthorize(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAppAuthorize(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		q := r.URL.Query()
@@ -40,21 +42,21 @@ func (s *Server) HandleAppAuthorize(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		token, err := s.issueCSRFToken()
+		token, err := h.Host.IssueCSRFToken()
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusInternalServerError, "failed to issue CSRF token")
 			return
 		}
 		fmt.Fprint(w, strings.Replace(appAuthorizeHTML, csrfTokenPlaceholder, token, 1))
 	case http.MethodPost:
-		s.handleAppAuthorizeGrant(w, r)
+		h.handleAppAuthorizeGrant(w, r)
 	default:
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
-func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request) {
-	if s.apps == nil {
+func (h *Handlers) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request) {
+	if h.Apps == nil {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
 		return
 	}
@@ -62,7 +64,7 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 	var q url.Values
 	ct := r.Header.Get("Content-Type")
 	if strings.Contains(ct, "application/json") {
-		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, shared.MaxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -83,7 +85,7 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 		q = r.Form
 		// Form posts are CSRF-prone (simple request, no preflight). The
 		// consent page carries a per-render token (issue #182).
-		if !s.requireFormCSRF(w, r, q) {
+		if !h.Host.RequireFormCSRF(w, r, q) {
 			return
 		}
 	}
@@ -103,26 +105,26 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 
 	// Persist/refresh the app registration and mint a fresh token for this grant.
 	ensure := apps.AppCreateRequest{ID: req.ClientID, Name: req.Name, Scopes: scopes}
-	if _, ok := s.apps.Get(req.ClientID); ok {
+	if _, ok := h.Apps.Get(req.ClientID); ok {
 		name := req.Name
-		if err := s.apps.Enable(req.ClientID); err != nil {
+		if err := h.Apps.Enable(req.ClientID); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if _, err := s.apps.Update(req.ClientID, apps.AppUpdateRequest{Name: &name, Scopes: &scopes}); err != nil {
+		if _, err := h.Apps.Update(req.ClientID, apps.AppUpdateRequest{Name: &name, Scopes: &scopes}); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	} else {
-		if _, _, err := s.apps.Create(ensure); err != nil {
+		if _, _, err := h.Apps.Create(ensure); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
-	if s.grants == nil {
-		s.grants = apps.NewGrantStore()
+	if h.Grants == nil {
+		h.Grants = apps.NewGrantStore()
 	}
-	code, err := s.grants.Issue(apps.GrantCode{
+	code, err := h.Grants.Issue(apps.GrantCode{
 		AppID:      req.ClientID,
 		AppName:    req.Name,
 		Scopes:     scopes,
@@ -133,15 +135,15 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to issue grant code")
 		return
 	}
-	s.invalidateCaches()
-	withPeerLog(slog.With("handler", "app_authorize"), r).
+	h.Host.InvalidateCaches()
+	h.Host.Logger(r, "app_authorize").
 		Info("third-party data grant", "app_id", req.ClientID, "scopes", scopes)
 
 	if strings.Contains(ct, "application/json") {
 		shared.WriteJSON(w, map[string]any{
 			"code":  code,
 			"state": req.State,
-			"app":   mustAppView(s.apps, req.ClientID),
+			"app":   mustAppView(h.Apps, req.ClientID),
 		})
 		return
 	}
@@ -157,16 +159,16 @@ func mustAppView(store *apps.Store, id string) apps.AppView {
 // HandleAppToken redeems a one-time grant code for a third-party app token.
 //
 // POST /v1/apps/token  {"code":"aeg_grant_…"}
-func (s *Server) HandleAppToken(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAppToken(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if s.apps == nil || s.grants == nil {
+	if h.Apps == nil || h.Grants == nil {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
 		return
 	}
-	body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
+	body, ok := shared.ReadBodyLimited(w, r, shared.MaxAdminBodyBytes)
 	if !ok {
 		return
 	}
@@ -182,12 +184,12 @@ func (s *Server) HandleAppToken(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusBadRequest, "code is required")
 		return
 	}
-	grant, ok := s.grants.Consume(code)
+	grant, ok := h.Grants.Consume(code)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest, "invalid or expired grant code")
 		return
 	}
-	view, token, err := s.apps.Rotate(grant.AppID)
+	view, token, err := h.Apps.Rotate(grant.AppID)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
@@ -205,12 +207,12 @@ func (s *Server) HandleAppToken(w http.ResponseWriter, r *http.Request) {
 // app is disabled until the owner grants again.
 //
 // POST /v1/apps/revoke   Authorization: Bearer aeg_app_…
-func (s *Server) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if s.apps == nil {
+	if h.Apps == nil {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
 		return
 	}
@@ -226,13 +228,13 @@ func (s *Server) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusUnauthorized, "app token required")
 		return
 	}
-	id, err := s.apps.RevokeByToken(token)
+	id, err := h.Apps.RevokeByToken(token)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.invalidateCaches()
-	withPeerLog(slog.With("handler", "app_revoke"), r).
+	h.Host.InvalidateCaches()
+	h.Host.Logger(r, "app_revoke").
 		Info("third-party app disconnected", "app_id", id)
 	shared.WriteJSON(w, map[string]any{"status": "revoked", "app_id": id})
 }
@@ -242,7 +244,7 @@ func (s *Server) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
 // still requires Aegis owner auth.
 //
 // GET /demo/third-party
-func (s *Server) HandleThirdPartyDemo(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleThirdPartyDemo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

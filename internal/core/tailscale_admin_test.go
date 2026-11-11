@@ -42,7 +42,7 @@ func TestTailscaleAdminKey_PersistPresenceOnly(t *testing.T) {
 	})
 	req := adminRequest(http.MethodPost, "/v1/admin/setup/immich/tailnet_save", "admin-key", string(body))
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminOnboarding)(w, req)
+	srv.AdminMiddleware(srv.admin().HandleAdminOnboarding)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("save status = %d body=%s", w.Code, w.Body.String())
 	}

@@ -1,4 +1,4 @@
-package core
+package admin
 
 import (
 	"encoding/json"
@@ -56,25 +56,25 @@ type SyncEnqueueRequest struct {
 }
 
 // HandleAdminSync reports queue state (GET) or enqueues work (POST).
-func (s *Server) HandleAdminSync(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminSync(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		s.writeSyncStatus(w)
+		h.writeSyncStatus(w)
 	case http.MethodPost:
-		s.handleSyncEnqueue(w, r)
+		h.handleSyncEnqueue(w, r)
 	default:
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
-func (s *Server) writeSyncStatus(w http.ResponseWriter) {
-	store := s.syncJobs
+func (h *Handlers) writeSyncStatus(w http.ResponseWriter) {
+	store := h.SyncJobs
 	status := SyncStatus{
 		Enabled: store != nil && store.Enabled(),
 		Jobs:    []syncjobs.SyncJob{},
 	}
-	if s.syncWorker != nil {
-		status.Workers = s.syncWorker.Workers()
+	if h.SyncWorker != nil {
+		status.Workers = h.SyncWorker.Workers()
 	}
 	if store != nil {
 		status.StorePath = store.Path()
@@ -87,17 +87,17 @@ func (s *Server) writeSyncStatus(w http.ResponseWriter) {
 			status.ByJobType = b.ByJobType
 		}
 	}
-	if s.copyLedger != nil {
-		status.Freshness = s.copyLedger.FreshnessRollup()
+	if h.Copies != nil {
+		status.Freshness = h.Copies.FreshnessRollup()
 	}
-	if s.syncSchedules != nil {
-		status.Schedules = s.syncSchedules.List()
+	if h.SyncSchedules != nil {
+		status.Schedules = h.SyncSchedules.List()
 	}
 	if store != nil && store.Enabled() {
 		status.Paused = store.Paused()
 	}
-	if s.syncRunners != nil {
-		status.Kinds = s.syncRunners.Kinds()
+	if h.SyncRunners != nil {
+		status.Kinds = h.SyncRunners.Kinds()
 	}
 	shared.WriteJSON(w, status)
 }
@@ -107,22 +107,22 @@ func (s *Server) writeSyncStatus(w http.ResponseWriter) {
 // whole queue. Queued work for the scope moves to `paused` and new enqueues
 // land there too. In-flight steps keep running — cancel them individually if
 // they must stop.
-func (s *Server) HandleAdminSyncPause(w http.ResponseWriter, r *http.Request) {
-	s.handleSyncPause(w, r, true)
+func (h *Handlers) HandleAdminSyncPause(w http.ResponseWriter, r *http.Request) {
+	h.handleSyncPause(w, r, true)
 }
 
 // HandleAdminSyncResume re-arms a paused scope:
 // POST /v1/admin/sync/resume. Its `paused` jobs go back to `queued`.
-func (s *Server) HandleAdminSyncResume(w http.ResponseWriter, r *http.Request) {
-	s.handleSyncPause(w, r, false)
+func (h *Handlers) HandleAdminSyncResume(w http.ResponseWriter, r *http.Request) {
+	h.handleSyncPause(w, r, false)
 }
 
-func (s *Server) handleSyncPause(w http.ResponseWriter, r *http.Request, pause bool) {
+func (h *Handlers) handleSyncPause(w http.ResponseWriter, r *http.Request, pause bool) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if s.syncJobs == nil || !s.syncJobs.Enabled() {
+	if h.SyncJobs == nil || !h.SyncJobs.Enabled() {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
 		return
 	}
@@ -148,29 +148,29 @@ func (s *Server) handleSyncPause(w http.ResponseWriter, r *http.Request, pause b
 	}
 	var err error
 	if pause {
-		err = s.syncJobs.Pause(scope, req.Reason)
+		err = h.SyncJobs.Pause(scope, req.Reason)
 	} else {
-		err = s.syncJobs.Resume(scope)
+		err = h.SyncJobs.Resume(scope)
 	}
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to update sync pause")
 		return
 	}
 	shared.WriteJSON(w, map[string]any{
-		"paused": s.syncJobs.Paused(),
+		"paused": h.SyncJobs.Paused(),
 		"scope":  scope,
-		"counts": s.syncJobs.Counts("", ""),
+		"counts": h.SyncJobs.Counts("", ""),
 	})
 }
 
 // HandleAdminSyncSchedule toggles a recurring template:
 // POST /v1/admin/sync/schedules/{id}/enable | /disable
-func (s *Server) HandleAdminSyncSchedule(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminSyncSchedule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if s.syncSchedules == nil || !s.syncSchedules.Enabled() {
+	if h.SyncSchedules == nil || !h.SyncSchedules.Enabled() {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "sync schedules disabled")
 		return
 	}
@@ -199,7 +199,7 @@ func (s *Server) HandleAdminSyncSchedule(w http.ResponseWriter, r *http.Request)
 		}
 		sid = sid*10 + int64(ch-'0')
 	}
-	sc, ok, err := s.syncSchedules.SetEnabled(sid, enable)
+	sc, ok, err := h.SyncSchedules.SetEnabled(sid, enable)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to update sync schedule")
 		return
@@ -211,8 +211,8 @@ func (s *Server) HandleAdminSyncSchedule(w http.ResponseWriter, r *http.Request)
 	shared.WriteJSON(w, sc)
 }
 
-func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
-	if s.syncJobs == nil || !s.syncJobs.Enabled() {
+func (h *Handlers) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
+	if h.SyncJobs == nil || !h.SyncJobs.Enabled() {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
 		return
 	}
@@ -238,8 +238,8 @@ func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusBadRequest, "kind and job_type are required")
 		return
 	}
-	if s.syncRunners != nil {
-		if _, ok := s.syncRunners.For(req.Kind, req.JobType); !ok {
+	if h.SyncRunners != nil {
+		if _, ok := h.SyncRunners.For(req.Kind, req.JobType); !ok {
 			shared.WriteJSONError(w, http.StatusBadRequest,
 				"no sync runner for kind="+req.Kind+" job_type="+req.JobType)
 			return
@@ -252,25 +252,25 @@ func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
 		// not stack duplicate ingest runs.
 		entityKey = strings.TrimSpace(req.Service)
 	}
-	job, err := s.syncJobs.Enqueue(syncjobs.NewSyncEnqueue(
+	job, err := h.SyncJobs.Enqueue(syncjobs.NewSyncEnqueue(
 		req.Kind, req.JobType, req.Service, entityKey, req.Payload))
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to enqueue sync job")
 		return
 	}
-	if s.syncWorker != nil {
-		s.syncWorker.Kick()
+	if h.SyncWorker != nil {
+		h.SyncWorker.Kick()
 	}
 	shared.WriteJSON(w, job)
 }
 
 // HandleAdminSyncCancel parks a queued or running job: POST /v1/admin/sync/{id}/cancel
-func (s *Server) HandleAdminSyncCancel(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) HandleAdminSyncCancel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if s.syncJobs == nil || !s.syncJobs.Enabled() {
+	if h.SyncJobs == nil || !h.SyncJobs.Enabled() {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
 		return
 	}
@@ -281,7 +281,7 @@ func (s *Server) HandleAdminSyncCancel(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusBadRequest, "job id required")
 		return
 	}
-	job, err := s.syncJobs.Cancel(id)
+	job, err := h.SyncJobs.Cancel(id)
 	if errors.Is(err, syncjobs.ErrSyncJobNotFound) {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown sync job")
 		return
@@ -292,8 +292,8 @@ func (s *Server) HandleAdminSyncCancel(w http.ResponseWriter, r *http.Request) {
 	}
 	// Stop the in-flight step too — parking the row alone would let a runner
 	// keep working on work the operator just cancelled.
-	if s.syncWorker != nil {
-		s.syncWorker.CancelJob(id)
+	if h.SyncWorker != nil {
+		h.SyncWorker.CancelJob(id)
 	}
 	shared.WriteJSON(w, job)
 }

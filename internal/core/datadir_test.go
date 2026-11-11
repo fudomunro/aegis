@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"github.com/fudomunro/aegis/internal/admin"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -267,11 +268,11 @@ func TestAdminSummary_IncludesDataDir(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminSummary)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var payload AdminSummary
+	var payload admin.AdminSummary
 	if err := json.NewDecoder(w.Body).Decode(&payload); err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +282,7 @@ func TestAdminSummary_IncludesDataDir(t *testing.T) {
 }
 
 func TestAdminUI_ShowsDataDir(t *testing.T) {
-	data, err := os.ReadFile("web/admin.html")
+	data, err := os.ReadFile("../admin/web/admin.html")
 	if err != nil {
 		t.Fatal(err)
 	}

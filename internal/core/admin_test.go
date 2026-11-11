@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/admin"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
@@ -56,7 +57,7 @@ func TestHandleAdmin_HTMLShell(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -101,7 +102,7 @@ func TestHandleAdmin_FriendlyShellPaths(t *testing.T) {
 	} {
 		req := httptest.NewRequest("GET", path, nil)
 		w := httptest.NewRecorder()
-		srv.HandleAdmin(w, req)
+		srv.admin().HandleAdmin(w, req)
 		if w.Code != http.StatusOK {
 			t.Fatalf("GET %s status = %d, want 200", path, w.Code)
 		}
@@ -113,7 +114,7 @@ func TestHandleAdmin_FriendlyShellPaths(t *testing.T) {
 	for _, path := range []string{"/nope", "/v1/admin/nope", "/v1/library"} {
 		req := httptest.NewRequest("GET", path, nil)
 		w := httptest.NewRecorder()
-		srv.HandleAdmin(w, req)
+		srv.admin().HandleAdmin(w, req)
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("GET %s status = %d, want 404", path, w.Code)
 		}
@@ -121,7 +122,7 @@ func TestHandleAdmin_FriendlyShellPaths(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/library", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST /library status = %d, want 405", w.Code)
 	}
@@ -164,7 +165,7 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminSummary)(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
@@ -182,7 +183,7 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 		}
 	}
 
-	var summary AdminSummary
+	var summary admin.AdminSummary
 	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
 		t.Fatalf("parse summary: %v", err)
 	}
@@ -248,7 +249,7 @@ func TestHandleAdminCacheClear(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/admin/cache/clear", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminCacheClear)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminCacheClear)(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
@@ -271,7 +272,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminMailStatus)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminMailStatus)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -327,7 +328,7 @@ func TestHandleAdminMailDisabled(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminMailStatus)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminMailStatus)(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("disabled status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -352,13 +353,13 @@ func TestAdminSummary_SupportsPhotoPicker(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminSummary)(w, req)
 
-	var summary AdminSummary
+	var summary admin.AdminSummary
 	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
 		t.Fatal(err)
 	}
-	byID := map[string]AdminService{}
+	byID := map[string]admin.AdminService{}
 	for _, svc := range summary.Services {
 		byID[svc.ID] = svc
 	}
@@ -374,7 +375,7 @@ func TestHandleAdmin_HTMLIncludesPhotoPick(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	body := w.Body.String()
 	if !strings.Contains(body, "photo-pick") {
 		t.Fatal("expected photo-pick control in admin HTML")
@@ -394,7 +395,7 @@ func TestHandleAdminHTML_ServiceCardHierarchy(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
-	srv.HandleAdmin(w, req)
+	srv.admin().HandleAdmin(w, req)
 	body := w.Body.String()
 	// Primary: name + data flow + connection status. Details stay secondary.
 	for _, want := range []string{
@@ -446,7 +447,7 @@ func TestHandleAdminSummary_ProviderJSONFlags(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	srv.AuthMiddleware(srv.admin().HandleAdminSummary)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -454,7 +455,7 @@ func TestHandleAdminSummary_ProviderJSONFlags(t *testing.T) {
 		!strings.Contains(w.Body.String(), `"has_message_provider"`) {
 		t.Fatalf("summary missing library fan-in flags for services flow block")
 	}
-	var summary AdminSummary
+	var summary admin.AdminSummary
 	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
