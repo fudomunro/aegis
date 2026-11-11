@@ -30,6 +30,7 @@ func newEventsKind(h Host, e *Engine, d Deps) Kind {
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[CalendarEventProvider],
+		writeCapable: providerProvides[CalendarEventWriteProvider],
 		routes: []Route{
 			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve, GrantKey: eventsRouteKey},
 			// Freebusy is the events availability view, not a LibraryKind —

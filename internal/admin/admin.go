@@ -54,6 +54,9 @@ type AdminService struct {
 	// CanonicalFor lists library kinds where this service is the configured
 	// authoritative non-Aegis location (issue #16).
 	CanonicalFor []string `json:"canonical_for,omitempty"`
+	// Sync lists this source's sync relationships (issue #365): one row per
+	// participating kind it provides.
+	Sync []shared.SyncRelationship `json:"sync,omitempty"`
 	ProxyPath    string   `json:"proxy_path"`
 	LoginPath    string   `json:"login_path,omitempty"`
 }
@@ -179,6 +182,7 @@ func (h *Handlers) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			CacheTTL:     svc.CacheTTL,
 			Description:  svc.Description,
 			CanonicalFor: svc.CanonicalFor,
+			Sync:         svc.Sync,
 			HasOAuth:     svc.Connection != "",
 			HasAPIKey:    svc.HasStaticAPIKey,
 			ConnectionID: h.Host.ConnectionIDForService(svc.ID),

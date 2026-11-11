@@ -27,6 +27,10 @@ type ServiceFacts struct {
 	Connection   string
 	Dataset      string
 	CanonicalFor []string
+	// Sync lists this source's sync relationships (issue #365): one row per
+	// sync-participating kind it provides, hub flag and read-only membership
+	// filled by the hub.
+	Sync    []shared.SyncRelationship
 	CacheTTL     string
 	Aliases      []string
 	// HasStaticAPIKey reports a configured static credential (presence only).
@@ -82,6 +86,9 @@ type Host interface {
 	// headers into the encrypted store) — the same seam the setup flows use
 	// (docs/connector-onboarding.md).
 	SetConnection(serviceID string, meta shared.ConnectionMetadata, upd shared.ConnectionUpdate) error
+	// SetSyncRelationship designates (or unsets) a source as the canonical
+	// home of one kind's sync group (issue #365).
+	SetSyncRelationship(serviceID string, rel shared.SyncRelationship) error
 	// SetTailscaleAdminSettings persists operator Tailscale Admin settings.
 	SetTailscaleAdminSettings(upd shared.TailscaleAdminUpdate) error
 

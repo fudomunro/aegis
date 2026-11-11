@@ -34,6 +34,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch playlists",
 		AppReadable:      true,
 		CanonicalAllowed: true,
+		SyncParticipant: true,
 		DefaultNone:      false,
 		Search:           &SearchSpec{Fields: []string{"name", "description"}, TitleField: "name"},
 	},
@@ -126,6 +127,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch contacts",
 		AppReadable:      true,
 		CanonicalAllowed: true,
+		SyncParticipant: true,
 		DefaultNone:      false,
 		Search:           &SearchSpec{Fields: []string{"name", "emails", "phones", "handles", "organization"}, TitleField: "name"},
 	},
@@ -178,6 +180,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:           "failed to fetch calendar events",
 		AppReadable:       true,
 		CanonicalAllowed:  true,
+		SyncParticipant:  true,
 		DefaultNone:       false,
 		ExtraInstructions: " For scheduling or availability-only questions use GET {root}/v1/library/freebusy — busy intervals only (start_at, end_at, all_day); never includes titles or attendees.",
 		Search:            &SearchSpec{Fields: []string{"title", "description", "location", "calendar_name"}, TitleField: "title"},
@@ -345,6 +348,25 @@ func CanonicalKindIDs() []string {
 func IsCanonicalKindID(id string) bool {
 	k := BuiltinKindByID(id)
 	return k != nil && k.CanonicalAllowed
+}
+
+// SyncParticipantKindIDs returns kinds that take part in sync relationships
+// (issue #365): connecting a source establishes a row per kind provided.
+func SyncParticipantKindIDs() []string {
+	out := make([]string, 0, len(BuiltinLibraryKinds))
+	for _, k := range BuiltinLibraryKinds {
+		if k.SyncParticipant {
+			out = append(out, k.ID)
+		}
+	}
+	return out
+}
+
+// IsSyncParticipantKindID reports whether the kind takes part in sync
+// relationships (issue #365).
+func IsSyncParticipantKindID(id string) bool {
+	k := BuiltinKindByID(id)
+	return k != nil && k.SyncParticipant
 }
 
 // Register the built-in kind rules with the shared rule table at package

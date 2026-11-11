@@ -36,6 +36,10 @@ type Kind interface {
 	Routes() []Route
 	// Provides reports whether a connector instance feeds this kind.
 	Provides(connector any) bool
+	// WriteCapable reports whether the connector can receive writes for
+	// this kind (issue #365) — the gate for designating a sync hub and for
+	// converging a member in the other direction.
+	WriteCapable(connector any) bool
 	// HasProviders reports whether any source can feed this kind.
 	HasProviders(h Host) bool
 	// Readable reports whether at least one non-blocked service allows
@@ -107,14 +111,21 @@ func RouteDecls() []Route {
 // providerKind is the common shape for kinds fed by connectors
 // implementing a provider interface (the newKindRuntime[P] pattern).
 type providerKind struct {
-	def      LibraryKind
-	routes   []Route
-	provides func(any) bool
+	def         LibraryKind
+	routes      []Route
+	provides    func(any) bool
+	writeCapable func(any) bool
 }
 
 func (k providerKind) Def() LibraryKind            { return k.def }
 func (k providerKind) Routes() []Route             { return k.routes }
 func (k providerKind) Provides(connector any) bool { return k.provides(connector) }
+
+// WriteCapable reports whether connector can receive writes for this kind.
+// Kinds without a write provider are read-only everywhere.
+func (k providerKind) WriteCapable(connector any) bool {
+	return k.writeCapable != nil && k.writeCapable(connector)
+}
 
 // HasProviders reports whether any registered connector provides P.
 func (k providerKind) HasProviders(h Host) bool {

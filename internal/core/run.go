@@ -555,6 +555,11 @@ func Run() {
 	// connector is its own ingest; Takeout is ingest-only.
 	srv.wireMailIngests()
 
+	// Sync relationships (issue #365): one row per participating kind each
+	// connected source provides. Idempotent — this pass is the migration over
+	// existing connections and canonical_for.
+	srv.EstablishSyncRelationships()
+
 	// Sync worker (issue #227): drains the job queue in-process. Runners
 	// need the connector map above, so this starts after registration. The
 	// registry lives on the Server too, so admin enqueue can validate a

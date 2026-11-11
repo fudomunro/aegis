@@ -2258,6 +2258,65 @@
     ).join("");
   }
 
+  // Sync relationships (issue #365): one row per kind this source provides,
+  // with the group's hub designation editable right on the card.
+  function serviceSyncRows(svc) {
+    const rels = svc.sync || [];
+    if (!rels.length) return "";
+    const rows = rels.map((rel) => {
+      const badges = [];
+      if (rel.canonical) {
+        badges.push('<span class="badge badge-blue">canonical home</span>');
+      }
+      if (rel.read_only) {
+        badges.push('<span class="badge">read-only member</span>');
+      }
+      const members = (rel.members || []).map(escapeHtml).join(", ");
+      const toggle = rel.read_only
+        ? ""
+        : ' <button class="link-btn" data-sync-toggle="' + escapeHtml(svc.id) + '"' +
+          ' data-sync-kind="' + escapeHtml(rel.kind) + '"' +
+          ' data-sync-canonical="' + (rel.canonical ? "0" : "1") + '">' +
+          (rel.canonical ? "Unset hub" : "Make canonical home") + "</button>";
+      return '<div class="flow-row">' +
+        '<span class="flow-label">' + escapeHtml(rel.kind) + "</span>" +
+        '<span class="flow-value">' + (badges.join(" ") || "member") +
+        (members ? ' <span class="flow-note">· group: ' + members + "</span>" : "") +
+        toggle + "</span></div>";
+    }).join("");
+    return '<div class="meta"><strong>Sync</strong></div>' + rows +
+      '<div class="meta flow-note">Hub = canonical home of the kind\'s sync group; edits reassign it across the group.</div>';
+  }
+
+  async function toggleSyncHub(btn) {
+    const id = btn.getAttribute("data-sync-toggle");
+    const kind = btn.getAttribute("data-sync-kind");
+    const canonical = btn.getAttribute("data-sync-canonical") === "1";
+    const status = document.getElementById("sync-status-" + id);
+    if (status) {
+      status.textContent = "Saving…";
+      status.className = "perm-status";
+    }
+    try {
+      await api("/v1/admin/services/" + encodeURIComponent(id) + "/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: kind, canonical: canonical }),
+      });
+      await loadSummary();
+      renderServices($("service-filter").value);
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      if (status) {
+        status.textContent = "Failed: " + err.message;
+        status.className = "perm-status err";
+      }
+    }
+  }
+
   function renderServices(filterText) {
     if (!summary) return;
     const q = (filterText || "").trim().toLowerCase();
@@ -2316,7 +2375,8 @@
             "</div>" +
             '<div class="svc-details">' +
               '<div class="meta">' + escapeHtml(svc.description || svc.endpoint || "No description") + "</div>" +
-              aliases + oauthBits + canonicalBadge +
+              aliases + oauthBits + canonicalBadge + serviceSyncRows(svc) +
+              '<div class="perm-status" id="sync-status-' + escapeHtml(svc.id) + '"></div>' +
               '<div class="meta">Cache TTL: <code>' + escapeHtml(svc.cache_ttl) + "</code>" +
                 (svc.proxy_path ? ' · proxy <code>' + escapeHtml(svc.proxy_path) + "</code>" : "") +
                 (svc.endpoint ? ' · endpoint <code>' + escapeHtml(svc.endpoint) + "</code>" : "") +
@@ -4391,6 +4451,11 @@ function selectTab(name, opts) {
 
   $("quicken-import").addEventListener("click", () => runQuickenImport());
   $("quicken-refresh").addEventListener("click", () => loadQuickenStatus());
+  document.addEventListener("click", (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("[data-sync-toggle]") : null;
+    if (btn) toggleSyncHub(btn);
+  });
+
   document.querySelectorAll("[data-setup-service]").forEach((host) => loadSetupPanel(host));
   loadQuickenStatus();
 

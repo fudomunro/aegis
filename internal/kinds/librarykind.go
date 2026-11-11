@@ -56,6 +56,12 @@ type LibraryKind struct {
 	// canonical_for list (issue #16).
 	CanonicalAllowed bool
 
+	// SyncParticipant reports whether this kind takes part in sync
+	// relationships (issue #365): connecting a source establishes one
+	// relationship row per participating kind it provides. Starter set is
+	// contacts, events, and playlists; per-kind identity gaps gate the rest.
+	SyncParticipant bool
+
 	// DefaultNone keeps the kind hidden unless a permissions map / data
 	// grant names it explicitly (places pattern, issue #142).
 	DefaultNone bool
