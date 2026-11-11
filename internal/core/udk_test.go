@@ -11,6 +11,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // writeSchemaFile drops a schema fixture on disk. The udk package tests keep
@@ -41,7 +42,7 @@ func TestLoadUserDefinedKinds_FromExamplePack(t *testing.T) {
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udks = reg
-	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: policy.AccessRead})
+	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: shared.AccessRead})
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -112,7 +113,7 @@ func TestServer_UDKRouteAndAggregate(t *testing.T) {
 	srv.udks = reg
 	srv.registerUserDefinedKinds()
 	// Packs cannot self-enable; an admin data grant must name the kind.
-	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: policy.AccessRead})
+	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: shared.AccessRead})
 
 	schema, _ := reg.Get("reading-list")
 	handler := srv.routeHandler(schema.Path)

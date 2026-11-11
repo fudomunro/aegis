@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -150,9 +149,9 @@ func LoadUserDefinedKinds(dir, overlayPath string, logger *slog.Logger) (*Regist
 		// DefaultAccess is admin-display metadata only (packs cannot grant
 		// agent access); canonicalize the level token here at the policy
 		// boundary (issue #15 review).
-		schema.DefaultAccess = policy.NormalizeAccess(schema.DefaultAccess)
+		schema.DefaultAccess = shared.NormalizeAccess(schema.DefaultAccess)
 		if schema.DefaultAccess == "" {
-			schema.DefaultAccess = policy.AccessNone
+			schema.DefaultAccess = shared.AccessNone
 		}
 		if _, exists := reg.byID[schema.ID]; exists {
 			if logger != nil {

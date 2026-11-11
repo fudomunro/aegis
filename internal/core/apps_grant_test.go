@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/apps"
-	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
@@ -89,7 +89,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 
 	// App exists with the freebusy route grant.
 	view, ok := store.Get("eco-demo")
-	if !ok || view.Scopes["freebusy"] != policy.AccessRead {
+	if !ok || view.Scopes["freebusy"] != shared.AccessRead {
 		t.Fatalf("app = %+v ok=%v", view, ok)
 	}
 
@@ -206,7 +206,7 @@ func TestAppAuthorize_JSONGrantAndAppTokenDenied(t *testing.T) {
 	}
 
 	// App token must not call authorize (cannot mint more grants).
-	_, token := createTestApp(t, store, "other", policy.GrantMap{"events": policy.AccessRead})
+	_, token := createTestApp(t, store, "other", shared.GrantMap{"events": shared.AccessRead})
 	req = httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)

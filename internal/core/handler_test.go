@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestAuthMiddleware_ValidBearer(t *testing.T) {
@@ -543,7 +544,7 @@ func TestWriteGuardrailResponse_Block(t *testing.T) {
 
 func TestHandlePreRequest_IncludesPermissionNotice(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"default": {Default: policy.AccessRead}, "player": {Default: policy.AccessNone}, "recommendations": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"default": {Default: shared.AccessRead}, "player": {Default: shared.AccessNone}, "recommendations": {Default: shared.AccessNone}},
 
 		Services: []Service{
 			{

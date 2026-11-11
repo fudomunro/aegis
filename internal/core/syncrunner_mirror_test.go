@@ -14,6 +14,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // --- mirror runner ---
@@ -102,8 +103,8 @@ func (s *stubMirrorSource) ListUserLikedTracksPage(ctx context.Context, cursor s
 func mirrorStubServer(t *testing.T, src mirrorSource, dst mirrorTarget) *Server {
 	t.Helper()
 	grants := policy.DataGrants{
-		"playlists": {Default: policy.AccessFull},
-		"tracks":    {Default: policy.AccessFull},
+		"playlists": {Default: shared.AccessFull},
+		"tracks":    {Default: shared.AccessFull},
 	}
 	srv := testServerWithBase(&Config{typePolicies: grants, Services: []Service{
 		{ID: "spotify", Name: "Spotify", Action: "inject"},

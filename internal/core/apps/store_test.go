@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func testStore(t *testing.T) *Store {
@@ -17,7 +17,7 @@ func testStore(t *testing.T) *Store {
 	return store
 }
 
-func createTestApp(t *testing.T, store *Store, id string, scopes policy.GrantMap) (view AppView, token string) {
+func createTestApp(t *testing.T, store *Store, id string, scopes shared.GrantMap) (view AppView, token string) {
 	t.Helper()
 	view, token, err := store.Create(AppCreateRequest{ID: id, Name: id, Scopes: scopes})
 	if err != nil {
@@ -31,7 +31,7 @@ func TestStore_CreateReturnsTokenOnce(t *testing.T) {
 	view, token, err := store.Create(AppCreateRequest{
 		ID:     "eco",
 		Name:   "Event Coordinator",
-		Scopes: policy.GrantMap{"freebusy": policy.AccessRead},
+		Scopes: shared.GrantMap{"freebusy": shared.AccessRead},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -54,18 +54,18 @@ func TestStore_CreateReturnsTokenOnce(t *testing.T) {
 		t.Fatalf("list hint mismatch")
 	}
 	got, ok := store.Get("eco")
-	if !ok || got.Scopes["freebusy"] != policy.AccessRead {
+	if !ok || got.Scopes["freebusy"] != shared.AccessRead {
 		t.Fatalf("get = %+v ok=%v", got, ok)
 	}
 	// Scopes default to deny-all when not listed.
-	if got.Scopes[policy.DefaultKey] != policy.AccessNone {
-		t.Fatalf("default scope = %q, want none", got.Scopes[policy.DefaultKey])
+	if got.Scopes[shared.DefaultKey] != shared.AccessNone {
+		t.Fatalf("default scope = %q, want none", got.Scopes[shared.DefaultKey])
 	}
 }
 
 func TestStore_FindByTokenAndRotate(t *testing.T) {
 	store := testStore(t)
-	_, token := createTestApp(t, store, "eco", policy.GrantMap{"events": policy.AccessRead})
+	_, token := createTestApp(t, store, "eco", shared.GrantMap{"events": shared.AccessRead})
 	if store.FindByToken(token) == nil {
 		t.Fatal("expected token to resolve")
 	}
@@ -87,7 +87,7 @@ func TestStore_FindByTokenAndRotate(t *testing.T) {
 
 func TestStore_DeleteAndDisable(t *testing.T) {
 	store := testStore(t)
-	_, token := createTestApp(t, store, "eco", policy.GrantMap{"events": policy.AccessRead})
+	_, token := createTestApp(t, store, "eco", shared.GrantMap{"events": shared.AccessRead})
 	disabled := true
 	if _, err := store.Update("eco", AppUpdateRequest{Disabled: &disabled}); err != nil {
 		t.Fatalf("Update disabled: %v", err)
@@ -105,13 +105,13 @@ func TestStore_DeleteAndDisable(t *testing.T) {
 
 func TestStore_CreateRejectsBadIDAndScopes(t *testing.T) {
 	store := testStore(t)
-	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: policy.GrantMap{"events": policy.AccessRead}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: shared.GrantMap{"events": shared.AccessRead}}); err == nil {
 		t.Fatal("expected bad id rejected")
 	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.GrantMap{"tracks": "freebusy"}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: shared.GrantMap{"tracks": "freebusy"}}); err == nil {
 		t.Fatal("expected freebusy on tracks rejected")
 	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.GrantMap{"events": "write-only-oops"}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: shared.GrantMap{"events": "write-only-oops"}}); err == nil {
 		t.Fatal("expected unknown level rejected")
 	}
 }

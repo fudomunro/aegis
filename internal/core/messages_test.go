@@ -122,7 +122,7 @@ func TestHandleLibraryMessages_NoProviders(t *testing.T) {
 
 func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"messages": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"messages": {Default: shared.AccessNone}},
 		Services: []Service{{
 			ID:     "google-gmail",
 			Name:   "Gmail",

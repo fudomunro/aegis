@@ -304,7 +304,7 @@ func TestSpotifyConnector_ListUserPlaylists_Unauthorized(t *testing.T) {
 
 func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"playlists": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"playlists": {Default: shared.AccessNone}},
 
 		Services: []Service{
 			{
@@ -471,7 +471,7 @@ func TestHandleLibraryTracks_UnauthorizedService(t *testing.T) {
 
 func TestHandleLibraryTracks_PermissionDenied(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"tracks": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"tracks": {Default: shared.AccessNone}},
 
 		Services: []Service{
 			{
@@ -823,7 +823,7 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 
 func TestHandleLibraryAlbums_PermissionDenied(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"albums": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"albums": {Default: shared.AccessNone}},
 		Services: []Service{
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},

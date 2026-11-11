@@ -260,7 +260,7 @@ func TestLibraryArtists_ErrorService(t *testing.T) {
 
 func TestLibraryArtists_PermissionDenied(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"artists": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"artists": {Default: shared.AccessNone}},
 		Services: []Service{{
 			ID: "spotify", Name: "Spotify", Action: "inject",
 		}},
@@ -308,7 +308,7 @@ func TestLibraryReadableHelpers(t *testing.T) {
 
 	// Denied owner grant + only a blocked service remains → nothing readable.
 	srv2 := testServerWithBase(&Config{
-		typePolicies: policy.DataGrants{policy.DefaultKey: {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{shared.DefaultKey: {Default: shared.AccessNone}},
 		Services: []Service{
 			{ID: "b", Name: "B", Action: "block"},
 			{ID: "c", Name: "C", Action: "inject"},
@@ -766,8 +766,8 @@ func TestAllowDataPermission_FollowingUsesArtists(t *testing.T) {
 	svc := &Service{ID: "spotify", Name: "Spotify"}
 	srv := testServerWithBase(&Config{
 		typePolicies: policy.DataGrants{
-			policy.DefaultKey: {Default: policy.AccessRead},
-			"artists":         {Default: policy.AccessNone},
+			shared.DefaultKey: {Default: shared.AccessRead},
+			"artists":         {Default: shared.AccessNone},
 		},
 		Services: []Service{*svc},
 	}, "https://aegis.example.com")

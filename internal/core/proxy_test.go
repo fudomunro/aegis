@@ -148,7 +148,7 @@ func TestHandleServiceProxy_BlockedService(t *testing.T) {
 
 func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"playlists": {Default: policy.AccessNone}, "default": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"playlists": {Default: shared.AccessNone}, "default": {Default: shared.AccessRead}},
 
 		Services: []Service{
 			{
@@ -174,7 +174,7 @@ func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 func TestHandleServiceProxy_ContentPathAllowedByPermission(t *testing.T) {
 	conn := &testContentConnector{}
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"messages": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"messages": {Default: shared.AccessRead}},
 
 		Services: []Service{
 			{

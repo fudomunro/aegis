@@ -1,7 +1,9 @@
 // Package kinds owns the library aggregate pipeline over a narrow Host
 // seam that the core hub implements (issue #312), and the kind registry,
 // neutral models, and merge for library kinds (issue #325). Authorization
-// vocabulary comes from core/policy; the package never imports the hub.
+// vocabulary and the request rule map come from internal/shared; stored
+// grant resolution is internal/core/policy. The package imports
+// internal/shared only — never the hub.
 package kinds
 
 import (
@@ -10,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Principal says which kind of key a request presented. It decides only
@@ -99,10 +101,10 @@ type Host interface {
 	// AllowsKindMethod and redaction follows Level. App scopes, data-scope
 	// grants, and the owner map all resolve here — there is no second
 	// policy layer to merge at request time.
-	Grants(r *http.Request) (policy.GrantMap, Principal)
+	Grants(r *http.Request) (shared.GrantMap, Principal)
 	// OwnerGrants is the owner-tier rule map: the view used for internal
 	// fetches and for what a reduced principal is being narrowed from.
-	OwnerGrants() policy.GrantMap
+	OwnerGrants() shared.GrantMap
 	// RecordAccess records one redacted access event.
 	RecordAccess(r *http.Request, ev AccessEvent)
 	// Logger returns the request-scoped logger for a named handler.

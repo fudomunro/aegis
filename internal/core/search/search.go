@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	_ "modernc.org/sqlite"
 )
 
@@ -23,21 +24,6 @@ import (
 type Index struct {
 	db   *sql.DB
 	path string
-}
-
-// Query is one full-text lookup over a kind.
-type Query struct {
-	Kind    string
-	Dataset string
-	Q       string
-	Limit   int
-	Offset  int
-}
-
-// Result is the page of matching documents plus the full hit count.
-type Result struct {
-	Docs  []SearchDocument
-	Total int
 }
 
 // Open opens (creating if needed) the search index at path.
@@ -121,7 +107,7 @@ func (x *Index) Enabled() bool {
 
 // Upsert stores or replaces documents and refreshes their FTS rows. It never
 // deletes: use Sync when a complete fetch can refute stale rows.
-func (x *Index) Upsert(kind, dataset string, docs []SearchDocument) error {
+func (x *Index) Upsert(kind, dataset string, docs []shared.SearchDocument) error {
 	if !x.Enabled() {
 		return fmt.Errorf("search index disabled")
 	}
@@ -149,7 +135,7 @@ func (x *Index) Upsert(kind, dataset string, docs []SearchDocument) error {
 // complete is also the set of services whose membership this fetch may
 // rewrite: a vouch from a service outside complete is preserved on upsert,
 // so a merged row does not lose a degraded source and become refutable later.
-func (x *Index) Sync(kind, dataset string, docs []SearchDocument, complete []string) error {
+func (x *Index) Sync(kind, dataset string, docs []shared.SearchDocument, complete []string) error {
 	if !x.Enabled() {
 		return fmt.Errorf("search index disabled")
 	}
@@ -193,7 +179,7 @@ func (x *Index) Sync(kind, dataset string, docs []SearchDocument, complete []str
 }
 
 // upsertSearchDocs writes documents and refreshes their FTS rows inside tx.
-func upsertSearchDocs(tx *sql.Tx, kind, dataset string, docs []SearchDocument, now string) error {
+func upsertSearchDocs(tx *sql.Tx, kind, dataset string, docs []shared.SearchDocument, now string) error {
 	for _, doc := range docs {
 		if doc.ItemID == "" {
 			continue
@@ -345,9 +331,9 @@ func (x *Index) Count(kind, dataset string) (int, error) {
 // callers clamp to the agent-facing page cap. dataset="" searches every
 // partition; a non-empty
 // dataset restricts to that partition (docs/data-scopes.md).
-func (x *Index) Search(q Query) (Result, error) {
+func (x *Index) Search(q shared.SearchQuery) (shared.SearchResult, error) {
 	if !x.Enabled() {
-		return Result{}, fmt.Errorf("search index disabled")
+		return shared.SearchResult{}, fmt.Errorf("search index disabled")
 	}
 	limit := q.Limit
 	if limit <= 0 {
@@ -372,7 +358,7 @@ func (x *Index) Search(q Query) (Result, error) {
 
 	var total int
 	if err := x.db.QueryRow(`SELECT COUNT(*) `+base, args...).Scan(&total); err != nil {
-		return Result{}, err
+		return shared.SearchResult{}, err
 	}
 
 	// rank orders FTS5 hits by relevance; id tiebreak keeps pages stable.
@@ -381,18 +367,18 @@ func (x *Index) Search(q Query) (Result, error) {
 	args = append(args, limit, offset)
 	rows, err := x.db.Query(querySQL, args...)
 	if err != nil {
-		return Result{}, err
+		return shared.SearchResult{}, err
 	}
 	defer rows.Close()
-	docs := make([]SearchDocument, 0, limit)
+	docs := make([]shared.SearchDocument, 0, limit)
 	for rows.Next() {
 		var (
-			doc         SearchDocument
+			doc         shared.SearchDocument
 			servicesRaw []byte
 			payload     []byte
 		)
 		if err := rows.Scan(&doc.ItemID, &doc.Title, &doc.Body, &servicesRaw, &payload); err != nil {
-			return Result{}, err
+			return shared.SearchResult{}, err
 		}
 		doc.Payload = payload
 		if len(servicesRaw) > 0 {
@@ -401,9 +387,9 @@ func (x *Index) Search(q Query) (Result, error) {
 		docs = append(docs, doc)
 	}
 	if err := rows.Err(); err != nil {
-		return Result{}, err
+		return shared.SearchResult{}, err
 	}
-	return Result{Docs: docs, Total: total}, nil
+	return shared.SearchResult{Docs: docs, Total: total}, nil
 }
 
 // FTSMatchExpr turns user text into a safe FTS5 MATCH expression: AND of

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/apps"
-	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // adminWriteCases are the admin surfaces an LLM agent credential must never
@@ -138,7 +138,7 @@ func TestAdminMiddleware_AppTokenNeverAdmin(t *testing.T) {
 	_, token, err := srv.apps.Create(apps.AppCreateRequest{
 		ID:     "evil-app",
 		Name:   "evil-app",
-		Scopes: policy.GrantMap{"tracks": policy.AccessRead},
+		Scopes: shared.GrantMap{"tracks": shared.AccessRead},
 	})
 	if err != nil {
 		t.Fatalf("create app: %v", err)

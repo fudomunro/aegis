@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -275,11 +276,11 @@ func TestConfig_ConcurrentSetDataGrantsAndReads(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
 			grants := policy.DataGrants{
-				"tracks": {Default: policy.AccessRead},
-				"player": {Default: policy.AccessNone},
+				"tracks": {Default: shared.AccessRead},
+				"player": {Default: shared.AccessNone},
 			}
 			if i%2 == 0 {
-				grants = policy.DataGrants{"playlists": {Default: policy.AccessRead}}
+				grants = policy.DataGrants{"playlists": {Default: shared.AccessRead}}
 			}
 			if err := cfg.SetDataGrants(grants); err != nil {
 				t.Errorf("SetDataGrants: %v", err)

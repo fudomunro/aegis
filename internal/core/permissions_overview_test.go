@@ -25,9 +25,9 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.SeedDataGrant("tracks", policy.DataGrant{Default: policy.AccessRead})
-	cfg.SeedDataGrant("events", policy.DataGrant{Default: policy.AccessRead})
-	cfg.SeedDataGrant("places", policy.DataGrant{Default: policy.AccessRead})
+	cfg.SeedDataGrant("tracks", policy.DataGrant{Default: shared.AccessRead})
+	cfg.SeedDataGrant("events", policy.DataGrant{Default: shared.AccessRead})
+	cfg.SeedDataGrant("places", policy.DataGrant{Default: shared.AccessRead})
 
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
@@ -39,10 +39,10 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if _, _, err := appStore.Create(apps.AppCreateRequest{
 		ID:   "eco-demo",
 		Name: "Event Coordinator",
-		Scopes: policy.GrantMap{
-			"events": policy.AccessRead,
+		Scopes: shared.GrantMap{
+			"events": shared.AccessRead,
 			// Explicit none still counts as relevant for the editor.
-			"tracks": policy.AccessNone,
+			"tracks": shared.AccessNone,
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if _, _, err := appStore.Create(apps.AppCreateRequest{
 		ID:     "disabled-app",
 		Name:   "Disabled App",
-		Scopes: policy.GrantMap{"photos": policy.AccessRead},
+		Scopes: shared.GrantMap{"photos": shared.AccessRead},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing tracks row: %+v", overview.Rows)
 	}
-	if tracks.AgentLevel != policy.AccessRead {
+	if tracks.AgentLevel != shared.AccessRead {
 		t.Fatalf("tracks agent = %q, want read", tracks.AgentLevel)
 	}
 	// Eco named tracks (even as none) — relevant. Mail sync is not.
@@ -95,7 +95,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 		switch acc.ID {
 		case "app:eco-demo":
 			sawEco = true
-			if acc.Level != policy.AccessNone {
+			if acc.Level != shared.AccessNone {
 				t.Fatalf("eco tracks = %q, want none", acc.Level)
 			}
 		case "service:spotify":
@@ -123,13 +123,13 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if !ok {
 		t.Fatal("missing events row")
 	}
-	if events.AgentLevel != policy.AccessRead {
+	if events.AgentLevel != shared.AccessRead {
 		t.Fatalf("events agent = %q", events.AgentLevel)
 	}
 	if len(events.Accessors) != 1 || events.Accessors[0].ID != "app:eco-demo" {
 		t.Fatalf("events accessors = %+v", events.Accessors)
 	}
-	if events.Accessors[0].Level != policy.AccessRead {
+	if events.Accessors[0].Level != shared.AccessRead {
 		t.Fatalf("eco events = %q", events.Accessors[0].Level)
 	}
 
@@ -141,7 +141,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	for _, acc := range messages.Accessors {
 		if acc.ID == syncMailID {
 			foundMail = true
-			if acc.Kind != policy.AccessorSync || acc.Level != policy.AccessRead {
+			if acc.Kind != policy.AccessorSync || acc.Level != shared.AccessRead {
 				t.Fatalf("mail row = %+v", acc)
 			}
 		}
@@ -157,7 +157,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if !ok {
 		t.Fatal("missing places row")
 	}
-	if places.AgentLevel != policy.AccessRead {
+	if places.AgentLevel != shared.AccessRead {
 		t.Fatalf("places agent = %q", places.AgentLevel)
 	}
 	// Disabled app named photos only — not places. Timeline not mounted.
@@ -215,13 +215,13 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 	sawAgentLevel := false
 	for _, row := range overview.Rows {
 		if row.ID == "places" {
-			if row.AgentLevel != policy.AccessNone {
+			if row.AgentLevel != shared.AccessNone {
 				t.Fatalf("agent places = %q, want none", row.AgentLevel)
 			}
 		}
 		if row.ID == "tracks" {
-			if row.AgentLevel != policy.DefaultAccessType {
-				t.Fatalf("agent tracks = %q, want %q", row.AgentLevel, policy.DefaultAccessType)
+			if row.AgentLevel != shared.DefaultAccessType {
+				t.Fatalf("agent tracks = %q, want %q", row.AgentLevel, shared.DefaultAccessType)
 			}
 			sawAgentLevel = true
 		}
@@ -286,7 +286,7 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 	if !ok {
 		t.Fatalf("playlists services = %+v, want spotify", playlists.Accessors)
 	}
-	if spotify.Label != "Spotify" || spotify.Level != policy.AccessRead {
+	if spotify.Label != "Spotify" || spotify.Level != shared.AccessRead {
 		t.Fatalf("spotify = %+v", spotify)
 	}
 	yt, ok := services["service:youtube-music"]

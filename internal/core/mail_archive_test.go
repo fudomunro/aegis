@@ -187,7 +187,7 @@ func TestMailHTTPDisabledAndDenied(t *testing.T) {
 		t.Fatalf("upsert: %v", err)
 	}
 	srv = mailTestServer(t, a)
-	srv.config.typePolicies = policy.DataGrants{"messages": {Default: policy.AccessNone}}
+	srv.config.typePolicies = policy.DataGrants{"messages": {Default: shared.AccessNone}}
 	w = doMessagesFetchReq(t, srv, connectors.GoogleGmailServiceID, "m1")
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("denied code = %d body=%s", w.Code, w.Body.String())

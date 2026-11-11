@@ -9,8 +9,9 @@
 > mid-campaign; append questions here instead. Precedent for a record like
 > this: [`restructure-core-types-connectors.md`](restructure-core-types-connectors.md).
 
-Status: **in progress** — Phase 0 (rules + this record) on branch
-`docs/358-package-boundaries`; code moves P1–P5 not yet started.
+Status: **in progress** — Phase 0 (rules + this record) and P1 (seam
+vocabulary into `internal/shared`; `internal/kinds` imports `shared` only)
+are landed. P2–P5 pending.
 
 Related issues: **#358** (this restructure), **#346** (hookhealth/inject
 extraction — their final homes are settled here), **#325** (dissolution of
@@ -95,26 +96,38 @@ and the credential/observer engines shared by more than one surface:
 ### Shared (grows)
 
 Seam vocabulary moves here so `internal/kinds` can drop every `core/`
-import (this is the issue's second clause):
+import (this is the issue's second clause). Landed in P1, with two shape
+refinements recorded at implementation time:
 
-- **Grant vocabulary** — `GrantMap`, the access-level constants, and the
-  trivial pure lookups (`AllowsMethod`, `Allows`, `Level`). Grant
-  *resolution* over stored configuration stays in `core/policy`.
-- **Dataset-scope vocabulary** — `Scope`, `From`, `Dataset`, `ServiceVisible`.
-  The `data_scopes.json` store and invite-token hashing stay in
-  `core/scopes`.
-- **Search shapes** — `SearchDocument`, `Query`. `internal/kinds` names a
-  `SearchIndex` interface instead of `*search.Index`; the engine stays the
-  concrete implementation, wired hub-side.
-- **Generic bounded TTL cache** — the stdlib-only half of `cache.go`.
-- Audit decision constants need no move: `internal/kinds` already declares
-  its own `DecisionAllow`/`DecisionDeny` on the `Host` seam; it should use
-  those and drop the `core/audit` import.
+- **Grant vocabulary** — `GrantMap` (with its full pure method set:
+  `Allows*`, `Level`, `AllowsKindMethod`, `PrefillDefault`, `Clone`,
+  `AllowedKinds`/`DeniedKinds`), the access-level constants, and
+  `NormalizeAccess` / `AllowsMethod` / `IsAccessLevel`. Stored grant
+  *resolution* stays in `core/policy` (`DataGrant`/`DataGrants` and the
+  `Levels()` materializer — methods live with their type).
+- **Dataset-scope vocabulary** — the **request view** moves, not the store
+  record: `shared.DataScope` (the dataset partition) plus `WithDataScope`,
+  `DataScopeFrom`, `Dataset`, `ServiceVisible`. The stored record
+  (`scopes.Scope` — credentials, `policy.DataGrants`) stays hub-side in
+  `core/scopes` because a stdlib-only leaf cannot reference `core/policy`.
+  `scopes.WithDataScope` attaches the record and the view together, so the
+  nil-vs-empty-dataset distinction (owner principal vs default partition)
+  is preserved exactly.
+- **Search shapes** — `SearchDocument`, and — following shared's
+  domain-prefix convention (`MailIngest*`, `Ownership*`) — `SearchQuery`
+  and `SearchResult` (the freeze sketch said `Query`/`Result`).
+  `internal/kinds` names a `SearchIndex` interface instead of
+  `*search.Index`; the engine stays the concrete implementation, wired
+  hub-side.
+- **Generic bounded TTL cache** — the stdlib-only half of `cache.go`
+  (P2, with the split).
+- Audit decision constants needed no move: `internal/kinds` declares its
+  own `DecisionAllow`/`DecisionDeny` on the `Host` seam and now uses those.
 
 After P1: `internal/kinds` imports `internal/shared` only;
 `internal/connectors` needs no change (it already imports only `shared` and
-`kinds` — the `core/policy` row in the guardrails table is aspirational and
-can be dropped).
+`kinds` — the `core/policy` row in the guardrails table was aspirational
+and is dropped).
 
 ### Mixed-file splits
 
@@ -170,7 +183,7 @@ guardrails table updates in the same commit; the 80% floor never bends.
 | Phase | Scope | Rules/tests touch |
 |-------|-------|-------------------|
 | **P0** | This record, `AGENTS.md` package boundaries, [`glossary.md`](glossary.md) | none (docs only) |
-| **P1** | Seam vocabulary → `internal/shared`; `internal/kinds` drops `core/policy`, `core/scopes`, `core/audit`, `core/search` imports; `SearchIndex` interface lands in kinds | `internal/kinds` row shrinks to `{shared}`; connectors row drops `core/policy` |
+| **P1** | Seam vocabulary → `internal/shared`; `internal/kinds` drops `core/policy`, `core/scopes`, `core/audit`, `core/search` imports; `SearchIndex` interface lands in kinds — **landed** | `internal/kinds` row shrinks to `{shared}`; connectors row drops `core/policy` |
 | **P2** | `internal/library` + `core/search`, `core/links`; splits of `cache.go`, `copy_ledger.go`, `canonical.go`, `handler.go` | add `internal/library` row |
 | **P3** | `internal/admin` + `core/apps`, `core/udk`, scopes store; `searchindex.go` rename | add `internal/admin` row |
 | **P4** | `internal/syncjobs` (promote `core/syncjobs`) + runners, freshness, maintenance, `core/copies` | add `internal/syncjobs` row; drop `core/syncjobs` |

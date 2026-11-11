@@ -20,6 +20,26 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Seam vocabulary moves to `internal/shared` (issue #358, P1).** The
+  shapes the kinds pipeline exchanges with the hub leave `internal/core`
+  sub-packages so `internal/kinds` imports `internal/shared` only. Grant
+  vocabulary (`GrantMap` with its pure method set, the access-level
+  constants, `NormalizeAccess` / `AllowsMethod` / `IsAccessLevel`) moves
+  out of `core/policy`, which keeps stored grant resolution (`DataGrant` /
+  `DataGrants.Levels`, validation, editor view models). The request-side
+  data-scope view (`shared.DataScope` with `WithDataScope` /
+  `DataScopeFrom` / `Dataset` / `ServiceVisible`) moves out of
+  `core/scopes`; the stored record (credentials, stored grants) stays
+  there, and `WithDataScope` attaches both so the owner-vs-default-
+  partition distinction survives unchanged. Search shapes move out of
+  `core/search` as `SearchDocument` / `SearchQuery` / `SearchResult`, and
+  `internal/kinds` binds the engine through its own `SearchIndex`
+  interface instead of `*search.Index`. Kinds drops the `core/audit`
+  import (its own `DecisionAllow`/`DecisionDeny` already cover it). The
+  churn-guardrails table tightens: kinds → `{shared}`; the connectors and
+  UDK rows lose `core/policy`. No product behavior change. Design record:
+  `docs/restructure-packaging.md`.
+
 - **CI runs only the jobs a change can reach (issue #355).** A scope job
   classifies the diff once, and the heavy jobs then run only when the
   change can reach them: Test skips structurally inert diffs (binary blobs,

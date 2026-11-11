@@ -266,7 +266,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	}
 	srv := mailTestServer(t, a)
 	// A messages=none data grant must not block the operator admin panel.
-	srv.config.typePolicies = policy.DataGrants{"messages": {Default: policy.AccessNone}}
+	srv.config.typePolicies = policy.DataGrants{"messages": {Default: shared.AccessNone}}
 
 	req := httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")

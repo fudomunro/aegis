@@ -96,7 +96,7 @@ func TestHandleLibraryDocuments_MetadataRouteStripsExcerpt(t *testing.T) {
 	// Grant map keys are routes (issue #348): documents/metadata serves
 	// titles/dates/tags only and the full documents route is denied.
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"documents/metadata": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"documents/metadata": {Default: shared.AccessRead}},
 		Services: []Service{{
 			ID:     "paperless",
 			Name:   "Paperless-ngx",
@@ -141,7 +141,7 @@ func TestHandleLibraryDocuments_MetadataRouteStripsExcerpt(t *testing.T) {
 
 func TestHandleLibraryDocuments_DeniedByPermission(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"documents": {Default: shared.AccessNone}},
 		Services: []Service{{
 			ID:     "paperless",
 			Name:   "Paperless-ngx",
@@ -223,7 +223,7 @@ func TestHandleLibraryDocumentText_RouteGate(t *testing.T) {
 	// Full text is a read on the documents route: a documents/metadata-only
 	// key is denied (issue #348).
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"documents/metadata": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"documents/metadata": {Default: shared.AccessRead}},
 		Services: []Service{{
 			ID:     "paperless",
 			Name:   "Paperless-ngx",
@@ -244,7 +244,7 @@ func TestHandleLibraryDocumentText_RouteGate(t *testing.T) {
 		t.Fatalf("metadata-only key must not read text: status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	cfg.typePolicies = policy.DataGrants{"documents": {Default: policy.AccessRead}}
+	cfg.typePolicies = policy.DataGrants{"documents": {Default: shared.AccessRead}}
 	srv2 := testServerWithBase(cfg, "https://aegis.example.com")
 	srv2.connectors = map[string]connectors.ServiceConnector{
 		"paperless": &fakeDocumentProvider{text: "full lease text"},

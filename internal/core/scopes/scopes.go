@@ -462,44 +462,24 @@ func (s *Store) Path() string {
 
 type scopeKey struct{}
 
-// WithDataScope attaches the resolved principal scope to the request.
+// WithDataScope attaches the resolved principal scope to the request. The
+// dataset-partition view the kinds pipeline reads is attached alongside it
+// (shared.DataScope); the stored record itself stays hub-side.
 func WithDataScope(r *http.Request, sc *Scope) *http.Request {
 	if sc == nil {
 		return r
 	}
+	r = shared.WithDataScope(r, &shared.DataScope{Dataset: sc.Dataset})
 	return r.WithContext(context.WithValue(r.Context(), scopeKey{}, sc))
 }
 
-// From returns the principal scope for the request, or nil when the
+// From returns the principal scope record for the request, or nil when the
 // caller is the default/owner principal (legacy API key or tailnet identity).
+// Pipeline code that only needs the dataset partition reads shared.Dataset
+// instead.
 func From(r *http.Request) *Scope {
 	sc, _ := r.Context().Value(scopeKey{}).(*Scope)
 	return sc
-}
-
-// Dataset returns the partition id for the request ("" = no filter).
-func Dataset(r *http.Request) string {
-	sc := From(r)
-	if sc == nil {
-		return ""
-	}
-	return sc.Dataset
-}
-
-// ServiceVisible reports whether a service's connector may feed this
-// principal. Services without a dataset are shared (every scope). A dataset
-// bound service is visible only to scopes in that partition. The default
-// scope (empty dataset) sees every service.
-func ServiceVisible(dataset string, sc *Scope) bool {
-	if dataset == "" {
-		return true
-	}
-	if sc == nil {
-		// Default principal: no partition filter, sees shared and all
-		// dataset-bound services (owner view).
-		return true
-	}
-	return sc.Dataset == dataset
 }
 
 // ForceReadOnlyAll marks every data scope read-only (demo lockdown).

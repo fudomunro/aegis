@@ -527,7 +527,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 
 	// Permission-denied: the agent data grant forbids tracks.
 	deniedCfg := &Config{
-		typePolicies: policy.DataGrants{"tracks": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"tracks": {Default: shared.AccessNone}},
 		Services: []Service{
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},

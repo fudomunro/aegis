@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Route is one agent-tier GET/HEAD route owned by a library kind. The
@@ -140,7 +140,7 @@ func readableFor(h Host, kind string) bool {
 		if svc.Action == "block" {
 			continue
 		}
-		if policy.AllowsMethod(level, http.MethodGet) {
+		if shared.AllowsMethod(level, http.MethodGet) {
 			return true
 		}
 	}

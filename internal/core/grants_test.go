@@ -9,31 +9,32 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestPermissions_LevelAndAllows(t *testing.T) {
-	var nilPerms policy.GrantMap
-	if nilPerms.Level("tracks") != policy.AccessNone {
-		t.Fatalf("nil permissions Level(tracks) = %q, want %q", nilPerms.Level("tracks"), policy.AccessNone)
+	var nilPerms shared.GrantMap
+	if nilPerms.Level("tracks") != shared.AccessNone {
+		t.Fatalf("nil permissions Level(tracks) = %q, want %q", nilPerms.Level("tracks"), shared.AccessNone)
 	}
 	if nilPerms.Allows("tracks", http.MethodGet) || nilPerms.Allows("tracks", http.MethodPost) {
 		t.Fatal("nil permissions deny all methods")
 	}
 
-	p := policy.GrantMap{
-		policy.DefaultKey: policy.AccessRead,
-		"playlists":       policy.AccessFull,
-		"player":          policy.AccessNone,
-		"contacts":        policy.AccessWrite,
+	p := shared.GrantMap{
+		shared.DefaultKey: shared.AccessRead,
+		"playlists":       shared.AccessFull,
+		"player":          shared.AccessNone,
+		"contacts":        shared.AccessWrite,
 	}
 
-	if p.Level("tracks") != policy.AccessRead {
+	if p.Level("tracks") != shared.AccessRead {
 		t.Fatalf("default Level(tracks) = %q, want read", p.Level("tracks"))
 	}
-	if p.Level("playlists") != policy.AccessFull {
+	if p.Level("playlists") != shared.AccessFull {
 		t.Fatalf("Level(playlists) = %q, want read-write", p.Level("playlists"))
 	}
-	if p.Level("player") != policy.AccessNone {
+	if p.Level("player") != shared.AccessNone {
 		t.Fatalf("Level(player) = %q, want none", p.Level("player"))
 	}
 
@@ -64,23 +65,23 @@ func TestPermissions_LevelAndAllows(t *testing.T) {
 }
 
 func TestPermissions_NormalizeAliases(t *testing.T) {
-	p := policy.GrantMap{"a": "READ", "b": "deny", "c": "read_write"}
-	if p.Level("a") != policy.AccessRead {
+	p := shared.GrantMap{"a": "READ", "b": "deny", "c": "read_write"}
+	if p.Level("a") != shared.AccessRead {
 		t.Fatalf("a = %q", p.Level("a"))
 	}
-	if p.Level("b") != policy.AccessNone {
+	if p.Level("b") != shared.AccessNone {
 		t.Fatalf("b = %q", p.Level("b"))
 	}
-	if p.Level("c") != policy.AccessFull {
+	if p.Level("c") != shared.AccessFull {
 		t.Fatalf("c = %q", p.Level("c"))
 	}
 }
 
 func TestPermissions_DeniedKinds(t *testing.T) {
-	p := policy.GrantMap{
-		policy.DefaultKey: policy.AccessNone,
+	p := shared.GrantMap{
+		shared.DefaultKey: shared.AccessNone,
 		"player":          "none",
-		"albums":          policy.AccessRead,
+		"albums":          shared.AccessRead,
 		"tracks":          "deny",
 	}
 	denied := p.DeniedKinds()
@@ -93,13 +94,13 @@ func TestValidateGrantMap(t *testing.T) {
 	if err := policy.ValidateGrantMap(nil); err != nil {
 		t.Fatalf("nil should be valid: %v", err)
 	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{policy.DefaultKey: policy.AccessRead, "tracks": "nope"}); err == nil {
+	if err := policy.ValidateGrantMap(shared.GrantMap{shared.DefaultKey: shared.AccessRead, "tracks": "nope"}); err == nil {
 		t.Fatal("expected error for unknown level")
 	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"": policy.AccessRead}); err == nil {
+	if err := policy.ValidateGrantMap(shared.GrantMap{"": shared.AccessRead}); err == nil {
 		t.Fatal("expected error for empty key")
 	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"tracks": policy.AccessFull}); err != nil {
+	if err := policy.ValidateGrantMap(shared.GrantMap{"tracks": shared.AccessFull}); err != nil {
 		t.Fatalf("valid map rejected: %v", err)
 	}
 }
@@ -147,8 +148,8 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}},
 		typePolicies: policy.DataGrants{
-			policy.DefaultKey: {Default: policy.AccessRead},
-			"playlists":       {Default: policy.AccessFull},
+			shared.DefaultKey: {Default: shared.AccessRead},
+			"playlists":       {Default: shared.AccessFull},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -177,10 +178,10 @@ func TestAllDataDenied(t *testing.T) {
 	if !allDataDenied(nil) {
 		t.Fatal("nil grants deny everything")
 	}
-	if allDataDenied(policy.GrantMap{"default": policy.AccessRead, "player": policy.AccessNone}) {
+	if allDataDenied(shared.GrantMap{"default": shared.AccessRead, "player": shared.AccessNone}) {
 		t.Fatal("default read should not be all-denied")
 	}
-	if !allDataDenied(policy.GrantMap{"default": policy.AccessNone, "player": policy.AccessNone, "tracks": "deny"}) {
+	if !allDataDenied(shared.GrantMap{"default": shared.AccessNone, "player": shared.AccessNone, "tracks": "deny"}) {
 		t.Fatal("all none should be all-denied")
 	}
 }
@@ -191,8 +192,8 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 		// A write grant must not unlock proxy writes the connector does
 		// not implement (mirror write is a separate path).
 		typePolicies: policy.DataGrants{
-			"tracks":    {Default: policy.AccessFull},
-			"playlists": {Default: policy.AccessFull},
+			"tracks":    {Default: shared.AccessFull},
+			"playlists": {Default: shared.AccessFull},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -224,10 +225,10 @@ func writeFile(path, content string) error {
 
 func TestPermissionNotice_DerivesFromGrantMap(t *testing.T) {
 	// Permissive default: explicit denials are what the agent must avoid.
-	open := policy.GrantMap{
-		policy.DefaultKey: policy.AccessRead,
-		"player":          policy.AccessNone,
-		"freebusy":        policy.AccessRead,
+	open := shared.GrantMap{
+		shared.DefaultKey: shared.AccessRead,
+		"player":          shared.AccessNone,
+		"freebusy":        shared.AccessRead,
 	}
 	notice := permissionNotice(open)
 	if !strings.Contains(notice, "player") || !strings.Contains(notice, "not available") {
@@ -238,10 +239,10 @@ func TestPermissionNotice_DerivesFromGrantMap(t *testing.T) {
 	}
 
 	// Deny-by-default: the map is a complete allow list.
-	closed := policy.GrantMap{
-		"contacts":            policy.AccessRead,
-		"playlists":           policy.AccessFull,
-		"transactions/totals": policy.AccessRead,
+	closed := shared.GrantMap{
+		"contacts":            shared.AccessRead,
+		"playlists":           shared.AccessFull,
+		"transactions/totals": shared.AccessRead,
 	}
 	notice = permissionNotice(closed)
 	if !strings.Contains(notice, "only these library routes are available") {

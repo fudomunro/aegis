@@ -16,6 +16,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
@@ -83,7 +84,7 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 	defer a.Close()
 
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"playlists": {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{"playlists": {Default: shared.AccessNone}},
 
 		Services: []Service{
 			{
