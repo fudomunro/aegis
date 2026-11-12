@@ -143,7 +143,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		Label:           "contacts",
 		Usage:           "people, contacts, or their address book",
 		Summary:         "all user contacts from every connected service in one neutral list (name, emails, phones, handles, organization, sources[])",
-		SyncRule:        "Contacts that share an email, phone, handle, or name are synced into one entry with multiple sources[].",
+		SyncRule:        "Contacts that share a vCard UID, email, phone, or handle are synced into one entry with multiple sources[]; the display name folds only cards that carry none of those, so two different people with the same name stay separate.",
 		ExampleQuestion: "who is in my contacts?",
 		Keywords: []string{
 			"my contacts", "address book", "contact list", "contacts list",

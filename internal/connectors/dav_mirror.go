@@ -26,7 +26,7 @@ func (c *CardDAVConnector) PlaceContacts(ctx context.Context, contacts []kinds.C
 		id, etag := placeContactRef(ct, CardDAVServiceID)
 
 		neutral := ct
-		if uid := placeContactUID(ct); uid != "" {
+		if uid := kinds.ContactUID(ct); uid != "" {
 			if neutral.Extra == nil {
 				neutral.Extra = map[string]any{}
 			}

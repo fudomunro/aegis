@@ -2,7 +2,7 @@ package kinds
 
 import "strings"
 
-// primaryContactKey is the first identity key, or "" when the contact has none.
+// PrimaryContactKey is the first identity key, or "" when the contact has none.
 func PrimaryContactKey(c Contact) string {
 	keys := ContactIdentityKeys(c)
 	if len(keys) == 0 {
@@ -75,11 +75,49 @@ func NormalizePhoneList(in []string) []string {
 	return out
 }
 
-// ContactIdentityKeys returns ordered merge keys for a contact: email first
-// (strongest), then phone, then handle. Display name is used only when the
-// contact has no stronger identifier, so two different "Alex Kim" addresses
-// do not merge just because the names match. Empty keys are omitted. The
-// first key is the contact's primary identity.
+// ContactUIDs returns the distinct cross-service vCard UIDs the contact
+// carries — the contact-level extra first, then each source's extra. A
+// source-local id is not a UID: it names one service's copy of the card,
+// not the card itself.
+func ContactUIDs(c Contact) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(val any) {
+		s, _ := val.(string)
+		s = strings.TrimSpace(s)
+		if s == "" || seen[s] {
+			return
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	if c.Extra != nil {
+		add(c.Extra["uid"])
+	}
+	for _, src := range c.Sources {
+		if src.Extra != nil {
+			add(src.Extra["uid"])
+		}
+	}
+	return out
+}
+
+// ContactUID is the contact's primary vCard UID — the one an outgoing copy
+// should carry — or "" when it has none.
+func ContactUID(c Contact) string {
+	if uids := ContactUIDs(c); len(uids) > 0 {
+		return uids[0]
+	}
+	return ""
+}
+
+// ContactIdentityKeys returns ordered merge keys for a contact: vCard UID
+// first (the durable card identity), then email, then phone, then handle.
+// Display name is a weak key — it is used only when the contact has no
+// email, phone, or handle, so two different "Alex Kim" addresses do not
+// merge just because the names match. A vCard UID does not suppress the
+// name key: a UID-only card still folds with a name-only card. Empty keys
+// are omitted. The first key is the contact's primary identity.
 func ContactIdentityKeys(c Contact) []string {
 	var keys []string
 	seen := map[string]bool{}
@@ -94,6 +132,10 @@ func ContactIdentityKeys(c Contact) []string {
 		seen[k] = true
 		keys = append(keys, k)
 	}
+	for _, uid := range ContactUIDs(c) {
+		add("uid", uid)
+	}
+	uidKeys := len(keys)
 	for _, e := range c.Emails {
 		add("email", NormalizeContactEmail(e))
 	}
@@ -103,7 +145,7 @@ func ContactIdentityKeys(c Contact) []string {
 	for _, h := range c.Handles {
 		add("handle", NormalizeContactHandle(h))
 	}
-	if len(keys) == 0 {
+	if len(keys) == uidKeys {
 		if name := NormalizeIdentityKey(c.Name); name != "" {
 			add("name", name)
 		}

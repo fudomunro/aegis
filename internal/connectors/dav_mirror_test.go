@@ -183,8 +183,8 @@ func TestPlaceEntityRefsAndUID(t *testing.T) {
 	if id, etag := placeContactRef(ct, "s"); id != "id-1" || etag != `"e"` {
 		t.Fatalf("placeContactRef = %q %q", id, etag)
 	}
-	if placeContactUID(ct) != "u1" {
-		t.Fatalf("placeContactUID = %q", placeContactUID(ct))
+	if kinds.ContactUID(ct) != "u1" {
+		t.Fatalf("ContactUID = %q", kinds.ContactUID(ct))
 	}
 	if placeContactDisplay(kinds.Contact{Emails: []string{"a@x"}}) != "a@x" {
 		t.Fatal("display must fall back to email")
@@ -201,5 +201,10 @@ func TestPlaceEntityRefsAndUID(t *testing.T) {
 	ev.EntityID = "ent"
 	if placeEventUID(ev) != "ent" {
 		t.Fatalf("placeEventUID entity = %q", placeEventUID(ev))
+	}
+	ical := kinds.NewCalendarEvent("s", "S", "ev-2", "T", "2026-03-02T10:00:00Z", "2026-03-02T11:00:00Z", false)
+	ical.Sources[0].Extra = map[string]any{"ical_uid": "ical-9"}
+	if placeEventUID(ical) != "ical-9" {
+		t.Fatalf("placeEventUID ical_uid = %q", placeEventUID(ical))
 	}
 }

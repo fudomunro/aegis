@@ -20,14 +20,27 @@ Placement and existence filters match the way the merge layer does
 (issue #366):
 
 1. **Durable id first** — ISRC, then UPC/MBID where the provider exposes
-   them (`EntityID` on the neutral model). Distinct durable ids never
-   match, even when the names collide (different recordings / remixes).
+   them (`EntityID` on the neutral model), and the vCard UID for contacts.
+   For music, distinct durable ids never match, even when the names collide
+   (different recordings / remixes). Contacts are the exception: the UID
+   names the vCard *card*, not the person, and one person's cards may carry
+   different UIDs — so a shared UID folds cards even when their emails
+   drifted apart, and a shared email still folds cards that carry different
+   UIDs.
 2. **Duration-guarded name** — normalized title + primary artist, and only
    when the two lengths agree within five seconds (zero means unknown and
    does not block). A name hit of wildly different length is a different
-   recording and is not placed.
+   recording and is not placed. Contacts fall back to phone → handle →
+   name, and the name is a weak key: it folds only cards with no email,
+   phone, or handle, so two different "Alex Kim" addresses do not merge
+   because the names match.
 3. Every placed item records **which identity matched** (`matched_by` on
    `PlaceRecord`), so matches and skips are explainable.
+
+One caveat sits outside the ladder: per-item copy watermarks key on the
+display name (`ItemEntityKey`), not on the identity keys above — a rename
+on the canonical home orphans the row, and the next run places a fresh copy
+instead of updating in place.
 
 YouTube Music exposes no ISRC and no durations in search, so its name
 fallback is title-checked rather than duration-guarded; MusicBrainz

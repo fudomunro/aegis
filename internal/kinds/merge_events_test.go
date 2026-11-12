@@ -10,6 +10,18 @@ func TestCalendarEventIdentityKey_PrefersICalUID(t *testing.T) {
 	}
 }
 
+func TestCalendarEventIdentityKey_ReadsBothExtraSpellings(t *testing.T) {
+	// Connectors spell the durable UID two ways in source extras; either
+	// spelling establishes the same identity.
+	for _, key := range []string{"ical_uid", "uid"} {
+		e := NewCalendarEvent("dav", "DAV", "id1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
+		e.Sources[0].Extra = map[string]any{key: "uid@dav"}
+		if got := CalendarEventIdentityKey(e); got != "ical:uid@dav" {
+			t.Fatalf("key via %s = %q", key, got)
+		}
+	}
+}
+
 func TestCalendarEventIdentityKey_TitleStartFallback(t *testing.T) {
 	e := NewCalendarEvent("google-calendar", "Google Calendar", "id1", "  Standup  ", "2024-06-01T09:00:00+00:00", "2024-06-01T09:30:00Z", false)
 	if got := CalendarEventIdentityKey(e); got != "title:standup|start:2024-06-01T09:00:00Z|allday:0" {

@@ -189,3 +189,58 @@ func TestArtistsMatchLadder(t *testing.T) {
 		t.Fatal("name match must be held")
 	}
 }
+
+// TestContactsMatchLadder pins the contact identity ladder: shared vCard
+// UID first, then email, then phone, then handle — with the display name as
+// a weak key only when a card has no email, phone, or handle. A shared UID
+// folds cards even when their emails drifted; a shared email folds cards
+// that carry different UIDs (the UID names the card, the email names the
+// person).
+func TestContactsMatchLadder(t *testing.T) {
+	mk := func(name string, uid string, emails ...string) Contact {
+		c := Contact{Name: name, Emails: emails}
+		if uid != "" {
+			c.Extra = map[string]any{"uid": uid}
+		}
+		return c
+	}
+	cases := []struct {
+		name  string
+		a, b  Contact
+		match bool
+	}{
+		{"same uid links drifted emails", mk("Ada", "u1", "old@example.com"), mk("Ada L.", "u1", "new@example.com"), true},
+		{"same uid links an email-less twin", mk("Bob", "u2", "bob@example.com"), mk("Bob", "u2"), true},
+		{"shared email links distinct uids", mk("Ada", "u1", "ada@example.com"), mk("Ada L.", "u2", "ada@example.com"), true},
+		{"phone links different cards", Contact{Name: "Bob", Phones: []string{"+15550001111"}}, Contact{Name: "Robert", Phones: []string{"+1 (555) 000-1111"}}, true},
+		{"name folds name-eligible cards", mk("Grace Hopper", "u1"), mk("Grace Hopper", ""), true},
+		{"name stays off an email card", mk("Alex Kim", "u1"), mk("Alex Kim", "u2", "alex@example.com"), false},
+		{"name-only twins fold", mk("Alex Kim", ""), mk("Alex Kim", ""), true},
+		{"different people stay separate", mk("Ada", "u1", "ada@example.com"), mk("Grace", "u2", "grace@example.com"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ContactsMatch(tc.a, tc.b); got != tc.match {
+				t.Fatalf("ContactsMatch = %v, want %v", got, tc.match)
+			}
+			if got := ContactsMatch(tc.b, tc.a); got != tc.match {
+				t.Fatalf("ContactsMatch (reversed) = %v, want %v", got, tc.match)
+			}
+		})
+	}
+
+	// The matcher agrees with the ladder across a held list.
+	m := NewContactMatcher([]Contact{
+		mk("Ada Lovelace", "u1", "ada@example.com"),
+		mk("Grace Hopper", ""),
+	})
+	if !m.Has(mk("Ada L.", "u1", "ada@example.com")) {
+		t.Fatal("a drifted twin of a held card must be held")
+	}
+	if !m.Has(mk("Grace Hopper", "")) {
+		t.Fatal("a name-only twin must be held")
+	}
+	if m.Has(mk("Alex Kim", "u9", "alex@example.com")) {
+		t.Fatal("an unrelated contact must not be held")
+	}
+}
