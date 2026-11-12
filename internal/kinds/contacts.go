@@ -129,13 +129,10 @@ func contactsConvergePlan(h Host, kind string) *ConvergePlan {
 			if err != nil {
 				return 0, nil, err
 			}
-			hubKeys := make(map[string]bool, len(hubList))
-			for _, c := range hubList {
-				hubKeys[PrimaryContactKey(c)] = true
-			}
+			held := NewContactMatcher(hubList)
 			var extras []Contact
 			for _, c := range memberList {
-				if !hubKeys[PrimaryContactKey(c)] {
+				if !held.Has(c) {
 					extras = append(extras, c)
 				}
 			}
@@ -162,7 +159,7 @@ func contactsConvergePlan(h Host, kind string) *ConvergePlan {
 			if err != nil {
 				return nil, false, err
 			}
-			hubCT := findContactByKey(hubList, PrimaryContactKey(memberCT))
+			hubCT := findContactMatch(hubList, memberCT)
 			if contactDisplayName(hubCT) == "" {
 				// The edit may have changed the identity key itself — the
 				// watermark rows key on the display name, so fall back to it.
@@ -262,13 +259,12 @@ func findContactByRef(list []Contact, service, externalID string) (Contact, bool
 	return Contact{}, false
 }
 
-// findContactByKey finds the contact with the given identity key.
-func findContactByKey(list []Contact, key string) Contact {
-	if key == "" {
-		return Contact{}
-	}
+// findContactMatch finds the contact in list that is the same person as
+// target under the identity ladder (shared vCard UID, email, phone, handle,
+// or the weak name fallback).
+func findContactMatch(list []Contact, target Contact) Contact {
 	for _, c := range list {
-		if PrimaryContactKey(c) == key {
+		if ContactsMatch(c, target) {
 			return c
 		}
 	}

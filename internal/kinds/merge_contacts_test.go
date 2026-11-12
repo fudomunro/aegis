@@ -99,3 +99,107 @@ func TestMergeContacts_Empty(t *testing.T) {
 		t.Fatal("nil in should yield nil out")
 	}
 }
+
+func TestMergeContacts_SharedUIDLinksDriftedCards(t *testing.T) {
+	// The same card seen twice with edited emails — the vCard UID folds it.
+	a := Contact{
+		Name:    "Ada Lovelace",
+		Emails:  []string{"old@example.com"},
+		Extra:   map[string]any{"uid": "card-1"},
+		Sources: []ContactSource{{Service: "dav", ServiceName: "DAV", ID: "a", Extra: map[string]any{"uid": "card-1"}}},
+	}
+	b := Contact{
+		Name:    "Ada L.",
+		Emails:  []string{"new@example.com"},
+		Extra:   map[string]any{"uid": "card-1"},
+		Sources: []ContactSource{{Service: "icloud", ServiceName: "iCloud", ID: "b", Extra: map[string]any{"uid": "card-1"}}},
+	}
+	merged := MergeContacts([]Contact{a, b})
+	if len(merged) != 1 {
+		t.Fatalf("shared vCard UID must fold drifted cards: %+v", merged)
+	}
+	if len(merged[0].Emails) != 2 {
+		t.Fatalf("emails = %v", merged[0].Emails)
+	}
+	if len(merged[0].Sources) != 2 {
+		t.Fatalf("sources = %+v", merged[0].Sources)
+	}
+}
+
+func TestMergeContacts_SharedUIDLinksEmailAddedOnOneSide(t *testing.T) {
+	withEmail := Contact{
+		Name:    "Bob",
+		Emails:  []string{"bob@example.com"},
+		Extra:   map[string]any{"uid": "card-2"},
+		Sources: []ContactSource{{Service: "dav", ID: "a", Extra: map[string]any{"uid": "card-2"}}},
+	}
+	withoutEmail := Contact{
+		Name:    "Bob",
+		Extra:   map[string]any{"uid": "card-2"},
+		Sources: []ContactSource{{Service: "icloud", ID: "b", Extra: map[string]any{"uid": "card-2"}}},
+	}
+	merged := MergeContacts([]Contact{withEmail, withoutEmail})
+	if len(merged) != 1 {
+		t.Fatalf("shared vCard UID must fold an email-less twin: %+v", merged)
+	}
+}
+
+func TestMergeContacts_UIDOnlyJoinsNameOnly(t *testing.T) {
+	// The name key stays available to a UID-only card: it still folds with
+	// a name-only card of the same display name.
+	withUID := Contact{
+		Name:    "Grace Hopper",
+		Extra:   map[string]any{"uid": "card-3"},
+		Sources: []ContactSource{{Service: "dav", ID: "a", Extra: map[string]any{"uid": "card-3"}}},
+	}
+	nameOnly := Contact{
+		Name:    "Grace Hopper",
+		Sources: []ContactSource{{Service: "outlook", ID: "o"}},
+	}
+	merged := MergeContacts([]Contact{withUID, nameOnly})
+	if len(merged) != 1 {
+		t.Fatalf("uid-only must still fold with a name-only twin: %+v", merged)
+	}
+}
+
+func TestMergeContacts_SharedEmailLinksDistinctUIDs(t *testing.T) {
+	// Two cards of one person can carry different UIDs; a shared email is
+	// co-primary identity and still folds them.
+	a := Contact{
+		Name:    "Ada Lovelace",
+		Emails:  []string{"ada@example.com"},
+		Extra:   map[string]any{"uid": "card-1"},
+		Sources: []ContactSource{{Service: "dav", ID: "a", Extra: map[string]any{"uid": "card-1"}}},
+	}
+	b := Contact{
+		Name:    "Ada L.",
+		Emails:  []string{"ada@example.com"},
+		Extra:   map[string]any{"uid": "card-2"},
+		Sources: []ContactSource{{Service: "icloud", ID: "b", Extra: map[string]any{"uid": "card-2"}}},
+	}
+	merged := MergeContacts([]Contact{a, b})
+	if len(merged) != 1 {
+		t.Fatalf("shared email must fold cards that carry distinct UIDs: %+v", merged)
+	}
+}
+
+func TestMergeContacts_NameEligibleCardStaysOffEmailBearingCard(t *testing.T) {
+	// The name key must not cross to an email-bearing card: a UID-only
+	// card and a UID+email card with the same display name stay separate
+	// even though both carry UIDs.
+	a := Contact{
+		Name:    "Alex Kim",
+		Extra:   map[string]any{"uid": "card-1"},
+		Sources: []ContactSource{{Service: "dav", ID: "a", Extra: map[string]any{"uid": "card-1"}}},
+	}
+	b := Contact{
+		Name:    "Alex Kim",
+		Emails:  []string{"alex@example.com"},
+		Extra:   map[string]any{"uid": "card-2"},
+		Sources: []ContactSource{{Service: "icloud", ID: "b", Extra: map[string]any{"uid": "card-2"}}},
+	}
+	merged := MergeContacts([]Contact{a, b})
+	if len(merged) != 2 {
+		t.Fatalf("a name-only card must not join an email-bearing card: %+v", merged)
+	}
+}

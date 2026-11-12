@@ -31,6 +31,9 @@ func CalendarEventIdentityKey(e CalendarEvent) string {
 		if id := strings.TrimSpace(ExtraString(src.Extra, "ical_uid")); id != "" {
 			return "ical:" + strings.ToLower(id)
 		}
+		if id := strings.TrimSpace(ExtraString(src.Extra, "uid")); id != "" {
+			return "ical:" + strings.ToLower(id)
+		}
 	}
 	start := calendarEventStartNormalized(e.StartAt)
 	title := NormalizeIdentityKey(e.Title)

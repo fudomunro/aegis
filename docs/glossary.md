@@ -38,7 +38,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **sources[]** | Per-item provenance (service, id, url, `canonical`, `copy`) | Field name unchanged |
 | **Canonical home** (or **canonical**) | Non-Aegis authoritative home for a kind (`canonical_for`) | Avoid “home copy”, “foreign canonical” in product prose |
 | **Entity merge** | Folding music/photo/event rows into one item (ISRC/UPC/MBID/…) | Not for contacts |
-| **Identity matching** | Folding contacts/people on email → phone → handle → name | Not for playlists/tracks |
+| **Identity matching** | Folding contacts/people on vCard UID / email → phone → handle → name | Not for playlists/tracks |
 | **Entity link** | User-confirmed cross-service identity (`entity_links.json`) | |
 | **Copy ledger** | Durable record of mirrored/backup copies | |
 | **Mirror** | Explicit copy of a playlist/liked tracks to another service | Not automatic write sync; eventual successor: **sync relationship** |

@@ -479,3 +479,63 @@ func (m *ArtistMatcher) Has(a Artist) bool {
 	}
 	return false
 }
+
+// ContactsMatch reports whether two contacts are the same person: any
+// shared identity key — vCard UID, email, phone, handle — or the weak
+// display-name fallback both sides are eligible for. This is the
+// MergeContacts edge relation, applied pairwise: a shared vCard UID folds
+// cards even when their emails drifted apart, and a shared email folds
+// cards that carry different UIDs (the UID names the card, the email names
+// the person — two cards of one person may carry different UIDs).
+func ContactsMatch(a, b Contact) bool {
+	kb := map[string]bool{}
+	for _, k := range ContactIdentityKeys(b) {
+		kb[k] = true
+	}
+	for _, k := range ContactIdentityKeys(a) {
+		if kb[k] {
+			return true
+		}
+	}
+	return false
+}
+
+// ContactMatcher indexes a contact list for "is this person already here?"
+// checks with the ContactsMatch relation — the existence filter convergence
+// and conflict resolution need. Zero value is not ready; use
+// NewContactMatcher.
+type ContactMatcher struct {
+	byKey map[string]bool
+}
+
+// NewContactMatcher indexes the contacts a location already holds.
+func NewContactMatcher(contacts []Contact) *ContactMatcher {
+	m := &ContactMatcher{byKey: make(map[string]bool)}
+	for _, c := range contacts {
+		m.Add(c)
+	}
+	return m
+}
+
+// Add indexes one more held contact.
+func (m *ContactMatcher) Add(c Contact) {
+	if m == nil {
+		return
+	}
+	for _, k := range ContactIdentityKeys(c) {
+		m.byKey[k] = true
+	}
+}
+
+// Has reports whether the indexed list already holds this person.
+func (m *ContactMatcher) Has(c Contact) bool {
+	if m == nil {
+		return false
+	}
+	for _, k := range ContactIdentityKeys(c) {
+		if m.byKey[k] {
+			return true
+		}
+	}
+	return false
+}

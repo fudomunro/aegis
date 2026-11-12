@@ -115,6 +115,20 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Contact identity matching folds on the vCard UID (issue #367).** The
+  contact row of the readiness inventory claimed a primary identity the
+  matcher never used — cards folded on email → phone → handle → name only,
+  so one card whose email had been edited on a single service came back as
+  two people. A contact's cross-service vCard UID is now the strongest
+  merge key: a shared UID folds cards even when every other identifier
+  drifted apart. Distinct UIDs do not veto the co-primary email match (the
+  UID names the card, the email names the person — one person's cards may
+  carry different UIDs), and the display name stays a weak key that folds
+  only cards with no email, phone, or handle, so a UID-only card still
+  joins a name-only twin. The convergence conflict lookups use the same
+  ladder instead of primary-key equality, and events read both source-extra
+  spellings of the durable UID (`uid` and `ical_uid`). The inventory table
+  and the glossary now describe the ladder that runs.
 - **Placement matching prefers durable ids (issue #366).** Music placement
   now follows the merge layer's ladder: a direct ISRC lookup before name
   search, a duration-guarded name fallback (a name hit of wildly different

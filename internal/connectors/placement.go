@@ -247,23 +247,14 @@ func placeEventRef(ev kinds.CalendarEvent, serviceID string) (id, etag string) {
 	return id, etag
 }
 
-// placeContactUID returns the cross-source contact UID carried in any
-// source's extras — the stable vCard identity that follows a copy.
-func placeContactUID(c kinds.Contact) string {
-	for _, src := range c.Sources {
-		if v, _ := src.Extra["uid"].(string); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-// placeEventUID returns the cross-source event identity: any source's uid,
-// else the catalog EntityID, else the first source's local id.
+// placeEventUID returns the cross-source event identity: any source's uid
+// or iCal uid, else the catalog EntityID, else the first source's local id.
 func placeEventUID(ev kinds.CalendarEvent) string {
 	for _, src := range ev.Sources {
-		if v, _ := src.Extra["uid"].(string); v != "" {
-			return v
+		for _, key := range []string{"uid", "ical_uid"} {
+			if v, _ := src.Extra[key].(string); v != "" {
+				return v
+			}
 		}
 	}
 	if ev.EntityID != "" {
