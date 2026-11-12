@@ -354,6 +354,42 @@ func (r *Runners) memberExtraItems(ctx context.Context, rec SyncConflict, row co
 			}
 		}
 		return out, nil
+	case library.MirrorKindAlbums:
+		memberList, err := r.listSavedAlbums(ctx, rec.Service)
+		if err != nil {
+			return nil, err
+		}
+		hubList, err := r.listSavedAlbums(ctx, hub)
+		if err != nil {
+			return nil, err
+		}
+		hubHeld := kinds.NewAlbumMatcher(hubList)
+		var out []entityItem
+		for _, a := range memberList {
+			if !hubHeld.Has(a) {
+				a := a
+				out = append(out, entityItem{album: &a})
+			}
+		}
+		return out, nil
+	case library.MirrorKindArtists:
+		memberList, err := r.listFollowedArtists(ctx, rec.Service)
+		if err != nil {
+			return nil, err
+		}
+		hubList, err := r.listFollowedArtists(ctx, hub)
+		if err != nil {
+			return nil, err
+		}
+		hubHeld := kinds.NewArtistMatcher(hubList)
+		var out []entityItem
+		for _, a := range memberList {
+			if !hubHeld.Has(a) {
+				a := a
+				out = append(out, entityItem{artist: &a})
+			}
+		}
+		return out, nil
 	default:
 		return nil, fmt.Errorf("%w: kind %q has no item adoption", ErrSyncTerminal, rec.Kind)
 	}
@@ -416,6 +452,32 @@ func (r *Runners) adoptExtras(ctx context.Context, rec SyncConflict, row copies.
 		}
 		_, err = dst.SaveLikedTracks(ctx, tracks)
 		return err
+	case library.MirrorKindAlbums:
+		dst, err := library.MirrorOpFor[kinds.AlbumWriteProvider](r.Mirror, hub, "conflict target")
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+		}
+		albums := make([]kinds.Album, 0, len(extras))
+		for _, it := range extras {
+			if it.album != nil {
+				albums = append(albums, *it.album)
+			}
+		}
+		_, err = dst.SaveAlbums(ctx, albums)
+		return err
+	case library.MirrorKindArtists:
+		dst, err := library.MirrorOpFor[kinds.ArtistWriteProvider](r.Mirror, hub, "conflict target")
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+		}
+		artists := make([]kinds.Artist, 0, len(extras))
+		for _, it := range extras {
+			if it.artist != nil {
+				artists = append(artists, *it.artist)
+			}
+		}
+		_, err = dst.FollowArtists(ctx, artists)
+		return err
 	default:
 		return fmt.Errorf("%w: kind %q has no item adoption", ErrSyncTerminal, rec.Kind)
 	}
@@ -427,6 +489,8 @@ type entityItem struct {
 	track   *kinds.Track
 	contact *kinds.Contact
 	event   *kinds.CalendarEvent
+	album   *kinds.Album
+	artist  *kinds.Artist
 }
 
 // enqueueConverge schedules a converge run so an accept fans out and a
@@ -496,6 +560,26 @@ func (r *Runners) listLikedTracks(ctx context.Context, service string) ([]kinds.
 		cursor = page.Next
 	}
 	return out, nil
+}
+
+// listSavedAlbums reads one service's full saved-album list.
+func (r *Runners) listSavedAlbums(ctx context.Context, service string) ([]kinds.Album, error) {
+	src, err := library.MirrorOpFor[kinds.AlbumProvider](r.Mirror, service, "conflict source")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	albums, _, err := src.ListUserSavedAlbums(ctx)
+	return albums, err
+}
+
+// listFollowedArtists reads one service's full followed-artist list.
+func (r *Runners) listFollowedArtists(ctx context.Context, service string) ([]kinds.Artist, error) {
+	src, err := library.MirrorOpFor[kinds.ArtistProvider](r.Mirror, service, "conflict source")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	artists, _, err := src.ListUserFollowedArtists(ctx)
+	return artists, err
 }
 
 // listPlaylistTracks pages one playlist's full item list.

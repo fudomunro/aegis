@@ -41,8 +41,8 @@ enrichment supplies recording MBIDs where the provider has none.
 | contacts | vCard UID / email | phone → handle → name | yes | member-side creates are undetected until an entity freshness checker lands |
 | events | iCal UID | title + start | yes | member-side creates are undetected until an entity freshness checker lands |
 | tracks | ISRC / recording MBID | duration-guarded name | yes | — (YouTube Music copies match on the title key) |
-| albums | UPC / MBID | title + primary artist | no sync yet | no write surface (no album placement) |
-| artists | MBID | name | no sync yet | no write surface (no artist placement) |
+| albums | UPC / MBID | title + primary artist | yes | — (YouTube Music exposes no saved-albums library — album placement runs on providers that can save albums) |
+| artists | MBID | name | yes | — (YouTube Music follows are channel subscriptions matched on the channel title key) |
 | photos | — | — | no sync yet | no cross-service photo identity, no write surface; photo ownership is unsettled |
 | messages | RFC Message-ID | subject + from + sent_at | no sync yet | read-only ingest by design — messages are never written back |
 | transactions | provider id | amount + posted day + merchant | no sync yet | local import store only — read-only by design |
@@ -56,8 +56,6 @@ answer is on file if that ever changes.
 
 ## Gaps worth closing
 
-- Album and artist write placement (so those kinds have somewhere to
-  converge) — [#375](https://github.com/fudomunro/aegis/issues/375).
 - Photo identity and write surface (photo ownership is being settled
   separately) — [#376](https://github.com/fudomunro/aegis/issues/376).
 - Entity freshness checker, so member-side *creates* of contacts and

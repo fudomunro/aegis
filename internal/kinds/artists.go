@@ -16,8 +16,9 @@ func newArtistsKind(h Host, e *Engine, d Deps) Kind {
 	k := &artistsKind{h: h, e: e, resolve: d.ResolveArtists}
 	def := *BuiltinKindByID("artists")
 	k.providerKind = providerKind{
-		def:      def,
-		provides: providerProvides[ArtistProvider],
+		def:          def,
+		provides:     providerProvides[ArtistProvider],
+		writeCapable: providerProvides[ArtistWriteProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,

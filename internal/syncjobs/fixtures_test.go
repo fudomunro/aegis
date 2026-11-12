@@ -466,6 +466,8 @@ func convergeStubRunners(t *testing.T, kind, hub string, members []string, conns
 		"events":    shared.AccessFull,
 		"playlists": shared.AccessFull,
 		"tracks":    shared.AccessFull,
+		"albums":    shared.AccessFull,
+		"artists":   shared.AccessFull,
 	}
 	for id, conn := range conns {
 		h.services[id] = fixtureService{Name: id, Action: "inject"}
@@ -871,4 +873,168 @@ func (c *likedStubConn) SavedTrackCount(ctx context.Context) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.liked), nil
+}
+
+// --- albums/artists converge fixtures (issue #375) ---
+
+// saveStubConn is a test connector for saved-albums and followed-artists
+// convergence: the two library-save lists implementing their placement
+// contracts — saving and following are create-only and never un-saves or
+// unfollows. Lists are small and whole-list, like the providers.
+type saveStubConn struct {
+	mu         sync.Mutex
+	svc        string
+	albums     []kinds.Album
+	artists    []kinds.Artist
+	failPlace  error
+	failList   error
+	placeCalls int
+	lastPlaced []string
+}
+
+func newSaveStubConn(svc string) *saveStubConn {
+	return &saveStubConn{svc: svc}
+}
+
+// seedAlbums adds held saves, one per name, in order.
+func (c *saveStubConn) seedAlbums(names ...string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, n := range names {
+		c.albums = append(c.albums, stubAlbum(c.svc, n))
+	}
+}
+
+// seedArtists adds held follows, one per name, in order.
+func (c *saveStubConn) seedArtists(names ...string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, n := range names {
+		c.artists = append(c.artists, stubArtist(c.svc, n))
+	}
+}
+
+// setFailPlace arms a one-shot placement failure.
+func (c *saveStubConn) setFailPlace(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.failPlace = err
+}
+
+// heldAlbumNames returns the saved album names in order.
+func (c *saveStubConn) heldAlbumNames() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.albums))
+	for _, a := range c.albums {
+		out = append(out, a.Name)
+	}
+	return out
+}
+
+// heldArtistNames returns the followed artist names in order.
+func (c *saveStubConn) heldArtistNames() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.artists))
+	for _, a := range c.artists {
+		out = append(out, a.Name)
+	}
+	return out
+}
+
+// --- connectors.ServiceConnector (unused surfaces) ---
+
+func (c *saveStubConn) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
+}
+
+func (c *saveStubConn) SystemInstructions(string) string { return "" }
+
+func (c *saveStubConn) HandleProxy(http.ResponseWriter, *http.Request, string) {}
+
+// --- kinds.AlbumProvider / ArtistProvider ---
+
+func (c *saveStubConn) ListUserSavedAlbums(ctx context.Context) ([]kinds.Album, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failList != nil {
+		return nil, false, c.failList
+	}
+	return append([]kinds.Album(nil), c.albums...), false, nil
+}
+
+func (c *saveStubConn) ListUserFollowedArtists(ctx context.Context) ([]kinds.Artist, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failList != nil {
+		return nil, false, c.failList
+	}
+	return append([]kinds.Artist(nil), c.artists...), false, nil
+}
+
+// --- kinds.AlbumWriteProvider / ArtistWriteProvider ---
+
+func (c *saveStubConn) SaveAlbums(ctx context.Context, albums []kinds.Album) (kinds.SaveAlbumsResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.placeCalls++
+	c.lastPlaced = nil
+	if c.failPlace != nil {
+		err := c.failPlace
+		c.failPlace = nil
+		return kinds.SaveAlbumsResult{}, err
+	}
+	held := kinds.NewAlbumMatcher(c.albums)
+	res := kinds.SaveAlbumsResult{}
+	for _, a := range albums {
+		c.lastPlaced = append(c.lastPlaced, a.Name)
+		if held.Has(a) {
+			continue // saving again is a no-op — and never an un-save
+		}
+		c.albums = append(c.albums, a)
+		held.Add(a)
+		res.Copied++
+		res.Placed = append(res.Placed, kinds.PlaceRecord{
+			Name:      a.Name,
+			MatchedBy: kinds.TrackMatchName,
+		})
+	}
+	return res, nil
+}
+
+func (c *saveStubConn) FollowArtists(ctx context.Context, artists []kinds.Artist) (kinds.FollowArtistsResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.placeCalls++
+	c.lastPlaced = nil
+	if c.failPlace != nil {
+		err := c.failPlace
+		c.failPlace = nil
+		return kinds.FollowArtistsResult{}, err
+	}
+	held := kinds.NewArtistMatcher(c.artists)
+	res := kinds.FollowArtistsResult{}
+	for _, a := range artists {
+		c.lastPlaced = append(c.lastPlaced, a.Name)
+		if held.Has(a) {
+			continue // following again is a no-op — and never an unfollow
+		}
+		c.artists = append(c.artists, a)
+		held.Add(a)
+		res.Copied++
+		res.Placed = append(res.Placed, kinds.PlaceRecord{
+			Name:      a.Name,
+			MatchedBy: kinds.TrackMatchName,
+		})
+	}
+	return res, nil
+}
+
+func stubAlbum(svc, name string) kinds.Album {
+	return kinds.Album{Name: name, Sources: []kinds.AlbumSource{{Service: svc, ID: "al-" + name}}}
+}
+
+func stubArtist(svc, name string) kinds.Artist {
+	return kinds.Artist{Name: name, Sources: []kinds.ArtistSource{{Service: svc, ID: "ar-" + name, Name: name}}}
 }

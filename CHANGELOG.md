@@ -7,6 +7,18 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Album and artist write placement (issue #375).** `albums` and `artists`
+  get placement contracts (`AlbumWriteProvider` save semantics,
+  `ArtistWriteProvider` follow semantics — both create-only, never
+  un-saving or unfollowing) and converge runner support, closing the write
+  surface gap from the readiness inventory. Spotify saves albums and
+  follows artists; YouTube Music follows artists by channel subscription
+  (its API surface exposes no saved-albums library). Placement matches on
+  the same ladder as merge — UPC/MBID first, title + primary artist (or
+  name) fallback — and records which identity matched. Member-only saves
+  and follows surface as item conflicts like liked tracks. Both kinds now
+  participate in sync relationships; the flipped readiness rows are in
+  `docs/sync-identity.md`.
 - **Liked-tracks convergence (issue #365, Phase 4b).** `tracks` joins the
   converged kinds: the daily fan-out now carries the canonical home's
   liked/saved list out to the group's other write-capable members, one
