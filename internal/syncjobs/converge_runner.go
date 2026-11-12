@@ -475,7 +475,7 @@ func (r *convergeRunner) runPlaylistStep(ctx context.Context, p convergeJobPaylo
 
 	// What the member already holds: the skip filter for a re-run, its item
 	// count for the copy stamp, and its title for rename-conflict detection.
-	state := memberPlaylistState{keys: map[string]bool{}}
+	state := memberPlaylistState{held: kinds.NewTrackMatcher(nil)}
 	if p.TargetID != "" {
 		var err error
 		state, err = loadMemberPlaylistState(ctx, s, target, p.TargetID)
@@ -499,11 +499,13 @@ func (r *convergeRunner) runPlaylistStep(ctx context.Context, p convergeJobPaylo
 
 	// Placement order is source order (order is fidelity); what the member
 	// already holds is dropped from placement only — member-only rows and
-	// any member-side order survive untouched.
+	// any member-side order survive untouched. The identity ladder is the
+	// merge layer's (issue #366): durable id first, then duration-guarded
+	// name — a plain name match would duplicate re-recordings.
 	alreadyHeld := 0
 	newTracks := make([]kinds.Track, 0, len(page.Tracks))
 	for _, t := range page.Tracks {
-		if state.keys[repairIdentityKey(t)] {
+		if state.held.Has(t) {
 			alreadyHeld++
 			continue
 		}
@@ -653,11 +655,11 @@ func (r *convergeRunner) pickPlaylist(ctx context.Context, p *convergeJobPayload
 	return nil
 }
 
-// memberPlaylistState is what a member's playlist holds now: identity keys
-// for the skip filter, the raw item count for the copy stamp, and the title
-// for rename-conflict detection.
+// memberPlaylistState is what a member's playlist holds now: the identity
+// matcher for the skip filter (issue #366), the raw item count for the copy
+// stamp, and the title for rename-conflict detection.
 type memberPlaylistState struct {
-	keys  map[string]bool
+	held  *kinds.TrackMatcher
 	count int
 	title string
 }
@@ -668,7 +670,7 @@ func loadMemberPlaylistState(ctx context.Context, s *Runners, service, playlistI
 	if err != nil {
 		return memberPlaylistState{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
 	}
-	st := memberPlaylistState{keys: map[string]bool{}}
+	st := memberPlaylistState{held: kinds.NewTrackMatcher(nil)}
 	cursor := ""
 	for i := 0; i < shared.LibraryPageCap; i++ {
 		ref, page, err := src.ListPlaylistItems(ctx, playlistID, cursor, 100)
@@ -679,7 +681,7 @@ func loadMemberPlaylistState(ctx context.Context, s *Runners, service, playlistI
 			st.title = ref.Name
 		}
 		for _, t := range page.Tracks {
-			st.keys[repairIdentityKey(t)] = true
+			st.held.Add(t)
 			st.count++
 		}
 		if page.Next == "" {

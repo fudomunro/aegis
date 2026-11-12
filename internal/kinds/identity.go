@@ -2,6 +2,7 @@ package kinds
 
 import (
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -227,4 +228,95 @@ func PlaceIdentityKey(v PlaceVisit) string {
 		return "anon:" + PlaceVisitServiceName(v) + ":" + v.StartAt
 	}
 	return "wp:" + start + "|" + end + "|" + placeKey
+}
+
+// --- placement identity (issue #366) ---
+//
+// Placement and existence filters match the way the merge layer does: a
+// durable catalog id first, then a duration-guarded name. A missed match
+// duplicates an item on the next converge run; a false match hides one, so
+// the ladder mirrors MergeTracksSync exactly — distinct durable ids stay
+// separate even when the names collide, and name matches require
+// compatible lengths.
+
+// isrcFormat matches the ISRC shape (CC-XXX-YY-NNNNN, dashes optional).
+var isrcFormat = regexp.MustCompile(`^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$`)
+
+// TrackMatchKey reports the strongest identity key a track carries and
+// which match method it came from (TrackMatchISRC, TrackMatchMBID, or
+// TrackMatchName) — recorded per placed item so matches are explainable.
+func TrackMatchKey(t Track) (key, how string) {
+	if id := TrackEntityID(t); id != "" {
+		if isrcFormat.MatchString(id) {
+			return "id:" + id, TrackMatchISRC
+		}
+		// MusicBrainz recording enrichment lands in EntityID too (issue
+		// #4); any other durable id rides the same equality path.
+		return "id:" + id, TrackMatchMBID
+	}
+	return "name:" + TrackIdentityKey(t), TrackMatchName
+}
+
+// TracksMatch reports whether two tracks are the same recording (issue
+// #366): shared durable id first, else duration-guarded name. Mirrors the
+// MergeTracksSync absorption rules — a name-only track matches an id'd one
+// when the names agree and the lengths fit, but two different durable ids
+// never match even when the names collide.
+func TracksMatch(a, b Track) bool {
+	ia, ib := TrackEntityID(a), TrackEntityID(b)
+	if ia != "" && ib != "" {
+		return ia == ib
+	}
+	if TrackIdentityKey(a) != TrackIdentityKey(b) {
+		return false
+	}
+	return DurationCompatible(a, b)
+}
+
+// TrackMatcher indexes a track list for "is this item already here?" checks
+// with the TracksMatch ladder — the existence filter placement and repair
+// need. Zero value is not ready; use NewTrackMatcher.
+type TrackMatcher struct {
+	byID   map[string]bool
+	byName map[string][]Track
+}
+
+// NewTrackMatcher indexes the tracks a location already holds.
+func NewTrackMatcher(tracks []Track) *TrackMatcher {
+	m := &TrackMatcher{
+		byID:   make(map[string]bool),
+		byName: make(map[string][]Track),
+	}
+	for _, t := range tracks {
+		m.Add(t)
+	}
+	return m
+}
+
+// Add indexes one more held track.
+func (m *TrackMatcher) Add(t Track) {
+	if m == nil {
+		return
+	}
+	if id := TrackEntityID(t); id != "" {
+		m.byID[id] = true
+	}
+	k := TrackIdentityKey(t)
+	m.byName[k] = append(m.byName[k], t)
+}
+
+// Has reports whether the indexed list already holds this track.
+func (m *TrackMatcher) Has(t Track) bool {
+	if m == nil {
+		return false
+	}
+	if id := TrackEntityID(t); id != "" && m.byID[id] {
+		return true
+	}
+	for _, c := range m.byName[TrackIdentityKey(t)] {
+		if TracksMatch(t, c) {
+			return true
+		}
+	}
+	return false
 }

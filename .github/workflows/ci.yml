@@ -280,6 +280,7 @@ jobs:
             FuzzNormalizeIdentityKey
             FuzzCleanYouTubeTitle
             FuzzTrackIdentityKey
+            FuzzTracksMatch
             FuzzMergeTracksSync
             FuzzMergePlaylistsSync
             FuzzPlaylistLinkKey

@@ -85,7 +85,10 @@ func TestHandleLibraryMirror_TracksKindWrites(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/search":
 			if strings.Contains(r.URL.Query().Get("q"), "Shared Hit") {
 				writeMirrorJSON(w, map[string]any{
-					"items": []any{map[string]any{"id": map[string]any{"videoId": "yt1"}}},
+					"items": []any{map[string]any{
+						"id":      map[string]any{"videoId": "yt1"},
+						"snippet": map[string]any{"title": "Shared Hit"},
+					}},
 				})
 				return
 			}
