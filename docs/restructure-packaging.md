@@ -277,6 +277,32 @@ guardrails table updates in the same commit; the 80% floor never bends.
 | **P4** | `internal/syncjobs` (promoted `core/syncjobs`) + runners, freshness, maintenance — **landed** (`core/copies` stays; see amendments) | `internal/syncjobs` row added; `core/syncjobs` dropped |
 | **P5** | Hub cleanup: `run.go` CLI → `internal/cli`, `musicbrainz.go` → `internal/kinds`, `fakeupstream.go`/`httpclient.go` folded, `handler.go` → `auth.go` + `hook.go` — **landed** (`maturity.go` was P3) | `internal/cli` row added |
 
+## Settled after the campaign: converge plans (issue #382)
+
+Issue #382 moved the sync engine's per-kind converge composition (the
+step functions, target provider assertions, copy-row names, and the
+conflict-resolution switches) into per-kind **converge plans**. The
+layout question is settled here per this record's rule:
+
+- **Plans live in `internal/kinds`, one per convergent kind, in the
+  kind's own file** — the write-side analogue of the read pipeline's
+  `Spec[T]`, declared beside routes, filters, redaction, and stamping.
+  `internal/kinds` gains no new dependencies: plans reach connectors over
+  the existing `Host` seam (`OpFor`), as the read side's `Collect` does.
+- **`internal/syncjobs` keeps the neutral engine** — job queue, payload
+  chaining, target resolution, grant checks, copy-ledger stamps, retries,
+  counters, the conflict store. It iterates plan **shapes** (create-only
+  saves, etag entities, the title-propagating playlist fan-out), never
+  kind ids: runner registration and the schedule seed derive from the
+  registry (`Kind.Converge()`).
+- **Not `internal/library`**: that package owns the agent/admin-facing
+  mirror API and the copy-ledger stamp helpers, not the background
+  engine's composition. **Not a new seam package**: plans are
+  declarations beside their kinds' data, not a shared domain with its own
+  interface — the `entityItem` union they retire was the anti-pattern.
+- Follow-on, on the same seam when it moves: the mirror backup runner and
+  the freshness checkers.
+
 ## Out of scope
 
 - Behavior, routes, neutral models, config fields, or admin copy changes.

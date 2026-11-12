@@ -24,10 +24,11 @@ func (s stubKind) Routes() []Route {
 	return []Route{{Pattern: s.pattern, Handler: func(http.ResponseWriter, *http.Request) {}}}
 }
 
-func (s stubKind) Provides(any) bool      { return false }
-func (s stubKind) WriteCapable(any) bool  { return false }
-func (s stubKind) HasProviders(Host) bool { return true }
-func (s stubKind) Readable(Host) bool     { return true }
+func (s stubKind) Provides(any) bool       { return false }
+func (s stubKind) WriteCapable(any) bool   { return false }
+func (s stubKind) Converge() *ConvergePlan { return nil }
+func (s stubKind) HasProviders(Host) bool  { return true }
+func (s stubKind) Readable(Host) bool      { return true }
 
 func TestMergeUserDefined_RejectsShadowing(t *testing.T) {
 	builtin := []Kind{

@@ -59,7 +59,8 @@ func (k *userDefinedKind) Routes() []Route { return k.routes }
 // Provides reports whether a connector instance feeds this kind. UDKs are
 // fed by schema sources, not OAuth connectors.
 func (k *userDefinedKind) Provides(connector any) bool { return false }
-func (k *userDefinedKind) WriteCapable(any) bool    { return false }
+func (k *userDefinedKind) WriteCapable(any) bool        { return false }
+func (k *userDefinedKind) Converge() *ConvergePlan      { return nil }
 
 // HasProviders reports whether the schema declares any source.
 func (k *userDefinedKind) HasProviders(h Host) bool {
