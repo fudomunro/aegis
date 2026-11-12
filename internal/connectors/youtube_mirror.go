@@ -329,3 +329,88 @@ func (c *YouTubeMusicConnector) searchVideoID(ctx context.Context, t kinds.Track
 	videoID, _ := id["videoId"].(string)
 	return videoID, nil
 }
+
+// FollowArtists implements kinds.ArtistWriteProvider by subscribing to the
+// resolved channels — YouTube's follow (issue #375). Following is
+// create-only — a placement never unsubscribes. YouTube exposes no
+// saved-albums library on this API surface, so albums are not placed here.
+func (c *YouTubeMusicConnector) FollowArtists(ctx context.Context, artists []kinds.Artist) (kinds.FollowArtistsResult, error) {
+	var result kinds.FollowArtistsResult
+	for _, a := range artists {
+		channelID, how := c.resolveChannelID(ctx, a, &result.Skips)
+		if channelID == "" {
+			continue
+		}
+		_, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "POST", "/subscriptions",
+			url.Values{"part": []string{"snippet"}},
+			map[string]any{
+				"snippet": map[string]any{
+					"resourceId": map[string]any{
+						"kind":      "youtube#channel",
+						"channelId": channelID,
+					},
+				},
+			})
+		if err != nil {
+			return result, err
+		}
+		result.Copied++
+		result.Placed = append(result.Placed, kinds.PlaceRecord{
+			Name:       placeArtistDisplay(a),
+			ExternalID: channelID,
+			MatchedBy:  how,
+		})
+	}
+	return result, nil
+}
+
+// resolveChannelID maps one artist to a YouTube channel ID and the identity
+// it matched on (issue #375): service-local reference first, then name
+// search guarded by normalized-name equality (the channel title may carry
+// the "- topic" unit, which the normalizer strips).
+func (c *YouTubeMusicConnector) resolveChannelID(ctx context.Context, a kinds.Artist, skips *[]kinds.PlaceSkip) (string, string) {
+	id := placeArtistLocalRef(a, YouTubeMusicServiceID)
+	how := "ref"
+	if id == "" {
+		found, err := c.searchChannelID(ctx, a)
+		if err != nil {
+			*skips = append(*skips, kinds.PlaceSkip{Name: placeArtistDisplay(a), Reason: err.Error()})
+			return "", ""
+		}
+		id, how = found, kinds.TrackMatchName
+	}
+	if id == "" {
+		*skips = append(*skips, kinds.PlaceSkip{Name: placeArtistDisplay(a), Reason: "no match on YouTube Music"})
+		return "", ""
+	}
+	return id, how
+}
+
+func (c *YouTubeMusicConnector) searchChannelID(ctx context.Context, a kinds.Artist) (string, error) {
+	q := url.Values{
+		"part":       []string{"snippet"},
+		"q":          []string{placeArtistDisplay(a)},
+		"type":       []string{"channel"},
+		"maxResults": []string{"1"},
+	}
+	raw, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "GET", "/search", q, nil)
+	if err != nil {
+		return "", err
+	}
+	items, _ := raw["items"].([]any)
+	if len(items) == 0 {
+		return "", nil
+	}
+	first, ok := items[0].(map[string]any)
+	if !ok {
+		return "", nil
+	}
+	snippet, _ := first["snippet"].(map[string]any)
+	hitTitle, _ := snippet["channelTitle"].(string)
+	if !artistNameCompatible(kinds.NewArtist(YouTubeMusicServiceID, YouTubeMusicServiceName, "", hitTitle), a) {
+		return "", nil
+	}
+	id, _ := first["id"].(map[string]any)
+	channelID, _ := id["channelId"].(string)
+	return channelID, nil
+}

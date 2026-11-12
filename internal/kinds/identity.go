@@ -242,6 +242,10 @@ func PlaceIdentityKey(v PlaceVisit) string {
 // isrcFormat matches the ISRC shape (CC-XXX-YY-NNNNN, dashes optional).
 var isrcFormat = regexp.MustCompile(`^[A-Z]{2}[A-Z0-9]{3}[0-9]{7}$`)
 
+// upcFormat matches a UPC/barcode shape (11–14 digits) — what distinguishes
+// an album's UPC EntityID from a MusicBrainz MBID in match reporting.
+var upcFormat = regexp.MustCompile(`^[0-9]{11,14}$`)
+
 // TrackMatchKey reports the strongest identity key a track carries and
 // which match method it came from (TrackMatchISRC, TrackMatchMBID, or
 // TrackMatchName) — recorded per placed item so matches are explainable.
@@ -315,6 +319,161 @@ func (m *TrackMatcher) Has(t Track) bool {
 	}
 	for _, c := range m.byName[TrackIdentityKey(t)] {
 		if TracksMatch(t, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// AlbumMatchKey reports the strongest identity key an album carries and
+// which match method it came from (AlbumMatchUPC, AlbumMatchMBID, or
+// TrackMatchName) — recorded per placed item so matches are explainable.
+func AlbumMatchKey(a Album) (key, how string) {
+	if id := AlbumEntityID(a); id != "" {
+		if upcFormat.MatchString(id) {
+			return "id:" + id, AlbumMatchUPC
+		}
+		return "id:" + id, AlbumMatchMBID
+	}
+	return "name:" + AlbumIdentityKey(a), TrackMatchName
+}
+
+// AlbumsMatch reports whether two albums are the same release (issue #375):
+// shared durable id first, else title + primary artist. Mirrors
+// MergeAlbumsSync — distinct durable ids stay separate even when the
+// titles collide.
+func AlbumsMatch(a, b Album) bool {
+	ia, ib := AlbumEntityID(a), AlbumEntityID(b)
+	if ia != "" && ib != "" {
+		return ia == ib
+	}
+	return AlbumIdentityKey(a) == AlbumIdentityKey(b)
+}
+
+// AlbumMatcher indexes an album list for "is this item already here?"
+// checks with the AlbumsMatch ladder — the existence filter placement and
+// convergence need. Zero value is not ready; use NewAlbumMatcher.
+type AlbumMatcher struct {
+	byID   map[string]bool
+	byName map[string][]Album
+}
+
+// NewAlbumMatcher indexes the albums a location already holds.
+func NewAlbumMatcher(albums []Album) *AlbumMatcher {
+	m := &AlbumMatcher{
+		byID:   make(map[string]bool),
+		byName: make(map[string][]Album),
+	}
+	for _, a := range albums {
+		m.Add(a)
+	}
+	return m
+}
+
+// Add indexes one more held album.
+func (m *AlbumMatcher) Add(a Album) {
+	if m == nil {
+		return
+	}
+	if id := AlbumEntityID(a); id != "" {
+		m.byID[id] = true
+	}
+	k := AlbumIdentityKey(a)
+	m.byName[k] = append(m.byName[k], a)
+}
+
+// Has reports whether the indexed list already holds this album.
+func (m *AlbumMatcher) Has(a Album) bool {
+	if m == nil {
+		return false
+	}
+	if id := AlbumEntityID(a); id != "" && m.byID[id] {
+		return true
+	}
+	for _, c := range m.byName[AlbumIdentityKey(a)] {
+		if AlbumsMatch(a, c) {
+			return true
+		}
+	}
+	return false
+}
+
+// ArtistMatchKey reports the strongest identity key an artist carries and
+// which match method it came from (ArtistMatchMBID or TrackMatchName).
+func ArtistMatchKey(a Artist) (key, how string) {
+	if id := ArtistEntityID(a); id != "" {
+		return "id:" + id, ArtistMatchMBID
+	}
+	return "name:" + NormalizeIdentityKey(a.Name), TrackMatchName
+}
+
+// ArtistsMatch reports whether two artists are the same act (issue #375):
+// shared MBID first, else normalized name. Mirrors MergeArtistLibrary —
+// nameless artists with no source never match.
+func ArtistsMatch(a, b Artist) bool {
+	ia, ib := ArtistEntityID(a), ArtistEntityID(b)
+	if ia != "" && ib != "" {
+		return ia == ib
+	}
+	ka, kb := artistNameKey(a), artistNameKey(b)
+	return ka != "" && ka == kb
+}
+
+// artistNameKey is the artist name-fallback identity: normalized name, else
+// the first service-local id when the artist has no name (the merge layer's
+// name-group key).
+func artistNameKey(a Artist) string {
+	if k := NormalizeIdentityKey(a.Name); k != "" {
+		return k
+	}
+	if len(a.Sources) > 0 {
+		return "\x00" + a.Sources[0].Service + ":" + a.Sources[0].ID
+	}
+	return ""
+}
+
+// ArtistMatcher indexes an artist list for "is this item already here?"
+// checks with the ArtistsMatch ladder. Zero value is not ready; use
+// NewArtistMatcher.
+type ArtistMatcher struct {
+	byID   map[string]bool
+	byName map[string][]Artist
+}
+
+// NewArtistMatcher indexes the artists a location already holds.
+func NewArtistMatcher(artists []Artist) *ArtistMatcher {
+	m := &ArtistMatcher{
+		byID:   make(map[string]bool),
+		byName: make(map[string][]Artist),
+	}
+	for _, a := range artists {
+		m.Add(a)
+	}
+	return m
+}
+
+// Add indexes one more held artist.
+func (m *ArtistMatcher) Add(a Artist) {
+	if m == nil {
+		return
+	}
+	if id := ArtistEntityID(a); id != "" {
+		m.byID[id] = true
+	}
+	k := artistNameKey(a)
+	m.byName[k] = append(m.byName[k], a)
+}
+
+// Has reports whether the indexed list already holds this artist.
+func (m *ArtistMatcher) Has(a Artist) bool {
+	if m == nil {
+		return false
+	}
+	if id := ArtistEntityID(a); id != "" && m.byID[id] {
+		return true
+	}
+	for _, c := range m.byName[artistNameKey(a)] {
+		if ArtistsMatch(a, c) {
 			return true
 		}
 	}

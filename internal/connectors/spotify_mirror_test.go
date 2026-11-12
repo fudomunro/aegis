@@ -657,3 +657,233 @@ func TestSpotifyPlaylistMeta(t *testing.T) {
 		t.Fatalf("SavedTrackCount = %d, %v", n, err)
 	}
 }
+
+// placeAlbum builds a neutral album with an optional service-local ref.
+func placeAlbum(service, name, id, upc string, artists ...string) kinds.Album {
+	a := kinds.Album{Name: name, EntityID: upc}
+	if id != "" {
+		a.Sources = []kinds.AlbumSource{{Service: service, ID: id}}
+	}
+	for _, n := range artists {
+		a.Artists = append(a.Artists, kinds.Artist{Name: n})
+	}
+	return a
+}
+
+// placeArtist builds a neutral artist with an optional service-local ref.
+func placeArtist(service, name, id string) kinds.Artist {
+	a := kinds.Artist{Name: name}
+	if id != "" {
+		a.Sources = []kinds.ArtistSource{{Service: service, ID: id, Name: name}}
+	}
+	return a
+}
+
+func TestSpotifySaveAlbums(t *testing.T) {
+	var puts atomic.Int32
+	var putIDs []string
+	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/search":
+			q := r.URL.Query().Get("q")
+			switch {
+			case strings.HasPrefix(q, "upc:012345678901"):
+				writeMirrorJSON(w, map[string]any{"albums": map[string]any{"items": []any{
+					map[string]any{"id": "by-upc", "name": "Found Album",
+						"external_ids": map[string]any{"upc": "012345678901"},
+						"artists":      []any{map[string]any{"id": "a1", "name": "Artist"}}},
+				}}})
+			case strings.Contains(q, "Found Album"):
+				writeMirrorJSON(w, map[string]any{"albums": map[string]any{"items": []any{
+					map[string]any{"id": "by-name", "name": "Found Album",
+						"artists": []any{map[string]any{"id": "a1", "name": "Artist"}}},
+				}}})
+			case strings.Contains(q, "Wrong Hit"):
+				// A hit naming a different release is not placed (issue #375).
+				writeMirrorJSON(w, map[string]any{"albums": map[string]any{"items": []any{
+					map[string]any{"id": "wrong", "name": "Something Else",
+						"artists": []any{map[string]any{"id": "a2", "name": "Artist"}}},
+				}}})
+			default:
+				writeMirrorJSON(w, map[string]any{"albums": map[string]any{"items": []any{}}})
+			}
+		case r.Method == http.MethodPut && r.URL.Path == "/me/albums":
+			puts.Add(1)
+			putIDs = append(putIDs, r.URL.Query().Get("ids"))
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+
+	albums := []kinds.Album{
+		placeAlbum(SpotifyServiceID, "HasID", "id-1", "", "Artist"),
+		placeAlbum("", "Found Album", "", "", "Artist"),
+		placeAlbum("", "Found Album 2", "", "012345678901", "Artist"),
+		placeAlbum("", "Wrong Hit", "", "", "Artist"),
+		placeAlbum("", "Missing Album", "", "", "Artist"),
+	}
+	res, err := c.SaveAlbums(context.Background(), albums)
+	if err != nil {
+		t.Fatalf("SaveAlbums: %v", err)
+	}
+	if res.Copied != 3 {
+		t.Fatalf("copied = %d skips=%+v", res.Copied, res.Skips)
+	}
+	if puts.Load() != 1 || len(putIDs) != 1 {
+		t.Fatalf("puts=%d ids=%v", puts.Load(), putIDs)
+	}
+	for _, want := range []string{"id-1", "by-name", "by-upc"} {
+		if !strings.Contains(putIDs[0], want) {
+			t.Fatalf("missing %s in %q", want, putIDs[0])
+		}
+	}
+	if len(res.Skips) != 2 {
+		t.Fatalf("skips = %+v", res.Skips)
+	}
+	if !strings.Contains(res.Skips[0].Reason, "no match on Spotify") ||
+		!strings.Contains(res.Skips[1].Reason, "no match on Spotify") {
+		t.Fatalf("skips = %+v", res.Skips)
+	}
+	// matched_by records which identity matched (issue #366).
+	for _, rec := range res.Placed {
+		switch rec.ExternalID {
+		case "id-1":
+			if rec.MatchedBy != "ref" {
+				t.Fatalf("record = %+v, want ref", rec)
+			}
+		case "by-upc":
+			if rec.MatchedBy != kinds.AlbumMatchUPC {
+				t.Fatalf("record = %+v, want upc", rec)
+			}
+		case "by-name":
+			if rec.MatchedBy != kinds.TrackMatchName {
+				t.Fatalf("record = %+v, want name", rec)
+			}
+		}
+	}
+}
+
+func TestSpotifySaveAlbums_PutError(t *testing.T) {
+	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut && r.URL.Path == "/me/albums" {
+			http.Error(w, "denied", http.StatusForbidden)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	_, err := c.SaveAlbums(context.Background(), []kinds.Album{
+		placeAlbum(SpotifyServiceID, "A", "id", "", "Artist"),
+	})
+	if err == nil {
+		t.Fatal("expected put error")
+	}
+}
+
+func TestSpotifyFollowArtists(t *testing.T) {
+	var puts atomic.Int32
+	var putIDs []string
+	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/search":
+			if strings.Contains(r.URL.Query().Get("q"), "Found") {
+				writeMirrorJSON(w, map[string]any{"artists": map[string]any{"items": []any{
+					map[string]any{"id": "found-artist", "name": "Found Act"},
+				}}})
+				return
+			}
+			writeMirrorJSON(w, map[string]any{"artists": map[string]any{"items": []any{}}})
+		case r.Method == http.MethodPut && r.URL.Path == "/me/following":
+			puts.Add(1)
+			if got := r.URL.Query().Get("type"); got != "artist" {
+				t.Errorf("type = %q", got)
+			}
+			putIDs = append(putIDs, r.URL.Query().Get("ids"))
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+
+	artists := []kinds.Artist{
+		placeArtist(SpotifyServiceID, "HasID", "id-1"),
+		placeArtist("", "Found Act", ""),
+		placeArtist("", "Missing Act", ""),
+	}
+	res, err := c.FollowArtists(context.Background(), artists)
+	if err != nil {
+		t.Fatalf("FollowArtists: %v", err)
+	}
+	if res.Copied != 2 || puts.Load() != 1 {
+		t.Fatalf("copied=%d puts=%d skips=%+v", res.Copied, puts.Load(), res.Skips)
+	}
+	for _, want := range []string{"id-1", "found-artist"} {
+		if !strings.Contains(putIDs[0], want) {
+			t.Fatalf("missing %s in %q", want, putIDs[0])
+		}
+	}
+	if len(res.Skips) != 1 || !strings.Contains(res.Skips[0].Reason, "no match on Spotify") {
+		t.Fatalf("skips = %+v", res.Skips)
+	}
+}
+
+func TestSpotifyFollowArtists_NameGuard(t *testing.T) {
+	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A hit naming a different act is not followed (issue #375).
+		writeMirrorJSON(w, map[string]any{"artists": map[string]any{"items": []any{
+			map[string]any{"id": "wrong", "name": "Someone Else"},
+		}}})
+	}))
+	res, err := c.FollowArtists(context.Background(), []kinds.Artist{
+		placeArtist("", "Real Act", ""),
+	})
+	if err != nil {
+		t.Fatalf("FollowArtists: %v", err)
+	}
+	if res.Copied != 0 || len(res.Skips) != 1 {
+		t.Fatalf("res = %+v, want a guarded skip", res)
+	}
+}
+
+func TestSpotifySearchAlbumID_MatchLadder(t *testing.T) {
+	var queries []string
+	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		queries = append(queries, q)
+		switch {
+		case strings.HasPrefix(q, "upc:"):
+			if q == "upc:012345678901" {
+				writeMirrorJSON(w, map[string]any{"albums": map[string]any{"items": []any{
+					map[string]any{"id": "by-upc", "name": "Album",
+						"external_ids": map[string]any{"upc": "012345678901"},
+						"artists":      []any{map[string]any{"id": "a1", "name": "Artist"}}},
+				}}})
+				return
+			}
+			writeMirrorJSON(w, map[string]any{"albums": map[string]any{"items": []any{}}})
+		default:
+			writeMirrorJSON(w, map[string]any{"albums": map[string]any{"items": []any{
+				map[string]any{"id": "by-name", "name": "Album",
+					"artists": []any{map[string]any{"id": "a1", "name": "Artist"}}},
+			}}})
+		}
+	}))
+	ctx := context.Background()
+	artist := []kinds.Artist{{Name: "Artist"}}
+
+	// UPC beats name search when the album carries one.
+	id, how, err := c.searchAlbumID(ctx, kinds.Album{Name: "Album", Artists: artist, EntityID: "012345678901"})
+	if err != nil || id != "by-upc" || how != kinds.AlbumMatchUPC {
+		t.Fatalf("upc ladder = (%q,%q,%v)", id, how, err)
+	}
+
+	// UPC miss falls through to the title + primary artist name query.
+	queries = nil
+	id, how, err = c.searchAlbumID(ctx, kinds.Album{Name: "Album", Artists: artist, EntityID: "012345678902"})
+	if err != nil || id != "by-name" || how != kinds.TrackMatchName {
+		t.Fatalf("name ladder = (%q,%q,%v)", id, how, err)
+	}
+	if len(queries) != 2 || !strings.HasPrefix(queries[0], "upc:") {
+		t.Fatalf("queries = %v, want the upc lookup first", queries)
+	}
+}

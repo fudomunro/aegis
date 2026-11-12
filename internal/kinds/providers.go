@@ -351,6 +351,43 @@ type LikedTrackWriteProvider interface {
 	SaveLikedTracks(ctx context.Context, tracks []Track) (SaveLikedTracksResult, error)
 }
 
+// SaveAlbumsResult reports a saved-album placement.
+type SaveAlbumsResult struct {
+	Copied int `json:"copied"`
+	// Placed carries per-item match records (which identity matched).
+	Placed []PlaceRecord `json:"placed,omitempty"`
+	Skips  []PlaceSkip   `json:"skips,omitempty"`
+}
+
+// AlbumWriteProvider is implemented by connectors that can save albums on
+// the user's account. Save semantics are create-only, like
+// LikedTrackWriteProvider: a placement never un-saves, so a member's own
+// saves survive convergence untouched.
+type AlbumWriteProvider interface {
+	// SaveAlbums marks the given albums as saved. Matching is by
+	// service-local reference when present, else catalog search. Return
+	// ErrUnauthorized when no valid token is available.
+	SaveAlbums(ctx context.Context, albums []Album) (SaveAlbumsResult, error)
+}
+
+// FollowArtistsResult reports a followed-artist placement.
+type FollowArtistsResult struct {
+	Copied int `json:"copied"`
+	// Placed carries per-item match records (which identity matched).
+	Placed []PlaceRecord `json:"placed,omitempty"`
+	Skips  []PlaceSkip   `json:"skips,omitempty"`
+}
+
+// ArtistWriteProvider is implemented by connectors that can follow artists
+// on the user's account. Follow semantics are create-only: a placement
+// never unfollows, so a member's own follows survive convergence untouched.
+type ArtistWriteProvider interface {
+	// FollowArtists marks the given artists as followed. Matching is by
+	// service-local reference when present, else catalog search. Return
+	// ErrUnauthorized when no valid token is available.
+	FollowArtists(ctx context.Context, artists []Artist) (FollowArtistsResult, error)
+}
+
 // PlaceConflict is one item placement refused to overwrite: the remote
 // changed since the caller's watermark (If-Match / etag mismatch).
 type PlaceConflict struct {

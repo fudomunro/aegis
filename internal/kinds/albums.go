@@ -16,8 +16,9 @@ func newAlbumsKind(h Host, e *Engine, d Deps) Kind {
 	k := &albumsKind{h: h, e: e, resolve: d.ResolveAlbums}
 	def := *BuiltinKindByID("albums")
 	k.providerKind = providerKind{
-		def:      def,
-		provides: providerProvides[AlbumProvider],
+		def:          def,
+		provides:     providerProvides[AlbumProvider],
+		writeCapable: providerProvides[AlbumWriteProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,

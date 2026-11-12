@@ -76,10 +76,10 @@ func (p *convergeJobPayload) resetPlaylistChain() {
 }
 
 // convergeKinds are the kinds a converge runner is registered for. Entities
-// (contacts, events) place their whole collection per member; playlists and
-// liked tracks fan out one item page at a time (issue #365). Playlists also
-// propagate titles.
-var convergeKinds = []string{library.MirrorKindContacts, library.MirrorKindEvents, library.MirrorKindPlaylists, library.MirrorKindTracks}
+// (contacts, events) and library saves (albums, artists) place their whole
+// collection per member; playlists and liked tracks fan out one item page
+// at a time (issue #365). Playlists also propagate titles.
+var convergeKinds = []string{library.MirrorKindContacts, library.MirrorKindEvents, library.MirrorKindPlaylists, library.MirrorKindTracks, library.MirrorKindAlbums, library.MirrorKindArtists}
 
 // SyncConvergeKinds are the kinds the build registers converge runners for —
 // the schedule seed's kind list (the store does not know them).
@@ -142,6 +142,12 @@ func (r *convergeRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error)
 	}
 	if r.kind == library.MirrorKindTracks {
 		return r.runTracksStep(ctx, p, target)
+	}
+	if r.kind == library.MirrorKindAlbums {
+		return r.runAlbumsStep(ctx, p, target)
+	}
+	if r.kind == library.MirrorKindArtists {
+		return r.runArtistsStep(ctx, p, target)
 	}
 
 	items, truncated, err := r.listCanonical(ctx, p.SourceService)
@@ -253,6 +259,20 @@ func convergeTargetOK(s *Runners, kind, serviceID string) bool {
 		// Liked-tracks convergence reads the member's likes for the same
 		// reason (issue #366's identity ladder does the matching).
 		if _, ok := conn.(kinds.LikedTrackPageProvider); !ok {
+			return false
+		}
+	}
+	if kind == library.MirrorKindAlbums {
+		// Saved-album convergence reads the member's saves for the same
+		// reason (issue #375).
+		if _, ok := conn.(kinds.AlbumProvider); !ok {
+			return false
+		}
+	}
+	if kind == library.MirrorKindArtists {
+		// Followed-artist convergence reads the member's follows for the
+		// same reason (issue #375).
+		if _, ok := conn.(kinds.ArtistProvider); !ok {
 			return false
 		}
 	}
@@ -820,6 +840,213 @@ func loadMemberTrackState(ctx context.Context, s *Runners, service string) (memb
 		cursor = page.Next
 	}
 	return st, nil
+}
+
+// runAlbumsStep executes one bounded saved-albums step: the canonical
+// collection saved onto one member. Saving is create-only and never
+// un-saves — a member's own saves survive untouched (issue #375).
+func (r *convergeRunner) runAlbumsStep(ctx context.Context, p convergeJobPayload, target string) (SyncStep, error) {
+	s := r.run
+
+	// What the member already saves: the skip filter (issue #366's
+	// identity ladder) and the count for the extras check and stamp.
+	state, err := loadMemberAlbumState(ctx, s, target)
+	if err != nil {
+		return r.step(p, target, false, ""), err
+	}
+
+	src, err := library.MirrorOpFor[kinds.AlbumProvider](s.Mirror, p.SourceService, "converge source")
+	if err != nil {
+		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	albums, truncated, err := src.ListUserSavedAlbums(ctx)
+	if err != nil {
+		return r.step(p, target, false, ""), err
+	}
+	hubTotal := len(albums)
+	if len(albums) > library.MirrorTrackCap {
+		albums = albums[:library.MirrorTrackCap]
+		truncated = true
+	}
+
+	alreadyHeld := 0
+	newAlbums := make([]kinds.Album, 0, len(albums))
+	for _, a := range albums {
+		if state.held.Has(a) {
+			alreadyHeld++
+			continue
+		}
+		newAlbums = append(newAlbums, a)
+	}
+
+	copied, skips := 0, 0
+	if len(newAlbums) > 0 {
+		dst, err := library.MirrorOpFor[kinds.AlbumWriteProvider](s.Mirror, target, "converge target")
+		if err != nil {
+			return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+		}
+		res, perr := dst.SaveAlbums(ctx, newAlbums)
+		if perr != nil {
+			// Counters stay unmutated on failure so a retry cannot
+			// double-count. Saving is idempotent, so the retry is safe.
+			return r.step(p, target, false, ""), perr
+		}
+		copied, skips = res.Copied, len(res.Skips)
+	}
+
+	p.Planned += len(albums)
+	p.Copied += copied
+	p.Skipped += alreadyHeld + skips
+	if truncated {
+		p.Truncated = true
+	}
+
+	// Stamp the collection row freshness reads — the member's saves as
+	// they stand now.
+	s.Mirror.RecordMirrorCopy(library.MirrorKindAlbums, p.SourceService, "",
+		target, "", "saved albums", state.count+copied, "")
+
+	// Member-only saves are non-hub creates: recorded for accept — adopt
+	// onto the canonical home — or reject — keep local. Convergence itself
+	// never un-saves. A truncated hub list cannot judge extras.
+	if memberAfter := state.count + copied; !truncated && hubTotal > 0 && memberAfter > hubTotal {
+		s.recordConflict(SyncConflict{
+			Kind:        library.MirrorKindAlbums,
+			Service:     target,
+			EntityKey:   library.MirrorEntityKey(library.MirrorKindAlbums, p.SourceService, ""),
+			Subject:     "saved albums",
+			Field:       ConflictFieldItems,
+			MemberValue: fmt.Sprintf("%d items", memberAfter),
+			LastValue:   fmt.Sprintf("%d items", hubTotal),
+			Source:      ConflictSourceConverge,
+		})
+	}
+
+	p.TargetDone = p.Index + 1
+	p.Index++
+	if p.Index >= len(p.Targets) {
+		return r.step(p, target, true, ""), nil
+	}
+	return r.step(p, target, false, ""), nil
+}
+
+// memberAlbumState is what a member's saved-album list holds now: the
+// identity matcher for the skip filter and the raw count for the extras
+// check.
+type memberAlbumState struct {
+	held  *kinds.AlbumMatcher
+	count int
+}
+
+// loadMemberAlbumState reads a member's saved-album list.
+func loadMemberAlbumState(ctx context.Context, s *Runners, service string) (memberAlbumState, error) {
+	src, err := library.MirrorOpFor[kinds.AlbumProvider](s.Mirror, service, "converge target")
+	if err != nil {
+		return memberAlbumState{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	albums, _, err := src.ListUserSavedAlbums(ctx)
+	if err != nil {
+		return memberAlbumState{}, err
+	}
+	return memberAlbumState{held: kinds.NewAlbumMatcher(albums), count: len(albums)}, nil
+}
+
+// runArtistsStep executes one bounded followed-artists step: the canonical
+// collection followed onto one member. Following is create-only and never
+// unfollows — a member's own follows survive untouched (issue #375).
+func (r *convergeRunner) runArtistsStep(ctx context.Context, p convergeJobPayload, target string) (SyncStep, error) {
+	s := r.run
+
+	state, err := loadMemberArtistState(ctx, s, target)
+	if err != nil {
+		return r.step(p, target, false, ""), err
+	}
+
+	src, err := library.MirrorOpFor[kinds.ArtistProvider](s.Mirror, p.SourceService, "converge source")
+	if err != nil {
+		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	artists, truncated, err := src.ListUserFollowedArtists(ctx)
+	if err != nil {
+		return r.step(p, target, false, ""), err
+	}
+	hubTotal := len(artists)
+	if len(artists) > library.MirrorTrackCap {
+		artists = artists[:library.MirrorTrackCap]
+		truncated = true
+	}
+
+	alreadyHeld := 0
+	newArtists := make([]kinds.Artist, 0, len(artists))
+	for _, a := range artists {
+		if state.held.Has(a) {
+			alreadyHeld++
+			continue
+		}
+		newArtists = append(newArtists, a)
+	}
+
+	copied, skips := 0, 0
+	if len(newArtists) > 0 {
+		dst, err := library.MirrorOpFor[kinds.ArtistWriteProvider](s.Mirror, target, "converge target")
+		if err != nil {
+			return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+		}
+		res, perr := dst.FollowArtists(ctx, newArtists)
+		if perr != nil {
+			return r.step(p, target, false, ""), perr
+		}
+		copied, skips = res.Copied, len(res.Skips)
+	}
+
+	p.Planned += len(artists)
+	p.Copied += copied
+	p.Skipped += alreadyHeld + skips
+	if truncated {
+		p.Truncated = true
+	}
+
+	s.Mirror.RecordMirrorCopy(library.MirrorKindArtists, p.SourceService, "",
+		target, "", "followed artists", state.count+copied, "")
+
+	if memberAfter := state.count + copied; !truncated && hubTotal > 0 && memberAfter > hubTotal {
+		s.recordConflict(SyncConflict{
+			Kind:        library.MirrorKindArtists,
+			Service:     target,
+			EntityKey:   library.MirrorEntityKey(library.MirrorKindArtists, p.SourceService, ""),
+			Subject:     "followed artists",
+			Field:       ConflictFieldItems,
+			MemberValue: fmt.Sprintf("%d items", memberAfter),
+			LastValue:   fmt.Sprintf("%d items", hubTotal),
+			Source:      ConflictSourceConverge,
+		})
+	}
+
+	p.TargetDone = p.Index + 1
+	p.Index++
+	if p.Index >= len(p.Targets) {
+		return r.step(p, target, true, ""), nil
+	}
+	return r.step(p, target, false, ""), nil
+}
+
+// memberArtistState is what a member's followed-artist list holds now.
+type memberArtistState struct {
+	held  *kinds.ArtistMatcher
+	count int
+}
+
+// loadMemberArtistState reads a member's followed-artist list.
+func loadMemberArtistState(ctx context.Context, s *Runners, service string) (memberArtistState, error) {
+	src, err := library.MirrorOpFor[kinds.ArtistProvider](s.Mirror, service, "converge target")
+	if err != nil {
+		return memberArtistState{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	artists, _, err := src.ListUserFollowedArtists(ctx)
+	if err != nil {
+		return memberArtistState{}, err
+	}
+	return memberArtistState{held: kinds.NewArtistMatcher(artists), count: len(artists)}, nil
 }
 
 // playlistSourceID is a playlist's service-local id on the canonical home.

@@ -428,3 +428,78 @@ func TestYouTubePlaylistMeta(t *testing.T) {
 		t.Fatalf("SavedTrackCount = %d, %v", n, err)
 	}
 }
+
+func TestYouTubeFollowArtists(t *testing.T) {
+	var subs atomic.Int32
+	var subChannels []string
+	c := newYouTubeMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/search":
+			q := r.URL.Query().Get("q")
+			switch {
+			case strings.Contains(q, "Found Act"):
+				writeMirrorJSON(w, map[string]any{"items": []any{map[string]any{
+					"id":      map[string]any{"channelId": "chan-found"},
+					"snippet": map[string]any{"channelTitle": "Found Act"},
+				}}})
+			case strings.Contains(q, "Wrong Hit"):
+				// A channel titled differently is not subscribed (issue #375).
+				writeMirrorJSON(w, map[string]any{"items": []any{map[string]any{
+					"id":      map[string]any{"channelId": "chan-wrong"},
+					"snippet": map[string]any{"channelTitle": "Someone Else"},
+				}}})
+			default:
+				writeMirrorJSON(w, map[string]any{"items": []any{}})
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/subscriptions":
+			subs.Add(1)
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			snippet, _ := body["snippet"].(map[string]any)
+			res, _ := snippet["resourceId"].(map[string]any)
+			if kind, _ := res["kind"].(string); kind != "youtube#channel" {
+				t.Errorf("resource kind = %q", kind)
+			}
+			channelID, _ := res["channelId"].(string)
+			subChannels = append(subChannels, channelID)
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+
+	res, err := c.FollowArtists(context.Background(), []kinds.Artist{
+		placeArtist(YouTubeMusicServiceID, "HasID", "chan1"),
+		placeArtist("", "Found Act", ""),
+		placeArtist("", "Wrong Hit", ""),
+		placeArtist("", "Missing Act", ""),
+	})
+	if err != nil {
+		t.Fatalf("FollowArtists: %v", err)
+	}
+	if res.Copied != 2 || subs.Load() != 2 {
+		t.Fatalf("copied=%d subs=%d skips=%+v", res.Copied, subs.Load(), res.Skips)
+	}
+	if len(subChannels) != 2 || subChannels[0] != "chan1" || subChannels[1] != "chan-found" {
+		t.Fatalf("subscribed channels = %v", subChannels)
+	}
+	if len(res.Skips) != 2 {
+		t.Fatalf("skips = %+v", res.Skips)
+	}
+	// matched_by records which identity matched (issue #366).
+	if res.Placed[0].MatchedBy != "ref" || res.Placed[1].MatchedBy != kinds.TrackMatchName {
+		t.Fatalf("placed = %+v, want ref then name", res.Placed)
+	}
+}
+
+func TestYouTubeFollowArtists_SubscribeError(t *testing.T) {
+	c := newYouTubeMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no", http.StatusForbidden)
+	}))
+	_, err := c.FollowArtists(context.Background(), []kinds.Artist{
+		placeArtist(YouTubeMusicServiceID, "A", "chan1"),
+	})
+	if err == nil {
+		t.Fatal("expected subscribe error")
+	}
+}

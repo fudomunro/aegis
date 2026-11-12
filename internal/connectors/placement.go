@@ -121,6 +121,87 @@ func placeTrackLocalRef(t kinds.Track, serviceID string) (id, uri string) {
 	return id, uri
 }
 
+// placeAlbumDisplay names an album in skip reports.
+func placeAlbumDisplay(a kinds.Album) string {
+	names := make([]string, 0, len(a.Artists))
+	for _, artist := range a.Artists {
+		if artist.Name != "" {
+			names = append(names, artist.Name)
+		}
+	}
+	artists := strings.Join(names, ", ")
+	if artists == "" {
+		return a.Name
+	}
+	return a.Name + " — " + artists
+}
+
+// placeAlbumQuery is the catalog search query used when an album carries no
+// service-local reference: title plus the first artist.
+func placeAlbumQuery(a kinds.Album) string {
+	if len(a.Artists) == 0 {
+		return a.Name
+	}
+	return a.Name + " " + a.Artists[0].Name
+}
+
+// placeAlbumLocalRef returns the service-local id an album carries for this
+// service, if any — the fast path that avoids catalog search.
+func placeAlbumLocalRef(a kinds.Album, serviceID string) string {
+	for _, src := range a.Sources {
+		if src.Service == serviceID && src.ID != "" {
+			return src.ID
+		}
+	}
+	return ""
+}
+
+// placeArtistDisplay names an artist in skip reports.
+func placeArtistDisplay(a kinds.Artist) string {
+	if a.Name != "" {
+		return a.Name
+	}
+	if len(a.Sources) > 0 {
+		return a.Sources[0].Name
+	}
+	return ""
+}
+
+// placeArtistLocalRef returns the service-local id an artist carries for
+// this service, if any — the fast path that avoids catalog search.
+func placeArtistLocalRef(a kinds.Artist, serviceID string) string {
+	for _, src := range a.Sources {
+		if src.Service == serviceID && src.ID != "" {
+			return src.ID
+		}
+	}
+	return ""
+}
+
+// albumTitleArtistCompatible is the name-path catalog guard (issue #375's
+// title + primary artist fallback): a search hit may stand in for the album
+// under placement when the normalized titles agree and the primary artists
+// agree whenever both name one. EntityIDs are deliberately ignored here —
+// the id path proved identity by query, and the name path cannot compare a
+// provider UPC against an enriched MBID.
+func albumTitleArtistCompatible(hit, want kinds.Album) bool {
+	if kinds.NormalizeIdentityKey(hit.Name) != kinds.NormalizeIdentityKey(want.Name) {
+		return false
+	}
+	if len(hit.Artists) == 0 || len(want.Artists) == 0 {
+		return true
+	}
+	return kinds.NormalizeIdentityKey(hit.Artists[0].Name) == kinds.NormalizeIdentityKey(want.Artists[0].Name)
+}
+
+// artistNameCompatible is the name-path catalog guard for artists: a search
+// hit may stand in when the normalized names agree (the "- topic" unit is
+// stripped by NormalizeIdentityKey).
+func artistNameCompatible(hit, want kinds.Artist) bool {
+	got := kinds.NormalizeIdentityKey(hit.Name)
+	return got != "" && got == kinds.NormalizeIdentityKey(want.Name)
+}
+
 // placeContactDisplay names a contact in skip/conflict reports.
 func placeContactDisplay(c kinds.Contact) string {
 	if c.Name != "" {

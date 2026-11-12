@@ -14,12 +14,16 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// Mirror kinds supported by POST /v1/library/mirror.
+// Mirror kinds: the reconciliation kind ids. Playlists and tracks are
+// supported by POST /v1/library/mirror; albums and artists join for sync
+// convergence (issue #375).
 const (
 	MirrorKindPlaylists = "playlists"
 	MirrorKindTracks    = "tracks"
 	MirrorKindContacts  = "contacts"
 	MirrorKindEvents    = "events"
+	MirrorKindAlbums    = "albums"
+	MirrorKindArtists   = "artists"
 )
 
 // MirrorTrackCap bounds a single mirror call so a huge library cannot

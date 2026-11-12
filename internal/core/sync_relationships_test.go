@@ -39,10 +39,10 @@ func (*contactsWriteStub) PlaceContacts(context.Context, []kinds.Contact) (kinds
 	return kinds.PlaceEntitiesResult{}, nil
 }
 
-// albumsStub provides albums — a kind outside the sync participant set.
-type albumsStub struct{ syncStub }
+// photosStub provides photos — a kind outside the sync participant set.
+type photosStub struct{ syncStub }
 
-func (*albumsStub) ListUserSavedAlbums(context.Context) ([]kinds.Album, bool, error) {
+func (*photosStub) ListUserPhotos(context.Context) ([]kinds.Photo, bool, error) {
 	return nil, false, nil
 }
 
@@ -74,11 +74,11 @@ func syncRows(t *testing.T, srv *Server, id string) map[string]bool {
 func TestEstablishSyncRelationships_CreatesRowsForProvidedKinds(t *testing.T) {
 	cfg := &Config{Services: []Service{
 		{ID: "google-contacts", Name: "Google Contacts", Action: "inject", Endpoint: "https://contacts.example.com"},
-		{ID: "album-service", Name: "Albums", Action: "inject", Endpoint: "https://albums.example.com"},
+		{ID: "photo-service", Name: "Photos", Action: "inject", Endpoint: "https://photos.example.com"},
 	}}
 	srv := syncTestServer(t, cfg, map[string]connectors.ServiceConnector{
 		"google-contacts": &contactsAlbumsStub{},
-		"album-service":   &albumsStub{},
+		"photo-service":   &photosStub{},
 	})
 
 	srv.EstablishSyncRelationships()
@@ -87,10 +87,10 @@ func TestEstablishSyncRelationships_CreatesRowsForProvidedKinds(t *testing.T) {
 	if _, ok := rows["contacts"]; !ok {
 		t.Fatalf("expected a contacts row, got %v", rows)
 	}
-	if _, ok := rows["albums"]; ok {
-		t.Fatalf("albums is not a sync participant; no row expected, got %v", rows)
+	if _, ok := rows["albums"]; !ok {
+		t.Fatalf("albums is a sync participant; expected a row, got %v", rows)
 	}
-	if rows := syncRows(t, srv, "album-service"); len(rows) != 0 {
+	if rows := syncRows(t, srv, "photo-service"); len(rows) != 0 {
 		t.Fatalf("a source outside every participant kind joins no group: %v", rows)
 	}
 }
