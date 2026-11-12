@@ -362,6 +362,21 @@ func Run() {
 		}
 	}
 
+	// Conflicts share the same handle: a detection, its jobs, and its copy
+	// rows move together.
+	conflictsStore, err := syncjobs.OpenConflictStore(syncStore.DB(), paths.SyncJobs)
+	if err != nil {
+		slog.Error("failed to open sync conflict store", "path", paths.SyncJobs, "error", err)
+		os.Exit(1)
+	}
+	if conflictsStore != nil {
+		defer conflictsStore.Close()
+		if conflictsStore.Enabled() {
+			slog.Info("sync conflict store ready",
+				"count", len(conflictsStore.List(syncjobs.ConflictFilter{Status: syncjobs.ConflictStatusOpen})))
+		}
+	}
+
 	mailArchive, err := mail.Open(paths.MailArchive)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", paths.MailArchive, "error", err)
@@ -470,6 +485,7 @@ func Run() {
 		copyLedger:    copyLedger,
 		syncJobs:      syncStore,
 		syncSchedules: scheduleStore,
+		syncConflicts: conflictsStore,
 		mail:          mailArchive,
 		search:        searchIndex,
 		quicken:       quickenStore,

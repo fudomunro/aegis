@@ -282,3 +282,35 @@ func TestAdminHTML_OwnershipPanel(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminHTML_ConflictsPanel(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	req := httptest.NewRequest("GET", "/v1/admin", nil)
+	w := httptest.NewRecorder()
+	srv.admin().HandleAdmin(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	body := w.Body.String()
+
+	for _, want := range []string{
+		`id="library-conflicts"`,
+		"loadSyncConflicts",
+		"conflictFieldLabels",
+		"data-conflict-resolve",
+		"data-conflict-action",
+		`/v1/admin/sync/conflicts`,
+		"Accept makes the edit canonical",
+		"Reject restores the canonical version",
+		"Sync conflicts (",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("admin HTML missing conflicts marker %q", want)
+		}
+	}
+	// The panel writes through the same JSON fetch guard as every other
+	// admin write.
+	if !strings.Contains(body, `encodeURIComponent(id) + "/" + (accept ? "accept" : "reject")`) {
+		t.Fatal("conflict buttons must post accept/reject by id")
+	}
+}

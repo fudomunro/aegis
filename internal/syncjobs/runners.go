@@ -44,6 +44,9 @@ type Runners struct {
 	Copies *copies.Ledger
 	// Jobs is the durable sync job queue (nil when disabled).
 	Jobs *JobStore
+	// Conflicts is the durable conflict queue (issue #365 phase 3): the
+	// detected non-hub edits awaiting an accept/reject decision.
+	Conflicts *ConflictStore
 	// DataDir is the resolved local state directory (issue #74).
 	DataDir string
 	// Version and Commit stamp maintenance signal bundles.

@@ -7,6 +7,22 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Sync conflicts & manual resolution (issue #365, Phase 3).** A non-hub
+  edit on a converged copy is now detected from watermark divergence —
+  member-side renames and record edits surface at convergence (If-Match
+  refuses to overwrite), member-only items and later edits surface through
+  the copy watermark the freshness pass compares — and lands in a durable
+  conflict queue instead of being silently absorbed or overwritten. The
+  admin **Library** page lists each conflict and offers **accept** (write
+  the edit to the canonical home, then fan out to the other members) or
+  **reject** (re-converge that member from the canonical home). Member-only
+  items are never removed: accept adopts them onto the canonical home,
+  reject keeps them local; adopting a member's deletions is refused until
+  delete propagation. Resolved conflicts are kept as history and only a new
+  member-side value reopens them. Convergence now also carries per-item
+  etag watermarks into entity placement, so re-runs update in place with
+  If-Match instead of creating duplicates. JSON surface:
+  `GET /v1/admin/sync/conflicts` and `POST /v1/admin/sync/conflicts/{id}/accept|reject`.
 - **Playlist convergence (issue #365, Phase 2b).** The `converge` job now
   covers playlists: each canonical playlist fans out to the group's
   write-capable members one item page per step, in canonical item order

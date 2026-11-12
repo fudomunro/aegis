@@ -572,6 +572,7 @@
         </div>
         <button class="btn" id="reload-library" type="button">Reload from services</button>
       </div>
+      <div id="library-conflicts" class="source-overview" hidden></div>
       <div id="library-sources" class="source-overview" hidden></div>
       <div id="library-meta" class="meta" style="margin-bottom:0.75rem"></div>
       <div id="library-list"><div class="empty">Loading library…</div></div>
@@ -1785,6 +1786,74 @@
         showGlobalError(err.message || "Failed to update ownership");
       }
     });
+  }
+
+  const conflictFieldLabels = {
+    title: "Renamed on the copy",
+    items: "Items differ",
+    record: "Edited on the copy",
+    missing: "Copy is missing",
+  };
+
+  async function loadSyncConflicts() {
+    const el = $("library-conflicts");
+    if (!el) return;
+    try {
+      const res = await api("/v1/admin/sync/conflicts");
+      const list = res.conflicts || [];
+      if (!list.length) {
+        el.hidden = true;
+        el.innerHTML = "";
+        return;
+      }
+      el.hidden = false;
+      el.innerHTML =
+        '<div class="source-overview-title">Sync conflicts (' + list.length + ")</div>" +
+        '<div class="conflict-note">Edits made on copies that are not the canonical home. ' +
+        "Accept makes the edit canonical and updates the other copies. " +
+        "Reject restores the canonical version on that copy; items that exist only on the copy stay there.</div>" +
+        list.map((c) => {
+          const label = conflictFieldLabels[c.field] || c.field;
+          const vals = c.member_value || c.last_value
+            ? '<div class="conflict-values">Copy: ' + escapeHtml(c.member_value || "—") +
+              " · Canonical: " + escapeHtml(c.last_value || "—") + "</div>"
+            : "";
+          return (
+            '<div class="conflict-row" data-conflict-id="' + escapeHtml(c.id) + '">' +
+            '<div class="conflict-main"><strong>' + escapeHtml(c.subject || c.entity_key) + "</strong>" +
+            ' <span class="conflict-meta">' + escapeHtml(c.kind) + " · " + escapeHtml(c.service) + " · " + escapeHtml(label) + "</span>" +
+            vals + "</div>" +
+            '<div class="conflict-actions">' +
+            '<button type="button" class="btn" data-conflict-resolve="' + escapeHtml(c.id) + '" data-conflict-action="accept">Accept</button>' +
+            '<button type="button" class="btn" data-conflict-resolve="' + escapeHtml(c.id) + '" data-conflict-action="reject">Reject</button>' +
+            "</div></div>"
+          );
+        }).join("");
+      el.querySelectorAll("[data-conflict-resolve]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-conflict-resolve");
+          const accept = btn.getAttribute("data-conflict-action") === "accept";
+          btn.disabled = true;
+          try {
+            await api("/v1/admin/sync/conflicts/" + encodeURIComponent(id) + "/" + (accept ? "accept" : "reject"), {
+              method: "POST",
+              body: "{}",
+              headers: { "Content-Type": "application/json" },
+            });
+            await loadSyncConflicts();
+          } catch (err) {
+            btn.disabled = false;
+            showGlobalError(err.message || "Failed to resolve conflict");
+          }
+        });
+      });
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      el.hidden = true;
+    }
   }
 
   async function loadOwnership() {
@@ -4033,7 +4102,7 @@ function selectTab(name, opts) {
       loadFlow();
     });
   });
-  $("reload-library").addEventListener("click", () => { loadAllLibraryKinds(); loadOwnership(); });
+  $("reload-library").addEventListener("click", () => { loadAllLibraryKinds(); loadOwnership(); loadSyncConflicts(); });
   $("reload-cache").addEventListener("click", () => loadCache());
   $("reload-mail-archive").addEventListener("click", () => loadMailArchive());
   $("sync-mail-archive").addEventListener("click", () => runMailArchiveSync({ reset: false }));
@@ -5015,6 +5084,7 @@ function selectTab(name, opts) {
   loadSummary();
   loadTypePolicies();
   loadOwnership();
+  loadSyncConflicts();
   refreshSetupSurfaces();
 })();
 </script>
