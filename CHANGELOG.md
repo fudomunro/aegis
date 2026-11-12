@@ -7,6 +7,18 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Liked-tracks convergence (issue #365, Phase 4b).** `tracks` joins the
+  converged kinds: the daily fan-out now carries the canonical home's
+  liked/saved list out to the group's other write-capable members, one
+  item page per step, matching items on the durable-id ladder (ISRC/MBID
+  first, duration-guarded name). Saving is create-or-update and never
+  un-likes — a member's own likes survive every decision — and a member
+  that lost a canonical like gets it restored. Member-only likes surface
+  as item conflicts (accept adopts them onto the canonical home and fans
+  out; reject keeps them local), and the collection copy row is stamped
+  for the freshness pass like the other kinds. A kind opts into sync
+  relationships as its identity story allows — the readiness inventory is
+  `docs/sync-identity.md`.
 - **Sync identity readiness (issue #365 Phase 4 / #367).** Every library
   kind now declares its cross-service identity story in the registry —
   the durable id it matches on, the fallback when that is absent, and a

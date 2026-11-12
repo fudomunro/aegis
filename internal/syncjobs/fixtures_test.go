@@ -465,6 +465,7 @@ func convergeStubRunners(t *testing.T, kind, hub string, members []string, conns
 		"contacts":  shared.AccessFull,
 		"events":    shared.AccessFull,
 		"playlists": shared.AccessFull,
+		"tracks":    shared.AccessFull,
 	}
 	for id, conn := range conns {
 		h.services[id] = fixtureService{Name: id, Action: "inject"}
@@ -735,3 +736,139 @@ func (c *playlistStubConn) GetPlaylistMeta(ctx context.Context, playlistID strin
 }
 
 func (c *playlistStubConn) SavedTrackCount(ctx context.Context) (int, error) { return 0, nil }
+
+// --- liked-tracks converge fixtures (issue #365) ---
+
+// likedStubConn is a test connector for liked-tracks convergence: a liked
+// list implementing the placement contract — saving is create-or-update and
+// never un-likes. Items page on offset cursors; pageLimit (when set) forces
+// small pages.
+type likedStubConn struct {
+	mu         sync.Mutex
+	svc        string
+	pageLimit  int
+	liked      []kinds.Track
+	failPlace  error
+	failList   error
+	placeCalls int
+	lastPlaced []string
+}
+
+func newLikedStubConn(svc string) *likedStubConn {
+	return &likedStubConn{svc: svc}
+}
+
+// seed adds held likes, one per name, in order.
+func (c *likedStubConn) seed(names ...string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, n := range names {
+		c.liked = append(c.liked, stubTrack(c.svc, n))
+	}
+}
+
+// setFailPlace arms a one-shot placement failure.
+func (c *likedStubConn) setFailPlace(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.failPlace = err
+}
+
+// heldNames returns the liked track names in order.
+func (c *likedStubConn) heldNames() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.liked))
+	for _, t := range c.liked {
+		out = append(out, t.Name)
+	}
+	return out
+}
+
+// --- connectors.ServiceConnector (unused surfaces) ---
+
+func (c *likedStubConn) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
+}
+
+func (c *likedStubConn) SystemInstructions(string) string { return "" }
+
+func (c *likedStubConn) HandleProxy(http.ResponseWriter, *http.Request, string) {}
+
+// --- kinds.LikedTrackProvider / LikedTrackPageProvider ---
+
+func (c *likedStubConn) ListUserLikedTracks(ctx context.Context) ([]kinds.Track, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failList != nil {
+		return nil, false, c.failList
+	}
+	return append([]kinds.Track(nil), c.liked...), false, nil
+}
+
+func (c *likedStubConn) ListUserLikedTracksPage(ctx context.Context, cursor string, limit int) (kinds.TrackPage, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.failList != nil {
+		return kinds.TrackPage{}, c.failList
+	}
+	offset := 0
+	if cursor != "" {
+		fmt.Sscanf(cursor, "%d", &offset)
+	}
+	if limit <= 0 {
+		limit = 2
+	}
+	if c.pageLimit > 0 && limit > c.pageLimit {
+		limit = c.pageLimit
+	}
+	end := offset + limit
+	if end > len(c.liked) {
+		end = len(c.liked)
+	}
+	if offset > len(c.liked) {
+		offset = len(c.liked)
+	}
+	page := kinds.TrackPage{Tracks: c.liked[offset:end], Total: len(c.liked)}
+	if end < len(c.liked) {
+		page.Next = fmt.Sprint(end)
+	}
+	return page, nil
+}
+
+// --- kinds.LikedTrackWriteProvider ---
+
+func (c *likedStubConn) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.placeCalls++
+	c.lastPlaced = nil
+	if c.failPlace != nil {
+		err := c.failPlace
+		c.failPlace = nil
+		return kinds.SaveLikedTracksResult{}, err
+	}
+	held := kinds.NewTrackMatcher(c.liked)
+	res := kinds.SaveLikedTracksResult{}
+	for _, t := range tracks {
+		c.lastPlaced = append(c.lastPlaced, t.Name)
+		if held.Has(t) {
+			continue // liking again is a no-op — and never an un-like
+		}
+		c.liked = append(c.liked, t)
+		held.Add(t)
+		res.Copied++
+		res.Placed = append(res.Placed, kinds.PlaceRecord{
+			Name:      t.Name,
+			MatchedBy: kinds.TrackMatchName,
+		})
+	}
+	return res, nil
+}
+
+// SavedTrackCount implements the freshness checker's liked-list probe.
+func (c *likedStubConn) SavedTrackCount(ctx context.Context) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.liked), nil
+}
