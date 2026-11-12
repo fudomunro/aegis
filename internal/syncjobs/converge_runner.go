@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/library"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -149,6 +151,12 @@ func (r *convergeRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error)
 		truncated = true
 	}
 
+	// Watermark enrichment (issue #365 phase 3): attach the member's known
+	// ref+etag to each item so placement takes its update path — re-runs
+	// update in place instead of creating duplicates, and a member-side
+	// edit surfaces as an If-Match conflict instead of being overwritten.
+	s.attachMemberRefs(&items, p.Kind, target)
+
 	res, err := r.placeOn(ctx, target, items)
 	if err != nil {
 		// Counters stay unmutated on failure so a retry of this step cannot
@@ -162,6 +170,10 @@ func (r *convergeRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error)
 		s.Mirror.RecordMirrorItemCopy(p.Kind, rec.Name, target, rec.ExternalID, rec.Name, rec.ETag)
 	}
 	s.Mirror.RecordMirrorCopy(p.Kind, p.SourceService, "", target, "", p.Kind, res.Copied, "")
+
+	// If-Match refusals are the watermark signal that a member record
+	// changed underfoot: recorded as conflicts, never overwritten.
+	s.recordConflicts(p.Kind, target, res.Conflicts)
 
 	p.Planned += items.len()
 	p.Copied += res.Copied
@@ -306,6 +318,137 @@ func (r *convergeRunner) placeOn(ctx context.Context, target string, items entit
 	}
 }
 
+// attachMemberRefs rewrites each item's sources to carry the member's known
+// ref+etag from the per-item watermark rows (issue #365 phase 3). Placement
+// then takes its update path — If-Match against the last-seen etag — so
+// re-runs update in place instead of creating duplicates, and a member-side
+// edit surfaces as a conflict instead of being overwritten. Items with no
+// recorded copy on the member are left untouched (first placement creates
+// them and stamps the row).
+func (s *Runners) attachMemberRefs(items *entitySet, kind, target string) {
+	if s == nil || s.Copies == nil || !s.Copies.Enabled() {
+		return
+	}
+	rows := s.Copies.List(copies.Filter{Kind: kind, Service: target})
+	if len(rows) == 0 {
+		return
+	}
+	byEntity := make(map[string]copies.Record, len(rows))
+	for _, row := range rows {
+		prev, ok := byEntity[row.EntityKey]
+		if !ok || (prev.Watermark == "" && row.Watermark != "") {
+			byEntity[row.EntityKey] = row
+		}
+	}
+	etagOf := func(row copies.Record) string {
+		if row.Watermark != "" {
+			return row.Watermark
+		}
+		return row.Version.ETag
+	}
+	for i := range items.contacts {
+		row, ok := byEntity[kind+":"+strings.TrimSpace(contactDisplayName(items.contacts[i]))]
+		if !ok {
+			continue
+		}
+		items.contacts[i].Sources = upsertSourceRef(items.contacts[i].Sources, target, row.ExternalID, etagOf(row))
+	}
+	for i := range items.events {
+		row, ok := byEntity[kind+":"+strings.TrimSpace(items.events[i].Title)]
+		if !ok {
+			continue
+		}
+		items.events[i].Sources = upsertSourceEventRef(items.events[i].Sources, target, row.ExternalID, etagOf(row))
+	}
+}
+
+// contactDisplayName is the placement-side display name convention
+// (mirrors the connectors' placeContactDisplay): name, else first email.
+func contactDisplayName(c kinds.Contact) string {
+	if c.Name != "" {
+		return c.Name
+	}
+	if len(c.Emails) > 0 {
+		return c.Emails[0]
+	}
+	return ""
+}
+
+// upsertSourceRef patches a contact's source for service with id+etag,
+// replacing any previous entry for that service.
+func upsertSourceRef(srcs []kinds.ContactSource, service, id, etag string) []kinds.ContactSource {
+	out := make([]kinds.ContactSource, 0, len(srcs)+1)
+	replaced := false
+	for _, src := range srcs {
+		if src.Service == service {
+			if !replaced {
+				src.ID = id
+				src.Extra = withETag(src.Extra, etag)
+				out = append(out, src)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, src)
+	}
+	if !replaced {
+		out = append(out, kinds.ContactSource{Service: service, ID: id, Extra: withETag(nil, etag)})
+	}
+	return out
+}
+
+// upsertSourceEventRef is upsertSourceRef for event sources.
+func upsertSourceEventRef(srcs []kinds.CalendarEventSource, service, id, etag string) []kinds.CalendarEventSource {
+	out := make([]kinds.CalendarEventSource, 0, len(srcs)+1)
+	replaced := false
+	for _, src := range srcs {
+		if src.Service == service {
+			if !replaced {
+				src.ID = id
+				src.Extra = withETag(src.Extra, etag)
+				out = append(out, src)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, src)
+	}
+	if !replaced {
+		out = append(out, kinds.CalendarEventSource{Service: service, ID: id, Extra: withETag(nil, etag)})
+	}
+	return out
+}
+
+func withETag(extra map[string]any, etag string) map[string]any {
+	if etag == "" {
+		return extra
+	}
+	if extra == nil {
+		return map[string]any{"etag": etag}
+	}
+	extra["etag"] = etag
+	return extra
+}
+
+// recordConflicts records placement If-Match refusals as record conflicts:
+// the member record changed underfoot, and it is reported, never
+// overwritten (issue #365 phase 3).
+func (s *Runners) recordConflicts(kind, target string, conflicts []kinds.PlaceConflict) {
+	for _, c := range conflicts {
+		s.recordConflict(SyncConflict{
+			Kind:        kind,
+			Service:     target,
+			EntityKey:   kind + ":" + strings.TrimSpace(c.Name),
+			ExternalID:  c.ID,
+			Subject:     c.Name,
+			Field:       ConflictFieldRecord,
+			MemberValue: "changed on this copy",
+			LastValue:   "not overwritten",
+			Source:      ConflictSourceConverge,
+		})
+	}
+}
+
 // runPlaylistStep executes one bounded playlist step: at most one canonical
 // item page placed onto one member. Members are outermost; within a member
 // the canonical home's playlists run in listing order, each chained through
@@ -368,8 +511,8 @@ func (r *convergeRunner) runPlaylistStep(ctx context.Context, p convergeJobPaylo
 	}
 
 	// A member title that differs from both what we last set and the
-	// canonical title is a member-side rename: counted as a conflict and
-	// left alone (the hand-off to the user is a later phase).
+	// canonical title is a member-side rename: reported as a conflict and
+	// left alone until the user accepts or rejects it (issue #365 phase 3).
 	conflicted := p.TargetID != "" && state.title != "" && state.title != p.Name && state.title != p.RowName
 	title := p.Name
 	if conflicted || (p.ItemCursor != "" && page.Next != "") {
@@ -405,6 +548,19 @@ func (r *convergeRunner) runPlaylistStep(ctx context.Context, p convergeJobPaylo
 	p.Skipped += alreadyHeld + skips
 	if conflicted && p.ItemCursor == "" {
 		p.Conflicts++ // once per member copy, counted on the first page
+		// The rename is recorded for the admin's accept/reject decision
+		// (issue #365 phase 3) — reported and left alone until then.
+		s.recordConflict(SyncConflict{
+			Kind:        library.MirrorKindPlaylists,
+			Service:     target,
+			EntityKey:   library.MirrorEntityKey(library.MirrorKindPlaylists, p.SourceService, p.SourceID),
+			ExternalID:  p.TargetID,
+			Subject:     p.Name,
+			Field:       ConflictFieldTitle,
+			MemberValue: state.title,
+			LastValue:   p.Name,
+			Source:      ConflictSourceConverge,
+		})
 	}
 
 	if page.Next != "" {
@@ -421,6 +577,25 @@ func (r *convergeRunner) runPlaylistStep(ctx context.Context, p convergeJobPaylo
 	}
 	s.Mirror.RecordMirrorCopy(library.MirrorKindPlaylists, p.SourceService, p.SourceID,
 		target, p.TargetID, stampedName, state.count+copied, "")
+
+	// Member-only items are non-hub creates: recorded here (the watermark
+	// count diverges from the canonical total) for accept — adopt onto the
+	// canonical home — or reject — keep local. Convergence itself never
+	// removes them.
+	if memberAfter, hubTotal := state.count+copied, ref.TrackCount; hubTotal > 0 && memberAfter > hubTotal {
+		s.recordConflict(SyncConflict{
+			Kind:        library.MirrorKindPlaylists,
+			Service:     target,
+			EntityKey:   library.MirrorEntityKey(library.MirrorKindPlaylists, p.SourceService, p.SourceID),
+			ExternalID:  p.TargetID,
+			Subject:     p.Name,
+			Field:       ConflictFieldItems,
+			MemberValue: fmt.Sprintf("%d items", memberAfter),
+			LastValue:   fmt.Sprintf("%d items", hubTotal),
+			Source:      ConflictSourceConverge,
+		})
+	}
+
 	p.PlaylistsDone++
 	p.resetPlaylistChain()
 	p.PlaylistIndex++

@@ -303,15 +303,19 @@ func gmailPayloadJSON(id string) string {
 // and never deletes — the converge contract. Each service ID gets its own
 // instance in the fixture registry.
 type entityStubConn struct {
-	mu         sync.Mutex
-	contacts   []kinds.Contact
-	events     []kinds.CalendarEvent
-	failPlace  error
-	failList   error
-	conflicts  []kinds.PlaceConflict
-	skips      []kinds.PlaceSkip
-	placeCalls int
-	lastPlaced []string
+	mu        sync.Mutex
+	contacts  []kinds.Contact
+	events    []kinds.CalendarEvent
+	failPlace error
+	failList  error
+	conflicts []kinds.PlaceConflict
+	skips     []kinds.PlaceSkip
+	// placeCalls and lastInput capture what placement received — the
+	// watermark-enrichment assertions read the input refs.
+	placeCalls    int
+	lastPlaced    []string
+	lastContactIn []kinds.Contact
+	lastEventIn   []kinds.CalendarEvent
 }
 
 // --- connectors.ServiceConnector (unused surfaces) ---
@@ -340,16 +344,17 @@ func (c *entityStubConn) PlaceContacts(ctx context.Context, in []kinds.Contact) 
 	for _, ct := range in {
 		names = append(names, ct.Name)
 	}
-	return c.place(names, func(name string) {
-		for i := range c.contacts {
-			if c.contacts[i].Name == name {
+	return c.place(names, func(i int) {
+		ct := in[i]
+		for j := range c.contacts {
+			if c.contacts[j].Name == ct.Name {
+				c.contacts[j] = ct // create-or-update: the edit lands
 				return
 			}
 		}
-		c.contacts = append(c.contacts, kinds.Contact{
-			Name:    name,
-			Sources: []kinds.ContactSource{{Service: "stub", ID: "id-" + name}},
-		})
+		c.contacts = append(c.contacts, ct)
+	}, func() {
+		c.lastContactIn = append([]kinds.Contact(nil), in...)
 	})
 }
 
@@ -369,27 +374,31 @@ func (c *entityStubConn) PlaceEvents(ctx context.Context, in []kinds.CalendarEve
 	for _, ev := range in {
 		names = append(names, ev.Title)
 	}
-	return c.place(names, func(name string) {
-		for i := range c.events {
-			if c.events[i].Title == name {
+	return c.place(names, func(i int) {
+		ev := in[i]
+		for j := range c.events {
+			if c.events[j].Title == ev.Title {
+				c.events[j] = ev // create-or-update: the edit lands
 				return
 			}
 		}
-		c.events = append(c.events, kinds.CalendarEvent{
-			Title:   name,
-			Sources: []kinds.CalendarEventSource{{Service: "stub", ID: "id-" + name}},
-		})
+		c.events = append(c.events, ev)
+	}, func() {
+		c.lastEventIn = append([]kinds.CalendarEvent(nil), in...)
 	})
 }
 
-// place records one placement step: upsert each named item via put (never
-// removing anything already held), reporting any armed failures, skips, and
-// conflicts once.
-func (c *entityStubConn) place(names []string, put func(name string)) (kinds.PlaceEntitiesResult, error) {
+// place records one placement step: upsert each item via put (never
+// removing anything already held), reporting any armed failures, skips,
+// and conflicts once.
+func (c *entityStubConn) place(names []string, put func(i int), capture func()) (kinds.PlaceEntitiesResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.placeCalls++
 	c.lastPlaced = append([]string(nil), names...)
+	if capture != nil {
+		capture()
+	}
 	if c.failPlace != nil {
 		err := c.failPlace
 		c.failPlace = nil
@@ -398,7 +407,7 @@ func (c *entityStubConn) place(names []string, put func(name string)) (kinds.Pla
 	res := kinds.PlaceEntitiesResult{Conflicts: c.conflicts, Skips: c.skips}
 	c.conflicts, c.skips = nil, nil
 	for i, name := range names {
-		put(name)
+		put(i)
 		res.Copied++
 		res.Placed = append(res.Placed, kinds.PlaceRecord{
 			Name:       name,
@@ -434,6 +443,18 @@ func (c *entityStubConn) heldContacts() []string {
 	return out
 }
 
+// contact returns the stored contact with the given name (zero if absent).
+func (c *entityStubConn) contact(name string) kinds.Contact {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, ct := range c.contacts {
+		if ct.Name == name {
+			return ct
+		}
+	}
+	return kinds.Contact{}
+}
+
 // convergeStubRunners wires a Runners whose connectors are entity or
 // playlist stubs and whose fixture host reports one sync group for kind
 // (issue #365).
@@ -455,11 +476,17 @@ func convergeStubRunners(t *testing.T, kind, hub string, members []string, conns
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ledger.Close() })
+	conflicts, err := OpenConflictStore(nil, t.TempDir()+"/sync_jobs.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conflicts.Close() })
 	lib := &library.Handlers{Host: h, Connectors: h.connectors, Copies: ledger}
 	return &Runners{
 		Host:       h,
 		Mirror:     lib,
 		Copies:     ledger,
+		Conflicts:  conflicts,
 		Connectors: h.connectors,
 	}, h
 }
@@ -469,6 +496,7 @@ func convergeTestRunners(t *testing.T, kind, hub string, members []string, conns
 	t.Helper()
 	run, _ := convergeStubRunners(t, kind, hub, members, conns)
 	store := testJobStore(t)
+	run.Jobs = store
 	reg := NewRunnerRegistry()
 	registerConvergeRunners(reg, run)
 	w := NewSyncWorker(store, reg, SyncWorkerOptions{Workers: 1})
@@ -693,3 +721,17 @@ func (c *playlistStubConn) setFailPlace(err error) {
 	defer c.mu.Unlock()
 	c.failPlace = err
 }
+
+// --- kinds.PlaylistMetaProvider (the freshness checker's probe) ---
+
+func (c *playlistStubConn) GetPlaylistMeta(ctx context.Context, playlistID string) (kinds.PlaylistMeta, bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	pl := c.byID[playlistID]
+	if pl == nil {
+		return kinds.PlaylistMeta{}, false, nil
+	}
+	return kinds.PlaylistMeta{Name: pl.name, ItemCount: len(pl.tracks)}, true, nil
+}
+
+func (c *playlistStubConn) SavedTrackCount(ctx context.Context) (int, error) { return 0, nil }

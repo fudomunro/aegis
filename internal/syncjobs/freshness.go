@@ -2,6 +2,7 @@ package syncjobs
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -108,6 +109,11 @@ type freshnessOutcome struct {
 	Status  string
 	Checked bool // false: leave the ledger row untouched
 	Skip    string
+	// Cur and Exists are the live tokens behind the status, so a
+	// divergence can be classified into a sync conflict (issue #365
+	// phase 3) without a second fetch.
+	Cur    copies.Version
+	Exists bool
 }
 
 // FreshnessEngine walks copy rows and stamps check results. Shared by the
@@ -142,7 +148,12 @@ func (e *FreshnessEngine) checkOne(ctx context.Context, rec copies.Record) fresh
 	if !ok {
 		return freshnessOutcome{Skip: "unchecked"}
 	}
-	return freshnessOutcome{Status: compareCopyVersion(rec.SyncMode, rec.Version, cur, exists), Checked: true}
+	return freshnessOutcome{
+		Status:  compareCopyVersion(rec.SyncMode, rec.Version, cur, exists),
+		Checked: true,
+		Cur:     cur,
+		Exists:  exists,
+	}
 }
 
 // FreshnessBatch is one bounded walk of copy rows.
@@ -189,6 +200,7 @@ func (e *FreshnessEngine) RunBatch(ctx context.Context, kind string, afterID int
 				e.logger.Warn("copy freshness stamp failed",
 					"kind", rec.Kind, "service", rec.Service, "error", err)
 			}
+			e.recordDivergence(rec, res.Cur, res.Exists)
 			out.Checked++
 			switch res.Status {
 			case copies.CopyStatusStale:
@@ -205,6 +217,77 @@ func (e *FreshnessEngine) RunBatch(ctx context.Context, kind string, afterID int
 	}
 	out.Done = len(rows) < limit
 	return out, nil
+}
+
+// recordDivergence files a sync conflict when a member copy's live tokens
+// diverge from its watermark (issue #365 phase 3). Only sync-group members
+// are in scope: a plain mirror target has no canonical home to accept into
+// or reject against, and the canonical home's own rows record its edits —
+// which propagate rather than conflict.
+func (e *FreshnessEngine) recordDivergence(rec copies.Record, cur copies.Version, exists bool) {
+	field := classifyCopyDivergence(rec.Version, cur, exists)
+	if field == "" || e.run == nil || e.run.Host == nil {
+		return
+	}
+	hub, members := e.run.Host.SyncGroup(rec.Kind)
+	if hub == "" || hub == rec.Service {
+		return
+	}
+	inGroup := false
+	for _, m := range members {
+		if m == rec.Service {
+			inGroup = true
+			break
+		}
+	}
+	if !inGroup {
+		return
+	}
+	e.run.recordConflict(SyncConflict{
+		Kind:        rec.Kind,
+		Service:     rec.Service,
+		EntityKey:   rec.EntityKey,
+		ExternalID:  rec.ExternalID,
+		Subject:     rec.Version.Name,
+		Field:       field,
+		MemberValue: divergenceMemberValue(field, cur, exists),
+		LastValue:   divergenceLastValue(field, rec.Version),
+		Source:      ConflictSourceFreshness,
+	})
+}
+
+// divergenceMemberValue formats what the member copy now holds.
+func divergenceMemberValue(field string, got copies.Version, exists bool) string {
+	if !exists {
+		return "missing on this copy"
+	}
+	switch field {
+	case ConflictFieldTitle:
+		return got.Name
+	case ConflictFieldItems:
+		if got.ItemCount > 0 {
+			return fmt.Sprintf("%d items", got.ItemCount)
+		}
+		return "items changed on this copy"
+	default:
+		return "changed on this copy"
+	}
+}
+
+// divergenceLastValue formats the watermark the copy diverged from — the
+// state convergence last produced there.
+func divergenceLastValue(field string, want copies.Version) string {
+	switch field {
+	case ConflictFieldTitle:
+		return want.Name
+	case ConflictFieldItems:
+		if want.ItemCount > 0 {
+			return fmt.Sprintf("%d items", want.ItemCount)
+		}
+		return "items unchanged"
+	default:
+		return "not overwritten"
+	}
 }
 
 // --- checkers ---

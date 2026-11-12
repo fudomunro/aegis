@@ -440,7 +440,19 @@ POST /v1/admin/sync/pause                      # hold work {"service":"spotify"}
 POST /v1/admin/sync/resume                     # release a paused scope
 POST /v1/admin/sync/schedules/{id}/enable      # resume a paused schedule
 POST /v1/admin/sync/schedules/{id}/disable     # pause a schedule
+GET  /v1/admin/sync/conflicts                  # copies that diverged from their canonical home
+POST /v1/admin/sync/conflicts/{id}/accept      # make that edit canonical, then update the other copies
+POST /v1/admin/sync/conflicts/{id}/reject      # restore the canonical version on that copy
 ```
+
+Conflicts surface on the **Library** page: when a copy that is not the
+canonical home is renamed, gains items, or its records are edited, the
+change is listed there instead of being overwritten. **Accept** writes the
+edit to the canonical home and fans it out to the other copies; **reject**
+re-converges that copy from the canonical home. Items that exist only on a
+copy are never removed by either choice — accepting adopts them onto the
+canonical home, rejecting keeps them local. Adopting a copy's deletions
+lands together with delete propagation, a later phase.
 
 Job types today:
 
@@ -449,6 +461,7 @@ Job types today:
 | `ingest` | Live cursor paging into the mail archive (Gmail) |
 | `import_snapshot` | Snapshot import of a read-only export (Google Takeout) |
 | `freshness_check` | Observational copy-freshness pass (see below) |
+| `converge` | Fans a kind's data from its canonical home out to the group's other write-capable members, one member (or one item page) per step |
 | `mirror` | Copies a playlist or liked-tracks list from one service to another, one source page per step |
 | `repair` | Re-places a copy that freshness marked stale or missing |
 

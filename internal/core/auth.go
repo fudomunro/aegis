@@ -110,6 +110,10 @@ type Server struct {
 	// syncSchedules holds recurring sync job templates (issue #227 phase 2).
 	// May be disabled.
 	syncSchedules *syncjobs.ScheduleStore
+	// syncConflicts is the durable conflict queue (issue #365 phase 3):
+	// detected non-hub edits awaiting an accept/reject decision. May be
+	// disabled.
+	syncConflicts *syncjobs.ConflictStore
 	// mail is the optional local compressed mail archive (the messages
 	// kind's local source).
 	mail *mail.Archive

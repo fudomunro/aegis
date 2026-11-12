@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"net/http"
 	"sort"
 
@@ -35,6 +36,13 @@ type KindCatalog interface {
 type MaintenanceCapture interface {
 	CollectMaintenanceSignals() syncjobs.MaintenanceSignals
 	WriteMaintenanceSignals(sig syncjobs.MaintenanceSignals) (string, error)
+}
+
+// ConflictResolve applies an accept/reject decision to one detected
+// non-hub edit (issue #365 phase 3). The sync domain's Runners satisfies
+// it; the hub wires the instance so the surfaces stay uncoupled.
+type ConflictResolve interface {
+	ResolveConflict(ctx context.Context, id string, accept bool) (syncjobs.SyncConflict, error)
 }
 
 // SearchStatus is the search-index status view. The concrete engine
@@ -81,6 +89,12 @@ type Handlers struct {
 	SyncWorker *syncjobs.SyncWorker
 	// SyncSchedules holds recurring sync job templates (nil when disabled).
 	SyncSchedules *syncjobs.ScheduleStore
+	// SyncConflicts holds the detected non-hub edits awaiting an
+	// accept/reject decision (issue #365 phase 3). Nil when disabled.
+	SyncConflicts *syncjobs.ConflictStore
+	// Conflicts applies accept/reject decisions (wired to the sync
+	// domain's Runners).
+	Conflicts ConflictResolve
 	// Metrics is the in-memory access ring buffer for the admin map.
 	Metrics *metrics.AccessMetrics
 	// Prom exports the Prometheus text view of the same series.
