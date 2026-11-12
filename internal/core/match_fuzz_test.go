@@ -178,3 +178,61 @@ func FuzzMergeAlbumsSync(f *testing.F) {
 		_ = kinds.AlbumEntityID(al)
 	})
 }
+
+func FuzzTracksMatch(f *testing.F) {
+	f.Add("Song", "Artist", "USRC12345678", int64(200000))
+	f.Add("Song", "Artist", "", int64(200000))
+	f.Add("Song", "Artist", "USRC12345678", int64(-1))
+	f.Add("Song - Topic", "Artist - Topic", "not-an-isrc", int64(0))
+	f.Add("", "", "", int64(0))
+	f.Add("Song", "Artist A", "ZZXX-9999-00-00001", int64(200000))
+	f.Add("Song", "Artist B", "\x00\x00", int64(1))
+	f.Fuzz(func(t *testing.T, title, artist, isrc string, durationMs int64) {
+		if durationMs < 0 || durationMs > 1<<40 {
+			return
+		}
+		mk := func(id string) kinds.Track {
+			tr := kinds.Track{Name: title, EntityID: isrc, DurationMs: int(durationMs)}
+			if artist != "" {
+				tr.Artists = []kinds.Artist{{Name: artist}}
+			}
+			tr.Sources = []kinds.TrackSource{{Service: "s", ID: id}}
+			return tr
+		}
+		a, b := mk("1"), mk("2")
+		if kinds.TracksMatch(a, b) != kinds.TracksMatch(b, a) {
+			t.Fatal("TracksMatch must be symmetric")
+		}
+		if !kinds.TracksMatch(a, a) {
+			t.Fatal("a track must match itself")
+		}
+		keyA, howA := kinds.TrackMatchKey(a)
+		if howA != kinds.TrackMatchISRC && howA != kinds.TrackMatchMBID && howA != kinds.TrackMatchName {
+			t.Fatalf("unknown match method %q", howA)
+		}
+		_ = keyA
+		// The key is a function of the identity fields (deterministic).
+		ka, ha := kinds.TrackMatchKey(mk("1"))
+		kb, hb := kinds.TrackMatchKey(mk("1"))
+		if ka != kb || ha != hb {
+			t.Fatal("identical identity fields must produce identical match keys")
+		}
+		// Index checks agree with the pairwise ladder (issue #366).
+		m := kinds.NewTrackMatcher([]kinds.Track{a})
+		if !m.Has(a) {
+			t.Fatal("the matcher must hold what was added")
+		}
+		if m.Has(b) != kinds.TracksMatch(a, b) {
+			t.Fatal("matcher Has must agree with the pairwise ladder")
+		}
+		other := kinds.Track{Name: title + "\x00never", EntityID: isrc + "x", DurationMs: int(durationMs)}
+		_ = m.Has(other)
+		// A different durable id never matches, even at the same name.
+		if id := kinds.TrackEntityID(a); id != "" {
+			wrong := kinds.Track{Name: title, EntityID: id + "X", DurationMs: int(durationMs)}
+			if kinds.TracksMatch(a, wrong) {
+				t.Fatal("distinct durable ids must not match")
+			}
+		}
+	})
+}

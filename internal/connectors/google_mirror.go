@@ -39,7 +39,7 @@ func (c *GoogleContactsConnector) PlaceContacts(ctx context.Context, contacts []
 				continue
 			}
 			result.Copied++
-			result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag})
+			result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref"})
 			continue
 		}
 
@@ -83,7 +83,7 @@ func (c *GoogleCalendarConnector) PlaceEvents(ctx context.Context, events []kind
 				continue
 			}
 			result.Copied++
-			result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag})
+			result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref"})
 			continue
 		}
 

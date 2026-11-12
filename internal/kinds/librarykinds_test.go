@@ -1,6 +1,7 @@
 package kinds
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/shared"
@@ -125,3 +126,22 @@ func TestBuiltinLibraryKinds_PolicyFlags(t *testing.T) {
 }
 
 // TestBuiltinLibraryKinds_DerivedLists checks the hand-maintained copies are
+
+// TestSyncIdentityDeclarations gates sync readiness on the kind-owned
+// declaration (issue #367): a participant must declare ready, and every
+// "no sync yet" row must say what blocks it. The inventory table is
+// docs/sync-identity.md.
+func TestSyncIdentityDeclarations(t *testing.T) {
+	for _, k := range BuiltinLibraryKinds {
+		id := k.SyncIdentity
+		if k.SyncParticipant && !id.Ready {
+			t.Fatalf("kind %s participates in sync but its identity row says not ready", k.ID)
+		}
+		if !id.Ready && strings.TrimSpace(id.Note) == "" {
+			t.Fatalf("kind %s is not sync-ready but its row does not say what blocks it", k.ID)
+		}
+		if id.Ready && strings.TrimSpace(id.Fallback) == "" {
+			t.Fatalf("kind %s is sync-ready but declares no fallback match", k.ID)
+		}
+	}
+}

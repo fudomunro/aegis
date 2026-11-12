@@ -539,17 +539,69 @@ func TestSpotifySearchTrackURI_EdgeCases(t *testing.T) {
 	}))
 	ctx := context.Background()
 
-	uri, err := c.searchTrackURI(ctx, kinds.Track{Name: "Nope", Artists: []kinds.Artist{{Name: "X"}}})
+	uri, _, err := c.searchTrackURI(ctx, kinds.Track{Name: "Nope", Artists: []kinds.Artist{{Name: "X"}}})
 	if err != nil || uri != "" {
 		t.Fatalf("empty result = %q %v", uri, err)
 	}
-	uri, err = c.searchTrackURI(ctx, kinds.Track{Name: "BadItem"})
+	uri, _, err = c.searchTrackURI(ctx, kinds.Track{Name: "BadItem"})
 	if err != nil || uri != "" {
 		t.Fatalf("bad item = %q %v", uri, err)
 	}
-	uri, err = c.searchTrackURI(ctx, kinds.Track{Name: "EmptyURI"})
+	uri, _, err = c.searchTrackURI(ctx, kinds.Track{Name: "EmptyURI"})
 	if err != nil || uri != "" {
 		t.Fatalf("empty uri = %q %v", uri, err)
+	}
+}
+
+func TestSpotifySearchTrackURI_MatchLadder(t *testing.T) {
+	var queries []string
+	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		queries = append(queries, q)
+		switch {
+		case strings.HasPrefix(q, "isrc:"):
+			if q == "isrc:USRC12345678" {
+				writeMirrorJSON(w, map[string]any{"tracks": map[string]any{"items": []any{
+					map[string]any{"uri": "spotify:track:by-isrc", "duration_ms": 200000},
+				}}})
+				return
+			}
+			writeMirrorJSON(w, map[string]any{"tracks": map[string]any{"items": []any{}}})
+		case strings.Contains(q, "Long"):
+			// A name hit of a wildly different length is a different
+			// recording (issue #366).
+			writeMirrorJSON(w, map[string]any{"tracks": map[string]any{"items": []any{
+				map[string]any{"uri": "spotify:track:long-live", "duration_ms": 600000},
+			}}})
+		default:
+			writeMirrorJSON(w, map[string]any{"tracks": map[string]any{"items": []any{
+				map[string]any{"uri": "spotify:track:by-name", "duration_ms": 201000},
+			}}})
+		}
+	}))
+	ctx := context.Background()
+	artist := []kinds.Artist{{Name: "Artist"}}
+
+	// ISRC beats name search when the track carries one.
+	uri, how, err := c.searchTrackURI(ctx, kinds.Track{Name: "Song", Artists: artist, EntityID: "USRC12345678", DurationMs: 200000})
+	if err != nil || uri != "spotify:track:by-isrc" || how != kinds.TrackMatchISRC {
+		t.Fatalf("isrc ladder = (%q,%q,%v)", uri, how, err)
+	}
+
+	// ISRC miss falls through to duration-guarded name.
+	queries = nil
+	uri, how, err = c.searchTrackURI(ctx, kinds.Track{Name: "Song", Artists: artist, EntityID: "USRC00000000", DurationMs: 200000})
+	if err != nil || uri != "spotify:track:by-name" || how != kinds.TrackMatchName {
+		t.Fatalf("name ladder = (%q,%q,%v)", uri, how, err)
+	}
+	if len(queries) != 2 || !strings.HasPrefix(queries[0], "isrc:") {
+		t.Fatalf("queries = %v, want the isrc lookup first", queries)
+	}
+
+	// A name hit of a wildly different length is not the same recording.
+	uri, _, err = c.searchTrackURI(ctx, kinds.Track{Name: "Long Song", Artists: artist, DurationMs: 200000})
+	if err != nil || uri != "" {
+		t.Fatalf("duration guard = (%q,%v), want no match", uri, err)
 	}
 }
 

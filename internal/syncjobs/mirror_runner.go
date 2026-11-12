@@ -157,15 +157,17 @@ func (r *mirrorRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
 	pageSize := len(tracks)
 
 	// Repair: drop what the target already holds so a re-run converges.
+	// The identity ladder is the merge layer's (issue #366): durable id
+	// first, then duration-guarded name.
 	if p.Force && p.TargetID != "" && len(tracks) > 0 {
 		existing, ferr := loadTargetIdentities(ctx, s, p.TargetService, p.TargetID)
 		if ferr != nil {
 			slog.Warn("mirror repair could not read the target list",
 				"service", p.TargetService, "error", ferr)
-		} else if len(existing) > 0 {
+		} else {
 			filtered := tracks[:0]
 			for _, t := range tracks {
-				if !existing[repairIdentityKey(t)] {
+				if !existing.Has(t) {
 					filtered = append(filtered, t)
 				}
 			}
@@ -259,28 +261,16 @@ func defaultMirrorName(kind string) string {
 	return "Aegis mirror"
 }
 
-// repairIdentityKey is always name-based. Repair compares a source list
-// against a target list from a *different* service, and placement matches
-// cross-service by name/artist in the write operation — so id keys would
-// never line up. Name + first artist is the same matching placement uses.
-func repairIdentityKey(t kinds.Track) string {
-	artist := ""
-	if len(t.Artists) > 0 {
-		artist = t.Artists[0].Name
-	}
-	return "name:" + strings.ToLower(strings.TrimSpace(t.Name)) + "|" +
-		strings.ToLower(strings.TrimSpace(artist))
-}
-
-// loadTargetIdentities reads what a target playlist already holds so a repair
-// can skip those items. It reuses the items operation on the target service,
-// so no extra adapter method is needed.
-func loadTargetIdentities(ctx context.Context, s *Runners, targetService, targetID string) (map[string]bool, error) {
+// loadTargetIdentities indexes what a target playlist already holds so a
+// repair can skip those items (issue #366's identity ladder). It reuses the
+// items operation on the target service, so no extra adapter method is
+// needed.
+func loadTargetIdentities(ctx context.Context, s *Runners, targetService, targetID string) (*kinds.TrackMatcher, error) {
 	src, err := s.Mirror.MirrorSourceFor(targetService, library.MirrorKindPlaylists)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]bool)
+	out := kinds.NewTrackMatcher(nil)
 	cursor := ""
 	for i := 0; i < shared.LibraryPageCap; i++ {
 		_, page, err := src.ListPlaylistItems(ctx, targetID, cursor, 100)
@@ -288,7 +278,7 @@ func loadTargetIdentities(ctx context.Context, s *Runners, targetService, target
 			return out, err
 		}
 		for _, t := range page.Tracks {
-			out[repairIdentityKey(t)] = true
+			out.Add(t)
 		}
 		if page.Next == "" {
 			return out, nil

@@ -159,7 +159,7 @@ func TestHandleLibraryMirror_DryRunDoesNotWrite(t *testing.T) {
 	if writes.Load() != 0 {
 		t.Fatalf("dry-run performed %d writes", writes.Load())
 	}
-	if res.IdentityNote == "" || !strings.Contains(res.IdentityNote, "name-based") {
+	if res.IdentityNote == "" || !strings.Contains(res.IdentityNote, "duration-guarded") {
 		t.Fatalf("missing identity note: %q", res.IdentityNote)
 	}
 }
@@ -200,7 +200,10 @@ func TestHandleLibraryMirror_SpotifyToYouTubePlaylist(t *testing.T) {
 			// YouTube search — match only the first track.
 			if strings.Contains(q.Get("q"), "So What") {
 				json.NewEncoder(w).Encode(map[string]any{
-					"items": []any{map[string]any{"id": map[string]any{"videoId": "vid1"}}},
+					"items": []any{map[string]any{
+						"id":      map[string]any{"videoId": "vid1"},
+						"snippet": map[string]any{"title": "So What"},
+					}},
 				})
 				return
 			}

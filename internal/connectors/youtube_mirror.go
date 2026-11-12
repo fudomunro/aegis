@@ -187,7 +187,7 @@ func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlist
 	result.PlaylistID = playlistID
 
 	for _, t := range tracks {
-		videoID := c.resolveVideoID(ctx, t, &result.Skips)
+		videoID, how := c.resolveVideoID(ctx, t, &result.Skips)
 		if videoID == "" {
 			continue
 		}
@@ -206,6 +206,11 @@ func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlist
 			return result, err
 		}
 		result.Copied++
+		result.Placed = append(result.Placed, kinds.PlaceRecord{
+			Name:       placeTrackDisplay(t),
+			ExternalID: videoID,
+			MatchedBy:  how,
+		})
 	}
 	return result, nil
 }
@@ -250,7 +255,7 @@ func (c *YouTubeMusicConnector) renamePlaylist(ctx context.Context, playlistID, 
 func (c *YouTubeMusicConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
 	var result kinds.SaveLikedTracksResult
 	for _, t := range tracks {
-		videoID := c.resolveVideoID(ctx, t, &result.Skips)
+		videoID, how := c.resolveVideoID(ctx, t, &result.Skips)
 		if videoID == "" {
 			continue
 		}
@@ -260,27 +265,37 @@ func (c *YouTubeMusicConnector) SaveLikedTracks(ctx context.Context, tracks []ki
 			return result, err
 		}
 		result.Copied++
+		result.Placed = append(result.Placed, kinds.PlaceRecord{
+			Name:       placeTrackDisplay(t),
+			ExternalID: videoID,
+			MatchedBy:  how,
+		})
 	}
 	return result, nil
 }
 
-// resolveVideoID maps one track to a YouTube video ID, appending a skip
-// when it cannot be resolved.
-func (c *YouTubeMusicConnector) resolveVideoID(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) string {
+// resolveVideoID maps one track to a YouTube video ID and the identity it
+// matched on (issue #366): service-local reference first, then name search
+// guarded by the title key. YouTube exposes no ISRC and no durations in
+// search, so the name fallback is title-checked rather than
+// duration-guarded — a cover or remix under a different title is not
+// placed.
+func (c *YouTubeMusicConnector) resolveVideoID(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) (string, string) {
 	id, _ := placeTrackLocalRef(t, YouTubeMusicServiceID)
+	how := "ref"
 	if id == "" {
 		found, err := c.searchVideoID(ctx, t)
 		if err != nil {
 			*skips = append(*skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: err.Error()})
-			return ""
+			return "", ""
 		}
-		id = found
+		id, how = found, kinds.TrackMatchName
 	}
 	if id == "" {
 		*skips = append(*skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: "no match on YouTube Music"})
-		return ""
+		return "", ""
 	}
-	return id
+	return id, how
 }
 
 func (c *YouTubeMusicConnector) searchVideoID(ctx context.Context, t kinds.Track) (string, error) {
@@ -301,6 +316,13 @@ func (c *YouTubeMusicConnector) searchVideoID(ctx context.Context, t kinds.Track
 	}
 	first, ok := items[0].(map[string]any)
 	if !ok {
+		return "", nil
+	}
+	// Title guard (issue #366): the name fallback may not land on a cover
+	// or remix that spells the title differently.
+	snippet, _ := first["snippet"].(map[string]any)
+	hitTitle, _ := snippet["title"].(string)
+	if kinds.NormalizeIdentityKey(kinds.CleanYouTubeTitle(hitTitle)) != kinds.NormalizeIdentityKey(t.Name) {
 		return "", nil
 	}
 	id, _ := first["id"].(map[string]any)

@@ -314,6 +314,8 @@ type PlacePlaylistItemsResult struct {
 	URL string `json:"url,omitempty"`
 	// Copied is how many tracks were placed.
 	Copied int `json:"copied"`
+	// Placed carries per-item match records (which identity matched).
+	Placed []PlaceRecord `json:"placed,omitempty"`
 	// Skips are items that could not be placed (no catalog match, …).
 	Skips []PlaceSkip `json:"skips,omitempty"`
 }
@@ -334,8 +336,10 @@ type PlaylistItemWriteProvider interface {
 
 // SaveLikedTracksResult reports a liked/saved placement.
 type SaveLikedTracksResult struct {
-	Copied int         `json:"copied"`
-	Skips  []PlaceSkip `json:"skips,omitempty"`
+	Copied int `json:"copied"`
+	// Placed carries per-item match records (which identity matched).
+	Placed []PlaceRecord `json:"placed,omitempty"`
+	Skips  []PlaceSkip   `json:"skips,omitempty"`
 }
 
 // LikedTrackWriteProvider is implemented by connectors that can save/like
@@ -362,6 +366,11 @@ type PlaceRecord struct {
 	Name       string `json:"name"`
 	ExternalID string `json:"external_id,omitempty"`
 	ETag       string `json:"etag,omitempty"`
+	// MatchedBy names the identity the placement matched on ("ref",
+	// TrackMatchISRC, TrackMatchMBID, TrackMatchName, …) so matches — and
+	// the skips beside them — are explainable (issue #366). Empty on a
+	// create with nothing to match.
+	MatchedBy string `json:"matched_by,omitempty"`
 }
 
 // PlaceEntitiesResult reports an entity placement (contacts, events).

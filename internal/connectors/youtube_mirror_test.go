@@ -169,7 +169,19 @@ func TestYouTubePlacePlaylistItems_CreateSearchAndSkips(t *testing.T) {
 			switch {
 			case strings.Contains(q.Get("q"), "Found"):
 				writeMirrorJSON(w, map[string]any{
-					"items": []any{map[string]any{"id": map[string]any{"videoId": "vid-found"}}},
+					"items": []any{map[string]any{
+						"id":      map[string]any{"videoId": "vid-found"},
+						"snippet": map[string]any{"title": "Found Song"},
+					}},
+				})
+			case strings.Contains(q.Get("q"), "Cover"):
+				// A differently-titled hit is a cover, not the recording
+				// (issue #366) — the name fallback must not take it.
+				writeMirrorJSON(w, map[string]any{
+					"items": []any{map[string]any{
+						"id":      map[string]any{"videoId": "vid-cover"},
+						"snippet": map[string]any{"title": "Cover Song (cover)"},
+					}},
 				})
 			case strings.Contains(q.Get("q"), "SearchError"):
 				http.Error(w, "bad", http.StatusBadGateway)
@@ -197,6 +209,7 @@ func TestYouTubePlacePlaylistItems_CreateSearchAndSkips(t *testing.T) {
 		placeTrack("", "Missing Song", "", "", "B"),
 		placeTrack("", "SearchError Song", "", "", "C"),
 		placeTrack("", "BadShape Song", "", "", "D"),
+		placeTrack("", "Cover Song", "", "", "E"),
 	}
 	res, err := c.PlacePlaylistItems(context.Background(), "", "Backup", tracks)
 	if err != nil {
@@ -208,7 +221,11 @@ func TestYouTubePlacePlaylistItems_CreateSearchAndSkips(t *testing.T) {
 	if res.Copied != 2 || itemsAdded.Load() != 2 {
 		t.Fatalf("copied=%d added=%d skips=%+v", res.Copied, itemsAdded.Load(), res.Skips)
 	}
-	if len(res.Skips) != 3 {
+	// The per-item records say which identity matched (issue #366).
+	if len(res.Placed) != 2 || res.Placed[0].MatchedBy != "ref" || res.Placed[1].MatchedBy != kinds.TrackMatchName {
+		t.Fatalf("placed = %+v, want ref then name", res.Placed)
+	}
+	if len(res.Skips) != 4 {
 		t.Fatalf("skips = %+v", res.Skips)
 	}
 
@@ -327,7 +344,10 @@ func TestYouTubeSaveLikedTracks(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/search":
 			if strings.Contains(r.URL.Query().Get("q"), "Found") {
 				writeMirrorJSON(w, map[string]any{
-					"items": []any{map[string]any{"id": map[string]any{"videoId": "vid-found"}}},
+					"items": []any{map[string]any{
+						"id":      map[string]any{"videoId": "vid-found"},
+						"snippet": map[string]any{"title": "Found Song"},
+					}},
 				})
 				return
 			}

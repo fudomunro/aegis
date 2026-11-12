@@ -50,7 +50,7 @@ func (c *CardDAVConnector) PlaceContacts(ctx context.Context, contacts []kinds.C
 			continue
 		}
 		result.Copied++
-		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag})
+		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref"})
 	}
 	return result, nil
 }
@@ -92,7 +92,7 @@ func (c *CalDAVConnector) PlaceEvents(ctx context.Context, events []kinds.Calend
 			continue
 		}
 		result.Copied++
-		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag})
+		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref"})
 	}
 	return result, nil
 }

@@ -7,6 +7,15 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Sync identity readiness (issue #365 Phase 4 / #367).** Every library
+  kind now declares its cross-service identity story in the registry —
+  the durable id it matches on, the fallback when that is absent, and a
+  readiness verdict with what blocks it. The inventory table is
+  `docs/sync-identity.md`; a test keeps the verdicts honest (a kind cannot
+  join sync groups unless its row says ready, and every "no sync yet" row
+  names its gap). Gaps worth closing are ticketed: album/artist write
+  placement, photo identity and write surface, an entity freshness checker
+  for member-side create detection, and playlist order reconciliation.
 - **Sync conflicts & manual resolution (issue #365, Phase 3).** A non-hub
   edit on a converged copy is now detected from watermark divergence —
   member-side renames and record edits surface at convergence (If-Match
@@ -82,6 +91,17 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Placement matching prefers durable ids (issue #366).** Music placement
+  now follows the merge layer's ladder: a direct ISRC lookup before name
+  search, a duration-guarded name fallback (a name hit of wildly different
+  length is a different recording and is no longer placed), and a
+  per-item `matched_by` record (`ref` / `isrc` / `mbid` / `name`) on every
+  placement result so matches and skips are explainable. YouTube Music
+  exposes no ISRC and no search durations, so its name fallback is
+  title-checked instead. The existence filters behind converge, repair,
+  and conflict adoption use the same ladder — they were name-only, which
+  would have duplicated re-recordings on every converge run. Fuzzed
+  alongside the other match targets.
 - **Hub cleanup completes the packaging restructure (issue #358, P5).** The
   MBID lookup moves to `internal/kinds` beside the merge domain it serves
   (`MusicBrainzLookups` over the cache seam), the operator subcommands

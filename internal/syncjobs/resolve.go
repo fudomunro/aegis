@@ -285,13 +285,10 @@ func (r *Runners) memberExtraItems(ctx context.Context, rec SyncConflict, row co
 		if err != nil {
 			return nil, err
 		}
-		hubKeys := make(map[string]bool, len(hubTracks))
-		for _, t := range hubTracks {
-			hubKeys[repairIdentityKey(t)] = true
-		}
+		hubHeld := kinds.NewTrackMatcher(hubTracks)
 		var out []entityItem
 		for _, t := range memberTracks {
-			if !hubKeys[repairIdentityKey(t)] {
+			if !hubHeld.Has(t) {
 				t := t
 				out = append(out, entityItem{track: &t})
 			}

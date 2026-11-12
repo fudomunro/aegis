@@ -19,6 +19,26 @@ type SearchSpec struct {
 	TitleField string
 }
 
+// SyncIdentity is one kind's identity-readiness declaration (issue #367):
+// what identifies "the same item" across services, and whether that is
+// strong enough for the kind's sync group to converge today. The declaration
+// is kind-owned — it rides the registry entry, and the inventory table lives
+// in docs/sync-identity.md. A kind whose Ready is false stays out of sync
+// groups ("no sync yet"); its Note says what blocks it.
+type SyncIdentity struct {
+	// Primary names the durable identity source ("ISRC", "vCard UID",
+	// "iCal UID", "provider id", …). Empty when the kind has none.
+	Primary string
+	// Fallback names the weaker match used when the primary is absent
+	// ("duration-guarded name", "title + start", …).
+	Fallback string
+	// Ready reports whether cross-service matching — and the surface
+	// convergence writes through — can run safely today.
+	Ready bool
+	// Note explains the verdict: the gap, the caveat, or the follow-up.
+	Note string
+}
+
 // LibraryKind describes one unified library dataset (type-layer metadata).
 // Runtime visibility predicates (HasProviders / Readable) live on the core
 // registration wrapper, not on this data struct (issue #15).
@@ -61,6 +81,12 @@ type LibraryKind struct {
 	// relationship row per participating kind it provides. Starter set is
 	// contacts, events, and playlists; per-kind identity gaps gate the rest.
 	SyncParticipant bool
+
+	// SyncIdentity is this kind's identity-readiness declaration (issue
+	// #367): what identifies the same item across services, and whether
+	// that is strong enough to converge. Kind-owned — the verdict lives
+	// here, not in the hub. The inventory table is docs/sync-identity.md.
+	SyncIdentity SyncIdentity
 
 	// DefaultNone keeps the kind hidden unless a permissions map / data
 	// grant names it explicitly (places pattern, issue #142).
