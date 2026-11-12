@@ -160,9 +160,6 @@ func eventsConvergePlan(h Host, kind string) *ConvergePlan {
 	return &ConvergePlan{
 		Shape:   ConvergeEntities,
 		RowName: kind,
-		TargetReady: func(conn any) bool {
-			return providerProvides[CalendarEventWriteProvider](conn)
-		},
 		ReadSource: func(ctx context.Context, hub, _, _ string, _ int) (SourcePage, error) {
 			src, err := OpFor[CalendarEventProvider](h, hub, "converge source")
 			if err != nil {

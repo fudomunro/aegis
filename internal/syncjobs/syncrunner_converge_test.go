@@ -348,12 +348,12 @@ func TestNewConvergeRunners_Register(t *testing.T) {
 	run, _ := convergeStubRunners(t, "contacts", "google", []string{"google"}, conns)
 
 	runners := newConvergeRunners(run)
-	if len(runners) != len(SyncConvergeKinds) {
-		t.Fatalf("runners = %d, want %d", len(runners), len(SyncConvergeKinds))
+	if len(runners) != len(SyncConvergeKinds()) {
+		t.Fatalf("runners = %d, want %d", len(runners), len(SyncConvergeKinds()))
 	}
 	reg := NewRunnerRegistry()
 	registerConvergeRunners(reg, run)
-	for _, kind := range SyncConvergeKinds {
+	for _, kind := range SyncConvergeKinds() {
 		r, ok := reg.For(kind, SyncJobTypeConverge)
 		if !ok {
 			t.Fatalf("kind %s has no converge runner", kind)

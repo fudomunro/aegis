@@ -24,7 +24,7 @@ func newPlaylistsKind(h Host, e *Engine, d Deps) Kind {
 		def:      def,
 		provides: providerProvides[PlaylistProvider],
 		writeCapable: providerProvides[PlaylistItemWriteProvider],
-		converge: playlistsConvergePlan(h, def.ID),
+		converge: playlistsConvergePlan(h),
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -75,15 +75,14 @@ func forEachPlaylistSource(p *Playlist, f func(SourceMut)) {
 // out onto each member item page by item page, appending only what is
 // missing and propagating renames (a member-side rename is a conflict,
 // not an overwrite).
-func playlistsConvergePlan(h Host, kind string) *ConvergePlan {
+func playlistsConvergePlan(h Host) *ConvergePlan {
 	return &ConvergePlan{
 		Shape: ConvergePlaylists,
 		TargetReady: func(conn any) bool {
 			// Playlist convergence re-reads the member's items so a re-run
 			// appends only what is missing. A member that cannot list its
 			// items cannot converge idempotently.
-			return providerProvides[PlaylistItemWriteProvider](conn) &&
-				providerProvides[PlaylistItemsProvider](conn)
+			return providerProvides[PlaylistItemsProvider](conn)
 		},
 		ListSources: func(ctx context.Context, hub string) ([]SourceEntry, bool, error) {
 			src, err := OpFor[PlaylistProvider](h, hub, "converge source")
@@ -121,7 +120,8 @@ func playlistsConvergePlan(h Host, kind string) *ConvergePlan {
 			if err != nil {
 				return MemberState{}, err
 			}
-			st := MemberState{held: NewTrackMatcher(nil)}
+			m := NewTrackMatcher(nil)
+			st := MemberState{held: m}
 			cursor := ""
 			for i := 0; i < shared.LibraryPageCap; i++ {
 				ref, page, err := src.ListPlaylistItems(ctx, memberID, cursor, 100)
@@ -132,7 +132,7 @@ func playlistsConvergePlan(h Host, kind string) *ConvergePlan {
 					st.Title = ref.Name
 				}
 				for _, t := range page.Tracks {
-					st.held.(*TrackMatcher).Add(t)
+					m.Add(t)
 					st.Count++
 				}
 				if page.Next == "" {

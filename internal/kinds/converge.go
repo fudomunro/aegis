@@ -15,10 +15,11 @@ import (
 // copy row, and how to diff and adopt member extras is declared here.
 // Plans reach connectors over the Host seam (OpFor), as the read side does.
 
-// ErrUnsupported marks a converge-plan composition failure the engine
-// treats as terminal: a service that cannot serve the plan's operation is
-// misconfigured in a way retrying cannot fix.
-var ErrUnsupported = errors.New("converge operation not supported")
+// ErrConvergeUnsupported marks a converge-plan composition failure the
+// engine treats as terminal: a service that cannot serve the plan's
+// operation is misconfigured in a way retrying cannot fix. Converge-scoped
+// — it classifies plan-op errors only.
+var ErrConvergeUnsupported = errors.New("converge operation not supported")
 
 // ConvergeShape names how one kind converges (issue #382). The engine
 // iterates shapes, never kinds: create-only saves (whole-collection or
@@ -173,10 +174,12 @@ type ConvergePlan struct {
 	// The playlist shape names rows from the live title instead.
 	RowName string
 
-	// TargetReady reports whether a connector can receive converged
-	// writes for this kind: write-capable and able to list back what it
-	// holds (the skip filter and extras check read it — a member that
-	// cannot list its items cannot converge idempotently).
+	// TargetReady reports whether a connector that is already
+	// WriteCapable for this kind can also list back what it holds — the
+	// read-back the skip filter and extras check need (a member that
+	// cannot list its items cannot converge idempotently). Nil when the
+	// shape has no read-back requirement (the entity shapes match inside
+	// the write).
 	TargetReady func(conn any) bool
 
 	// LoadMember returns what a member already holds. memberID names a
@@ -289,25 +292,43 @@ func extrasOf[T any](hubList, memberList []T, has func(T) bool, place func(conte
 	}
 }
 
+// filterHeld drops the batch's items has already reports held (the kind's
+// identity ladder) and returns what is left to place — the loop behind
+// each save shape's FilterHeld.
+func filterHeld[T any](items Batch, has func(T) bool) (Batch, int) {
+	all := batchItems[T](items)
+	kept := make([]T, 0, len(all))
+	held := 0
+	for _, it := range all {
+		if has(it) {
+			held++
+			continue
+		}
+		kept = append(kept, it)
+	}
+	return batchOf(kept), held
+}
+
 // OpFor resolves a provider operation surface P for one service over the
 // Host seam — the read side's Collect pattern targeted at a single
-// service. Failures wrap ErrUnsupported so the engine can tell a
-// misconfigured group (terminal) from provider trouble (retryable).
+// service, used by converge plans. Failures wrap ErrConvergeUnsupported
+// so the engine can tell a misconfigured group (terminal) from provider
+// trouble (retryable).
 func OpFor[P any](h Host, serviceID, what string) (P, error) {
 	var zero P
 	if h == nil {
-		return zero, fmt.Errorf("%w: %s %q has no connector registry", ErrUnsupported, what, serviceID)
+		return zero, fmt.Errorf("%w: %s %q has no connector registry", ErrConvergeUnsupported, what, serviceID)
 	}
 	if conn, ok := h.Connectors()[serviceID].(P); ok {
 		return conn, nil
 	}
-	return zero, fmt.Errorf("%w: %s %q is not supported yet", ErrUnsupported, what, serviceID)
+	return zero, fmt.Errorf("%w: %s %q is not supported yet", ErrConvergeUnsupported, what, serviceID)
 }
 
-// convergeKindIDs lists the built-in kinds that declare a converge plan —
+// ConvergeKindIDs lists the built-in kinds that declare a converge plan —
 // the schedule seed's kind list. Kind declarations are static data, so a
 // nil-Host pass is safe (the builtinDecls rule).
-func convergeKindIDs() []string {
+func ConvergeKindIDs() []string {
 	var out []string
 	for _, k := range Builtin(nil, nil, Deps{}) {
 		if k.Converge() != nil {
@@ -316,6 +337,3 @@ func convergeKindIDs() []string {
 	}
 	return out
 }
-
-// ConvergeKindIDs lists the built-in kinds that declare a converge plan.
-func ConvergeKindIDs() []string { return convergeKindIDs() }

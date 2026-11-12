@@ -19,7 +19,7 @@ func newAlbumsKind(h Host, e *Engine, d Deps) Kind {
 		def:          def,
 		provides:     providerProvides[AlbumProvider],
 		writeCapable: providerProvides[AlbumWriteProvider],
-		converge:     albumsConvergePlan(h, def.ID),
+		converge:     albumsConvergePlan(h),
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -57,13 +57,12 @@ func (k *albumsKind) serve(w http.ResponseWriter, r *http.Request) {
 // albumsConvergePlan is the albums kind's converge plan (issue #382):
 // create-only saves of the whole saved-albums collection. Saving never
 // un-saves — a member's own saves survive untouched.
-func albumsConvergePlan(h Host, kind string) *ConvergePlan {
+func albumsConvergePlan(h Host) *ConvergePlan {
 	return &ConvergePlan{
 		Shape:   ConvergeSaves,
 		RowName: "saved albums",
 		TargetReady: func(conn any) bool {
-			return providerProvides[AlbumWriteProvider](conn) &&
-				providerProvides[AlbumProvider](conn)
+			return providerProvides[AlbumProvider](conn)
 		},
 		LoadMember: func(ctx context.Context, member, _ string) (MemberState, error) {
 			src, err := OpFor[AlbumProvider](h, member, "converge target")
@@ -92,17 +91,7 @@ func albumsConvergePlan(h Host, kind string) *ConvergePlan {
 			if m == nil {
 				return items, 0
 			}
-			albums := batchItems[Album](items)
-			kept := make([]Album, 0, len(albums))
-			held := 0
-			for _, a := range albums {
-				if m.Has(a) {
-					held++
-					continue
-				}
-				kept = append(kept, a)
-			}
-			return batchOf(kept), held
+			return filterHeld(items, m.Has)
 		},
 		Place: func(ctx context.Context, service, _, _ string, items Batch) (PlaceResult, error) {
 			albums := batchItems[Album](items)

@@ -81,11 +81,11 @@ func (p *convergeJobPayload) resetPlaylistChain() {
 	p.RowName = ""
 }
 
-// SyncConvergeKinds are the kinds a converge runner is registered for —
-// the schedule seed's kind list (the store does not know them). Derived
+// SyncConvergeKinds lists the kinds a converge runner is registered for
+// — the schedule seed's kind list (the store does not know them). Derived
 // from the kind registry's converge plans (issue #382): a convergent kind
 // declares its plan beside its data, and the engine never names one.
-var SyncConvergeKinds = kinds.ConvergeKindIDs()
+func SyncConvergeKinds() []string { return kinds.ConvergeKindIDs() }
 
 // convergeRunner runs converge jobs for one library kind, iterating that
 // kind's declared converge plan.
@@ -108,7 +108,7 @@ func (r *convergeRunner) Kind() string { return r.kind }
 // group is misconfigured in a way retrying cannot fix. Provider trouble
 // stays retryable and is returned unchanged.
 func planErr(err error) error {
-	if err == nil || !errors.Is(err, kinds.ErrUnsupported) {
+	if err == nil || !errors.Is(err, kinds.ErrConvergeUnsupported) {
 		return err
 	}
 	return fmt.Errorf("%w: %v", ErrSyncTerminal, err)
@@ -173,7 +173,7 @@ func (r *convergeRunner) resolveTargets(p *convergeJobPayload) (string, error) {
 	p.SourceService = hub
 	p.Targets = make([]string, 0, len(members))
 	for _, id := range members {
-		if id == hub || !convergeTargetOK(s, r.plan, id) {
+		if id == hub || !convergeTargetOK(s, r.kind, r.plan, id) {
 			continue
 		}
 		p.Targets = append(p.Targets, id)
@@ -187,9 +187,9 @@ func (r *convergeRunner) resolveTargets(p *convergeJobPayload) (string, error) {
 
 // convergeTargetOK reports whether a group member can receive converged
 // writes: configured, not blocked, not a read-only local import store,
-// and ready per the kind's converge plan (issue #382) — write-capable and
-// able to list back what it holds.
-func convergeTargetOK(s *Runners, plan *kinds.ConvergePlan, serviceID string) bool {
+// write-capable for the kind, and ready per the kind's converge plan
+// (issue #382) — able to list back what it holds when the shape needs it.
+func convergeTargetOK(s *Runners, kind string, plan *kinds.ConvergePlan, serviceID string) bool {
 	if s.Host.ServiceBlocked(serviceID) {
 		return false
 	}
@@ -200,7 +200,11 @@ func convergeTargetOK(s *Runners, plan *kinds.ConvergePlan, serviceID string) bo
 	if !ok {
 		return false
 	}
-	return plan.TargetReady != nil && plan.TargetReady(conn)
+	k, ok := s.Mirror.RegistryKind(kind)
+	if !ok || !k.WriteCapable(conn) {
+		return false
+	}
+	return plan.TargetReady == nil || plan.TargetReady(conn)
 }
 
 // runCollectionStep executes one bounded step of the collection shapes
@@ -280,24 +284,34 @@ func (r *convergeRunner) runCollectionStep(ctx context.Context, p convergeJobPay
 	}
 
 	// Canonical collection exhausted on this member: stamp the collection
-	// row freshness reads — the member's items as they stand now.
-	s.Mirror.RecordMirrorCopy(p.Kind, p.SourceService, "", target, "", plan.RowName, state.Count+res.Copied, "")
+	// row freshness reads — the member's items as they stand now. Only
+	// the shapes that track a member count (LoadMember) add one; the
+	// entity shapes stamp what this run placed.
+	memberCount := res.Copied
+	if plan.LoadMember != nil {
+		memberCount = state.Count + res.Copied
+	}
+	s.Mirror.RecordMirrorCopy(p.Kind, p.SourceService, "", target, "", plan.RowName, memberCount, "")
 
 	// Member-only items are non-hub creates: recorded here (the watermark
 	// count diverges from the canonical total) for accept — adopt onto
 	// the canonical home — or reject — keep local. Convergence itself
-	// never removes them. A truncated hub list cannot judge extras.
-	if memberAfter, hubTotal := state.Count+res.Copied, page.HubTotal; !page.Truncated && hubTotal > 0 && memberAfter > hubTotal {
-		s.recordConflict(SyncConflict{
-			Kind:        p.Kind,
-			Service:     target,
-			EntityKey:   library.MirrorEntityKey(p.Kind, p.SourceService, ""),
-			Subject:     plan.RowName,
-			Field:       ConflictFieldItems,
-			MemberValue: fmt.Sprintf("%d items", memberAfter),
-			LastValue:   fmt.Sprintf("%d items", hubTotal),
-			Source:      ConflictSourceConverge,
-		})
+	// never removes them. A truncated hub list cannot judge extras, and
+	// only the shapes that track a member count raise one — the entity
+	// shapes place the whole collection and have no extras channel here.
+	if plan.LoadMember != nil {
+		if memberAfter, hubTotal := memberCount, page.HubTotal; !page.Truncated && hubTotal > 0 && memberAfter > hubTotal {
+			s.recordConflict(SyncConflict{
+				Kind:        p.Kind,
+				Service:     target,
+				EntityKey:   library.MirrorEntityKey(p.Kind, p.SourceService, ""),
+				Subject:     plan.RowName,
+				Field:       ConflictFieldItems,
+				MemberValue: fmt.Sprintf("%d items", memberAfter),
+				LastValue:   fmt.Sprintf("%d items", hubTotal),
+				Source:      ConflictSourceConverge,
+			})
+		}
 	}
 
 	p.resetPlaylistChain() // clears the page cursor for the next member

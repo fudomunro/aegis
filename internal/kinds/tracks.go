@@ -24,7 +24,7 @@ func newTracksKind(h Host, e *Engine, d Deps) Kind {
 		def:      def,
 		provides: providerProvides[LikedTrackProvider],
 		writeCapable: providerProvides[LikedTrackWriteProvider],
-		converge: tracksConvergePlan(h, def.ID),
+		converge: tracksConvergePlan(h),
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -77,20 +77,20 @@ func forEachTrackSource(t *Track, f func(SourceMut)) {
 // create-only saves of the liked/saved list, one cursor page at a time.
 // Saving is create-or-update and never un-likes — a member's own likes
 // survive untouched.
-func tracksConvergePlan(h Host, kind string) *ConvergePlan {
+func tracksConvergePlan(h Host) *ConvergePlan {
 	return &ConvergePlan{
 		Shape:   ConvergeSaves,
 		RowName: "liked/saved tracks",
 		TargetReady: func(conn any) bool {
-			return providerProvides[LikedTrackWriteProvider](conn) &&
-				providerProvides[LikedTrackPageProvider](conn)
+			return providerProvides[LikedTrackPageProvider](conn)
 		},
 		LoadMember: func(ctx context.Context, member, _ string) (MemberState, error) {
 			src, err := OpFor[LikedTrackPageProvider](h, member, "converge target")
 			if err != nil {
 				return MemberState{}, err
 			}
-			st := MemberState{held: NewTrackMatcher(nil)}
+			m := NewTrackMatcher(nil)
+			st := MemberState{held: m}
 			cursor := ""
 			for i := 0; i < shared.LibraryPageCap; i++ {
 				page, err := src.ListUserLikedTracksPage(ctx, cursor, 100)
@@ -98,7 +98,7 @@ func tracksConvergePlan(h Host, kind string) *ConvergePlan {
 					return MemberState{}, err
 				}
 				for _, t := range page.Tracks {
-					st.held.(*TrackMatcher).Add(t)
+					m.Add(t)
 					st.Count++
 				}
 				if page.Next == "" {
@@ -163,17 +163,7 @@ func trackFilterHeld(state MemberState, items Batch) (Batch, int) {
 	if m == nil {
 		return items, 0
 	}
-	tracks := batchItems[Track](items)
-	kept := make([]Track, 0, len(tracks))
-	held := 0
-	for _, t := range tracks {
-		if m.Has(t) {
-			held++
-			continue
-		}
-		kept = append(kept, t)
-	}
-	return batchOf(kept), held
+	return filterHeld(items, m.Has)
 }
 
 // likedTracksFor pages one service's full liked/saved list.

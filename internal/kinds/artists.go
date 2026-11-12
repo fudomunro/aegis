@@ -19,7 +19,7 @@ func newArtistsKind(h Host, e *Engine, d Deps) Kind {
 		def:          def,
 		provides:     providerProvides[ArtistProvider],
 		writeCapable: providerProvides[ArtistWriteProvider],
-		converge:     artistsConvergePlan(h, def.ID),
+		converge:     artistsConvergePlan(h),
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -57,13 +57,12 @@ func (k *artistsKind) serve(w http.ResponseWriter, r *http.Request) {
 // artistsConvergePlan is the artists kind's converge plan (issue #382):
 // create-only saves of the followed-artist collection. Following never
 // unfollows — a member's own follows survive untouched.
-func artistsConvergePlan(h Host, kind string) *ConvergePlan {
+func artistsConvergePlan(h Host) *ConvergePlan {
 	return &ConvergePlan{
 		Shape:   ConvergeSaves,
 		RowName: "followed artists",
 		TargetReady: func(conn any) bool {
-			return providerProvides[ArtistWriteProvider](conn) &&
-				providerProvides[ArtistProvider](conn)
+			return providerProvides[ArtistProvider](conn)
 		},
 		LoadMember: func(ctx context.Context, member, _ string) (MemberState, error) {
 			src, err := OpFor[ArtistProvider](h, member, "converge target")
@@ -92,17 +91,7 @@ func artistsConvergePlan(h Host, kind string) *ConvergePlan {
 			if m == nil {
 				return items, 0
 			}
-			artists := batchItems[Artist](items)
-			kept := make([]Artist, 0, len(artists))
-			held := 0
-			for _, a := range artists {
-				if m.Has(a) {
-					held++
-					continue
-				}
-				kept = append(kept, a)
-			}
-			return batchOf(kept), held
+			return filterHeld(items, m.Has)
 		},
 		Place: func(ctx context.Context, service, _, _ string, items Batch) (PlaceResult, error) {
 			artists := batchItems[Artist](items)
