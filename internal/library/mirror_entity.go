@@ -20,7 +20,7 @@ func (h *Handlers) RecordMirrorItemCopy(kind, entityName, service, externalID, n
 	if h == nil || h.Copies == nil {
 		return
 	}
-	entity := kind + ":" + strings.TrimSpace(entityName)
+	entity := kinds.ItemEntityKey(kind, entityName)
 	if strings.TrimSpace(externalID) == "" {
 		return
 	}

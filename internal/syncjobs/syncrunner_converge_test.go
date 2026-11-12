@@ -281,7 +281,7 @@ func TestConvergeRunner_BadPayloadIsTerminal(t *testing.T) {
 	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": member}
 	run, _, _ := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"}, conns)
 
-	r := &convergeRunner{run: run, kind: "contacts"}
+	r := &convergeRunner{run: run, kind: "contacts", plan: run.planFor("contacts")}
 	_, err := r.Run(context.Background(), SyncJob{Payload: json.RawMessage("{")})
 	if !errors.Is(err, ErrSyncTerminal) {
 		t.Fatalf("err = %v, want terminal", err)
@@ -341,13 +341,19 @@ func TestConvergeRunner_LocalImportMembersAreSkipped(t *testing.T) {
 }
 
 func TestNewConvergeRunners_Register(t *testing.T) {
-	runners := newConvergeRunners(&Runners{})
-	if len(runners) != len(convergeKinds) {
-		t.Fatalf("runners = %d, want %d", len(runners), len(convergeKinds))
+	// Runners derive from the kind registry's converge plans (issue #382):
+	// every kind that declares a plan gets a converge runner.
+	hub := &entityStubConn{}
+	conns := map[string]connectors.ServiceConnector{"google": hub}
+	run, _ := convergeStubRunners(t, "contacts", "google", []string{"google"}, conns)
+
+	runners := newConvergeRunners(run)
+	if len(runners) != len(SyncConvergeKinds) {
+		t.Fatalf("runners = %d, want %d", len(runners), len(SyncConvergeKinds))
 	}
 	reg := NewRunnerRegistry()
-	registerConvergeRunners(reg, &Runners{})
-	for _, kind := range convergeKinds {
+	registerConvergeRunners(reg, run)
+	for _, kind := range SyncConvergeKinds {
 		r, ok := reg.For(kind, SyncJobTypeConverge)
 		if !ok {
 			t.Fatalf("kind %s has no converge runner", kind)
@@ -356,5 +362,8 @@ func TestNewConvergeRunners_Register(t *testing.T) {
 		if len(types) != 1 || types[0] != SyncJobTypeConverge {
 			t.Fatalf("JobTypes = %v, want converge only", types)
 		}
+	}
+	if got := newConvergeRunners(nil); len(got) != 0 {
+		t.Fatalf("unwired run registered %d runners, want 0", len(got))
 	}
 }

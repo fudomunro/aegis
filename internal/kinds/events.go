@@ -31,6 +31,7 @@ func newEventsKind(h Host, e *Engine, d Deps) Kind {
 		def:      def,
 		provides: providerProvides[CalendarEventProvider],
 		writeCapable: providerProvides[CalendarEventWriteProvider],
+		converge: eventsConvergePlan(h, def.ID),
 		routes: []Route{
 			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve, GrantKey: eventsRouteKey},
 			// Freebusy is the events availability view, not a LibraryKind —
@@ -150,4 +151,222 @@ func forEachCalendarEventSource(item *CalendarEvent, f func(SourceMut)) {
 			SetCopy:       func(info *CopyInfo) { src.Copy = info },
 		})
 	}
+}
+
+// eventsConvergePlan is the events kind's converge plan (issue #382): the
+// etag-entity shape, same as contacts — whole-collection placement with
+// If-Match refs and record-conflict resolution across hub and member.
+func eventsConvergePlan(h Host, kind string) *ConvergePlan {
+	return &ConvergePlan{
+		Shape:   ConvergeEntities,
+		RowName: kind,
+		TargetReady: func(conn any) bool {
+			return providerProvides[CalendarEventWriteProvider](conn)
+		},
+		ReadSource: func(ctx context.Context, hub, _, _ string, _ int) (SourcePage, error) {
+			src, err := OpFor[CalendarEventProvider](h, hub, "converge source")
+			if err != nil {
+				return SourcePage{}, err
+			}
+			events, truncated, err := src.ListCalendarEvents(ctx)
+			if err != nil {
+				return SourcePage{}, err
+			}
+			return SourcePage{Items: batchOf(events), HubTotal: len(events), Truncated: truncated}, nil
+		},
+		AttachRefs: func(items Batch, member string, refs map[string]ItemRef) Batch {
+			events := batchItems[CalendarEvent](items)
+			out := make([]CalendarEvent, len(events))
+			copy(out, events)
+			for i := range out {
+				ref, ok := refs[ItemEntityKey(kind, out[i].Title)]
+				if !ok {
+					continue
+				}
+				out[i].Sources = upsertEventRef(out[i].Sources, member, ref.ExternalID, ref.ETag)
+			}
+			return batchOf(out)
+		},
+		Place: func(ctx context.Context, service, _, _ string, items Batch) (PlaceResult, error) {
+			dst, err := OpFor[CalendarEventWriteProvider](h, service, "converge target")
+			if err != nil {
+				return PlaceResult{}, err
+			}
+			res, err := dst.PlaceEvents(ctx, batchItems[CalendarEvent](items))
+			if err != nil {
+				return PlaceResult{}, err
+			}
+			return PlaceResult{
+				Copied:    res.Copied,
+				Placed:    res.Placed,
+				Skips:     res.Skips,
+				Conflicts: res.Conflicts,
+			}, nil
+		},
+		MemberExtras: func(ctx context.Context, hub, member, _, _ string) (int, func(context.Context) error, error) {
+			memberList, err := eventListFor(ctx, h, member, "conflict source")
+			if err != nil {
+				return 0, nil, err
+			}
+			hubList, err := eventListFor(ctx, h, hub, "conflict source")
+			if err != nil {
+				return 0, nil, err
+			}
+			hubKeys := make(map[string]bool, len(hubList))
+			for _, e := range hubList {
+				hubKeys[CalendarEventIdentityKey(e)] = true
+			}
+			var extras []CalendarEvent
+			for _, e := range memberList {
+				if !hubKeys[CalendarEventIdentityKey(e)] {
+					extras = append(extras, e)
+				}
+			}
+			adopt := func(ctx context.Context) error {
+				dst, err := OpFor[CalendarEventWriteProvider](h, hub, "conflict target")
+				if err != nil {
+					return err
+				}
+				_, err = dst.PlaceEvents(ctx, extras)
+				return err
+			}
+			return len(extras), adopt, nil
+		},
+		RecordResolve: func(ctx context.Context, hub, member, memberID, subject string, accept bool) ([]ItemStamp, bool, error) {
+			memberList, err := eventListFor(ctx, h, member, "conflict source")
+			if err != nil {
+				return nil, false, err
+			}
+			memberEV, found := findEventByRef(memberList, member, memberID)
+			if !found {
+				return nil, false, nil
+			}
+			hubList, err := eventListFor(ctx, h, hub, "conflict source")
+			if err != nil {
+				return nil, false, err
+			}
+			hubEV := findEventByKey(hubList, CalendarEventIdentityKey(memberEV))
+			if hubEV.Title == "" {
+				hubEV = findEventByName(hubList, subject)
+			}
+			if accept {
+				dst, err := OpFor[CalendarEventWriteProvider](h, hub, "conflict target")
+				if err != nil {
+					return nil, true, err
+				}
+				merged := memberEV
+				merged.Sources = upsertEventRef(memberEV.Sources, hub,
+					eventRefID(hubEV, hub), eventRefETag(hubEV, hub))
+				if _, err := dst.PlaceEvents(ctx, []CalendarEvent{merged}); err != nil {
+					return nil, true, err
+				}
+				return []ItemStamp{{
+					EntityName: subject,
+					Service:    member,
+					ExternalID: memberID,
+					Name:       subject,
+					ETag:       eventRefETag(memberEV, member),
+				}}, true, nil
+			}
+			dst, err := OpFor[CalendarEventWriteProvider](h, member, "conflict target")
+			if err != nil {
+				return nil, true, err
+			}
+			merged := hubEV
+			merged.Sources = upsertEventRef(hubEV.Sources, member, memberID, eventRefETag(memberEV, member))
+			res, err := dst.PlaceEvents(ctx, []CalendarEvent{merged})
+			if err != nil {
+				return nil, true, err
+			}
+			return itemStampsFrom(res.Placed, member), true, nil
+		},
+	}
+}
+
+// eventListFor reads one service's full calendar list.
+func eventListFor(ctx context.Context, h Host, service, what string) ([]CalendarEvent, error) {
+	src, err := OpFor[CalendarEventProvider](h, service, what)
+	if err != nil {
+		return nil, err
+	}
+	events, _, err := src.ListCalendarEvents(ctx)
+	return events, err
+}
+
+// upsertEventRef patches an event's source for service with id+etag,
+// replacing any previous entry for that service.
+func upsertEventRef(srcs []CalendarEventSource, service, id, etag string) []CalendarEventSource {
+	out := make([]CalendarEventSource, 0, len(srcs)+1)
+	replaced := false
+	for _, src := range srcs {
+		if src.Service == service {
+			if !replaced {
+				src.ID = id
+				src.Extra = withETag(src.Extra, etag)
+				out = append(out, src)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, src)
+	}
+	if !replaced {
+		out = append(out, CalendarEventSource{Service: service, ID: id, Extra: withETag(nil, etag)})
+	}
+	return out
+}
+
+// findEventByRef finds the event a member copy row points at.
+func findEventByRef(list []CalendarEvent, service, externalID string) (CalendarEvent, bool) {
+	for _, e := range list {
+		for _, src := range e.Sources {
+			if src.Service == service && src.ID == externalID {
+				return e, true
+			}
+		}
+	}
+	return CalendarEvent{}, false
+}
+
+// findEventByKey finds the event with the given identity key.
+func findEventByKey(list []CalendarEvent, key string) CalendarEvent {
+	if key == "" {
+		return CalendarEvent{}
+	}
+	for _, e := range list {
+		if CalendarEventIdentityKey(e) == key {
+			return e
+		}
+	}
+	return CalendarEvent{}
+}
+
+// findEventByName finds the event with the given title.
+func findEventByName(list []CalendarEvent, title string) CalendarEvent {
+	for _, e := range list {
+		if e.Title == title {
+			return e
+		}
+	}
+	return CalendarEvent{}
+}
+
+// eventRefID reads an event's service-local id for one service.
+func eventRefID(e CalendarEvent, service string) string {
+	for _, src := range e.Sources {
+		if src.Service == service {
+			return src.ID
+		}
+	}
+	return ""
+}
+
+// eventRefETag reads an event's etag watermark for one service.
+func eventRefETag(e CalendarEvent, service string) string {
+	for _, src := range e.Sources {
+		if src.Service == service {
+			return ExtraString(src.Extra, "etag")
+		}
+	}
+	return ""
 }

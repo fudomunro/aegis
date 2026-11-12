@@ -40,6 +40,10 @@ type Kind interface {
 	// this kind (issue #365) — the gate for designating a sync hub and for
 	// converging a member in the other direction.
 	WriteCapable(connector any) bool
+	// Converge is the kind-owned converge plan (issue #382): how
+	// convergence and conflict resolution read, match, and place this
+	// kind. Nil for kinds that do not converge.
+	Converge() *ConvergePlan
 	// HasProviders reports whether any source can feed this kind.
 	HasProviders(h Host) bool
 	// Readable reports whether at least one non-blocked service allows
@@ -111,10 +115,11 @@ func RouteDecls() []Route {
 // providerKind is the common shape for kinds fed by connectors
 // implementing a provider interface (the newKindRuntime[P] pattern).
 type providerKind struct {
-	def         LibraryKind
-	routes      []Route
-	provides    func(any) bool
+	def          LibraryKind
+	routes       []Route
+	provides     func(any) bool
 	writeCapable func(any) bool
+	converge     *ConvergePlan
 }
 
 func (k providerKind) Def() LibraryKind            { return k.def }
@@ -126,6 +131,10 @@ func (k providerKind) Provides(connector any) bool { return k.provides(connector
 func (k providerKind) WriteCapable(connector any) bool {
 	return k.writeCapable != nil && k.writeCapable(connector)
 }
+
+// Converge returns the kind's converge plan (issue #382), or nil when the
+// kind does not converge.
+func (k providerKind) Converge() *ConvergePlan { return k.converge }
 
 // HasProviders reports whether any registered connector provides P.
 func (k providerKind) HasProviders(h Host) bool {

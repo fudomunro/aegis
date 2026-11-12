@@ -3,6 +3,8 @@ package kinds
 import (
 	"context"
 	"net/http"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 type tracksKind struct {
@@ -22,6 +24,7 @@ func newTracksKind(h Host, e *Engine, d Deps) Kind {
 		def:      def,
 		provides: providerProvides[LikedTrackProvider],
 		writeCapable: providerProvides[LikedTrackWriteProvider],
+		converge: tracksConvergePlan(h, def.ID),
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -68,4 +71,129 @@ func forEachTrackSource(t *Track, f func(SourceMut)) {
 			SetCopy:       func(info *CopyInfo) { src.Copy = info },
 		})
 	}
+}
+
+// tracksConvergePlan is the tracks kind's converge plan (issue #382):
+// create-only saves of the liked/saved list, one cursor page at a time.
+// Saving is create-or-update and never un-likes — a member's own likes
+// survive untouched.
+func tracksConvergePlan(h Host, kind string) *ConvergePlan {
+	return &ConvergePlan{
+		Shape:   ConvergeSaves,
+		RowName: "liked/saved tracks",
+		TargetReady: func(conn any) bool {
+			return providerProvides[LikedTrackWriteProvider](conn) &&
+				providerProvides[LikedTrackPageProvider](conn)
+		},
+		LoadMember: func(ctx context.Context, member, _ string) (MemberState, error) {
+			src, err := OpFor[LikedTrackPageProvider](h, member, "converge target")
+			if err != nil {
+				return MemberState{}, err
+			}
+			st := MemberState{held: NewTrackMatcher(nil)}
+			cursor := ""
+			for i := 0; i < shared.LibraryPageCap; i++ {
+				page, err := src.ListUserLikedTracksPage(ctx, cursor, 100)
+				if err != nil {
+					return MemberState{}, err
+				}
+				for _, t := range page.Tracks {
+					st.held.(*TrackMatcher).Add(t)
+					st.Count++
+				}
+				if page.Next == "" {
+					return st, nil
+				}
+				cursor = page.Next
+			}
+			return st, nil
+		},
+		ReadSource: func(ctx context.Context, hub, _, cursor string, limit int) (SourcePage, error) {
+			src, err := OpFor[LikedTrackPageProvider](h, hub, "converge source")
+			if err != nil {
+				return SourcePage{}, err
+			}
+			page, err := src.ListUserLikedTracksPage(ctx, cursor, limit)
+			if err != nil {
+				return SourcePage{}, err
+			}
+			return SourcePage{Items: batchOf(page.Tracks), Next: page.Next, HubTotal: page.Total}, nil
+		},
+		FilterHeld: trackFilterHeld,
+		Place: func(ctx context.Context, service, _, _ string, items Batch) (PlaceResult, error) {
+			tracks := batchItems[Track](items)
+			if len(tracks) == 0 {
+				return PlaceResult{}, nil
+			}
+			dst, err := OpFor[LikedTrackWriteProvider](h, service, "converge target")
+			if err != nil {
+				return PlaceResult{}, err
+			}
+			res, err := dst.SaveLikedTracks(ctx, tracks)
+			return PlaceResult{Copied: res.Copied, Skips: res.Skips}, err
+		},
+		MemberExtras: func(ctx context.Context, hub, member, _, _ string) (int, func(context.Context) error, error) {
+			memberTracks, err := likedTracksFor(ctx, h, member, "conflict source")
+			if err != nil {
+				return 0, nil, err
+			}
+			hubTracks, err := likedTracksFor(ctx, h, hub, "conflict source")
+			if err != nil {
+				return 0, nil, err
+			}
+			count, adopt := extrasOf(hubTracks, memberTracks, NewTrackMatcher(hubTracks).Has,
+				func(ctx context.Context, extras []Track) error {
+					dst, err := OpFor[LikedTrackWriteProvider](h, hub, "conflict target")
+					if err != nil {
+						return err
+					}
+					_, err = dst.SaveLikedTracks(ctx, extras)
+					return err
+				})
+			return count, adopt, nil
+		},
+	}
+}
+
+// trackFilterHeld drops the tracks a member state already holds (the
+// identity ladder of issue #366) — shared by the tracks and playlists
+// plans. A member state with no matcher holds nothing (first placement).
+func trackFilterHeld(state MemberState, items Batch) (Batch, int) {
+	m, _ := state.held.(*TrackMatcher)
+	if m == nil {
+		return items, 0
+	}
+	tracks := batchItems[Track](items)
+	kept := make([]Track, 0, len(tracks))
+	held := 0
+	for _, t := range tracks {
+		if m.Has(t) {
+			held++
+			continue
+		}
+		kept = append(kept, t)
+	}
+	return batchOf(kept), held
+}
+
+// likedTracksFor pages one service's full liked/saved list.
+func likedTracksFor(ctx context.Context, h Host, service, what string) ([]Track, error) {
+	src, err := OpFor[LikedTrackPageProvider](h, service, what)
+	if err != nil {
+		return nil, err
+	}
+	var out []Track
+	cursor := ""
+	for i := 0; i < shared.LibraryPageCap; i++ {
+		page, err := src.ListUserLikedTracksPage(ctx, cursor, 100)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page.Tracks...)
+		if page.Next == "" {
+			return out, nil
+		}
+		cursor = page.Next
+	}
+	return out, nil
 }
