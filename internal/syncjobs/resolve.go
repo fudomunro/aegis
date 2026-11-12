@@ -336,6 +336,24 @@ func (r *Runners) memberExtraItems(ctx context.Context, rec SyncConflict, row co
 			}
 		}
 		return out, nil
+	case library.MirrorKindTracks:
+		memberTracks, err := r.listLikedTracks(ctx, rec.Service)
+		if err != nil {
+			return nil, err
+		}
+		hubTracks, err := r.listLikedTracks(ctx, hub)
+		if err != nil {
+			return nil, err
+		}
+		hubHeld := kinds.NewTrackMatcher(hubTracks)
+		var out []entityItem
+		for _, t := range memberTracks {
+			if !hubHeld.Has(t) {
+				t := t
+				out = append(out, entityItem{track: &t})
+			}
+		}
+		return out, nil
 	default:
 		return nil, fmt.Errorf("%w: kind %q has no item adoption", ErrSyncTerminal, rec.Kind)
 	}
@@ -384,6 +402,19 @@ func (r *Runners) adoptExtras(ctx context.Context, rec SyncConflict, row copies.
 			}
 		}
 		_, err = dst.PlaceEvents(ctx, events)
+		return err
+	case library.MirrorKindTracks:
+		dst, err := library.MirrorOpFor[kinds.LikedTrackWriteProvider](r.Mirror, hub, "conflict target")
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+		}
+		tracks := make([]kinds.Track, 0, len(extras))
+		for _, it := range extras {
+			if it.track != nil {
+				tracks = append(tracks, *it.track)
+			}
+		}
+		_, err = dst.SaveLikedTracks(ctx, tracks)
 		return err
 	default:
 		return fmt.Errorf("%w: kind %q has no item adoption", ErrSyncTerminal, rec.Kind)
@@ -443,6 +474,28 @@ func (r *Runners) stampPlaced(kind, service string, placed []kinds.PlaceRecord) 
 	for _, rec := range placed {
 		r.Mirror.RecordMirrorItemCopy(kind, rec.Name, service, rec.ExternalID, rec.Name, rec.ETag)
 	}
+}
+
+// listLikedTracks pages one service's full liked/saved list.
+func (r *Runners) listLikedTracks(ctx context.Context, service string) ([]kinds.Track, error) {
+	src, err := library.MirrorOpFor[kinds.LikedTrackPageProvider](r.Mirror, service, "conflict source")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	var out []kinds.Track
+	cursor := ""
+	for i := 0; i < shared.LibraryPageCap; i++ {
+		page, err := src.ListUserLikedTracksPage(ctx, cursor, 100)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, page.Tracks...)
+		if page.Next == "" {
+			return out, nil
+		}
+		cursor = page.Next
+	}
+	return out, nil
 }
 
 // listPlaylistTracks pages one playlist's full item list.

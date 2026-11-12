@@ -562,11 +562,12 @@ not duplicated) and re-arms the schedule one interval out.
 On first start Aegis seeds one template per checked kind — **Daily copy
 freshness** for `messages`, `playlists`, and `tracks`, every 24 hours — and
 one **Daily outbound convergence** template per converged kind (`contacts`,
-`events`, `playlists`), which fans a kind's data out from its canonical home
-to the group's other write-capable members. Convergence only creates and
-updates on a member; it never deletes there. Converged playlists keep the
-canonical item order for what they place, gain only what is missing on a
-re-run, and rename the member copy when the canonical title changes. The
+`events`, `playlists`, `tracks`), which fans a kind's data out from its
+canonical home to the group's other write-capable members. Convergence only
+creates and updates on a member; it never deletes there — converged playlists
+keep the canonical item order for what they place, gain only what is missing
+on a re-run, and rename the member copy when the canonical title changes,
+and a converged liked list only ever gains likes, never loses them. The
 seed only fills in what is missing: a paused or edited schedule is left as the
 operator set it. Pause and resume from the panel or the
 `/v1/admin/sync/schedules/{id}/enable|disable` routes.

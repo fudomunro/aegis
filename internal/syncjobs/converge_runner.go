@@ -76,9 +76,10 @@ func (p *convergeJobPayload) resetPlaylistChain() {
 }
 
 // convergeKinds are the kinds a converge runner is registered for. Entities
-// (contacts, events) place their whole collection per member; playlists fan
-// out one item page at a time and propagate titles (issue #365).
-var convergeKinds = []string{library.MirrorKindContacts, library.MirrorKindEvents, library.MirrorKindPlaylists}
+// (contacts, events) place their whole collection per member; playlists and
+// liked tracks fan out one item page at a time (issue #365). Playlists also
+// propagate titles.
+var convergeKinds = []string{library.MirrorKindContacts, library.MirrorKindEvents, library.MirrorKindPlaylists, library.MirrorKindTracks}
 
 // SyncConvergeKinds are the kinds the build registers converge runners for —
 // the schedule seed's kind list (the store does not know them).
@@ -138,6 +139,9 @@ func (r *convergeRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error)
 
 	if r.kind == library.MirrorKindPlaylists {
 		return r.runPlaylistStep(ctx, p, target)
+	}
+	if r.kind == library.MirrorKindTracks {
+		return r.runTracksStep(ctx, p, target)
 	}
 
 	items, truncated, err := r.listCanonical(ctx, p.SourceService)
@@ -242,6 +246,13 @@ func convergeTargetOK(s *Runners, kind, serviceID string) bool {
 		// appends only what is missing. A member that cannot list its items
 		// cannot converge idempotently — it is not a converge target.
 		if _, ok := conn.(kinds.PlaylistItemsProvider); !ok {
+			return false
+		}
+	}
+	if kind == library.MirrorKindTracks {
+		// Liked-tracks convergence reads the member's likes for the same
+		// reason (issue #366's identity ladder does the matching).
+		if _, ok := conn.(kinds.LikedTrackPageProvider); !ok {
 			return false
 		}
 	}
@@ -679,6 +690,125 @@ func loadMemberPlaylistState(ctx context.Context, s *Runners, service, playlistI
 		}
 		if i == 0 {
 			st.title = ref.Name
+		}
+		for _, t := range page.Tracks {
+			st.held.Add(t)
+			st.count++
+		}
+		if page.Next == "" {
+			return st, nil
+		}
+		cursor = page.Next
+	}
+	return st, nil
+}
+
+// runTracksStep executes one bounded liked-tracks step: one canonical item
+// page saved onto one member. Members are outermost; pages chain through
+// the canonical home's liked list. Saving is create-or-update and never
+// un-likes — a member's own likes survive untouched (issue #365).
+func (r *convergeRunner) runTracksStep(ctx context.Context, p convergeJobPayload, target string) (SyncStep, error) {
+	s := r.run
+
+	// What the member already likes: the skip filter (issue #366's
+	// identity ladder) and the count for the extras check and stamp.
+	state, err := loadMemberTrackState(ctx, s, target)
+	if err != nil {
+		return r.step(p, target, false, ""), err
+	}
+
+	src, err := library.MirrorOpFor[kinds.LikedTrackPageProvider](s.Mirror, p.SourceService, "converge source")
+	if err != nil {
+		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	page, err := src.ListUserLikedTracksPage(ctx, p.ItemCursor, library.MirrorTrackCap)
+	if err != nil {
+		return r.step(p, target, false, ""), err
+	}
+
+	alreadyHeld := 0
+	newTracks := make([]kinds.Track, 0, len(page.Tracks))
+	for _, t := range page.Tracks {
+		if state.held.Has(t) {
+			alreadyHeld++
+			continue
+		}
+		newTracks = append(newTracks, t)
+	}
+
+	copied, skips := 0, 0
+	if len(newTracks) > 0 {
+		dst, err := library.MirrorOpFor[kinds.LikedTrackWriteProvider](s.Mirror, target, "converge target")
+		if err != nil {
+			return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+		}
+		res, perr := dst.SaveLikedTracks(ctx, newTracks)
+		if perr != nil {
+			// Counters stay unmutated on failure so a retry cannot
+			// double-count. Saving is idempotent, so the retry is safe.
+			return r.step(p, target, false, ""), perr
+		}
+		copied, skips = res.Copied, len(res.Skips)
+	}
+
+	p.Planned += len(page.Tracks)
+	p.Copied += copied
+	p.Skipped += alreadyHeld + skips
+
+	if page.Next != "" {
+		p.ItemCursor = page.Next
+		return r.step(p, target, false, ""), nil
+	}
+
+	// Canonical liked list exhausted on this member: stamp the collection
+	// row freshness reads — the member's likes as they stand now.
+	s.Mirror.RecordMirrorCopy(library.MirrorKindTracks, p.SourceService, "",
+		target, "", "liked/saved tracks", state.count+copied, "")
+
+	// Member-only likes are non-hub creates: recorded for accept — adopt
+	// onto the canonical home — or reject — keep local. Convergence itself
+	// never un-likes.
+	if memberAfter, hubTotal := state.count+copied, page.Total; hubTotal > 0 && memberAfter > hubTotal {
+		s.recordConflict(SyncConflict{
+			Kind:        library.MirrorKindTracks,
+			Service:     target,
+			EntityKey:   library.MirrorEntityKey(library.MirrorKindTracks, p.SourceService, ""),
+			Subject:     "liked/saved tracks",
+			Field:       ConflictFieldItems,
+			MemberValue: fmt.Sprintf("%d items", memberAfter),
+			LastValue:   fmt.Sprintf("%d items", hubTotal),
+			Source:      ConflictSourceConverge,
+		})
+	}
+
+	p.resetPlaylistChain() // clears the page cursor for the next member
+	p.TargetDone = p.Index + 1
+	p.Index++
+	if p.Index >= len(p.Targets) {
+		return r.step(p, target, true, ""), nil
+	}
+	return r.step(p, target, false, ""), nil
+}
+
+// memberTrackState is what a member's liked list holds now: the identity
+// matcher for the skip filter and the raw count for the extras check.
+type memberTrackState struct {
+	held  *kinds.TrackMatcher
+	count int
+}
+
+// loadMemberTrackState pages a member's liked/saved list.
+func loadMemberTrackState(ctx context.Context, s *Runners, service string) (memberTrackState, error) {
+	src, err := library.MirrorOpFor[kinds.LikedTrackPageProvider](s.Mirror, service, "converge target")
+	if err != nil {
+		return memberTrackState{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+	}
+	st := memberTrackState{held: kinds.NewTrackMatcher(nil)}
+	cursor := ""
+	for i := 0; i < shared.LibraryPageCap; i++ {
+		page, err := src.ListUserLikedTracksPage(ctx, cursor, 100)
+		if err != nil {
+			return memberTrackState{}, err
 		}
 		for _, t := range page.Tracks {
 			st.held.Add(t)

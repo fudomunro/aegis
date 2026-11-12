@@ -40,7 +40,7 @@ enrichment supplies recording MBIDs where the provider has none.
 | playlists | user-confirmed playlist link | duration-guarded name (items) | yes | — (item reorders of already-placed items are not re-ordered on members) |
 | contacts | vCard UID / email | phone → handle → name | yes | member-side creates are undetected until an entity freshness checker lands |
 | events | iCal UID | title + start | yes | member-side creates are undetected until an entity freshness checker lands |
-| tracks | ISRC / recording MBID | duration-guarded name | yes | convergence support (liked-tracks coverage) not yet landed |
+| tracks | ISRC / recording MBID | duration-guarded name | yes | — (YouTube Music copies match on the title key) |
 | albums | UPC / MBID | title + primary artist | no sync yet | no write surface (no album placement) |
 | artists | MBID | name | no sync yet | no write surface (no artist placement) |
 | photos | — | — | no sync yet | no cross-service photo identity, no write surface; photo ownership is unsettled |

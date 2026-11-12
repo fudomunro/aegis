@@ -78,8 +78,8 @@ type LibraryKind struct {
 
 	// SyncParticipant reports whether this kind takes part in sync
 	// relationships (issue #365): connecting a source establishes one
-	// relationship row per participating kind it provides. Starter set is
-	// contacts, events, and playlists; per-kind identity gaps gate the rest.
+	// relationship row per participating kind it provides. Kinds opt in as
+	// their identity story allows (docs/sync-identity.md).
 	SyncParticipant bool
 
 	// SyncIdentity is this kind's identity-readiness declaration (issue
