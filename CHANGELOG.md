@@ -7,6 +7,27 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Playlist order reconciliation (issue #378).** Order is fidelity: a
+  playlist reordered on its canonical home is re-ordered on its converged
+  copies. The write contract is a new `PlaylistOrderProvider`
+  (`SetPlaylistOrder`) — a set-preserving permutation of the playlist's
+  own items, so a reorder never adds or removes anything. Spotify applies
+  it as positional moves (the reorder mode of the playlist-items PUT);
+  YouTube Music, which exposes no move operation, reinserts each moved
+  video at its slot before removing the old entry — a transient duplicate
+  is recoverable, a transient loss is not — and refuses the reorder
+  rather than risk one on an item it cannot reinsert. The canonical items
+  fill the slots they already occupy on the copy and items the copy holds
+  beyond the canonical home keep their places. A member-side reorder is a
+  non-hub edit like a rename: it surfaces as an `order` conflict on the
+  admin library page with both sequences, and the user settles it —
+  accept makes the member's order canonical and fans out, reject restores
+  the canonical order on that copy. Detection keys on the order watermark
+  stamped with each converge run (the canonical items' sequence as it was
+  left there): a pure reorder diverges it, while membership changes stay
+  the items channel's. The watermark of a pending move stays on its
+  recorded baseline so the member's edit is never overwritten before the
+  user decides.
 - **Entity freshness checker (issue #377).** Contact and event copies get
   a real freshness probe, closing the member-side create blind spot:
   convergence saw renames and record edits through the etag watermarks,

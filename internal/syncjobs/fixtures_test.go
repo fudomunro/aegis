@@ -535,6 +535,8 @@ type playlistStubConn struct {
 	failList   error
 	created    int
 	placeCalls int
+	orderCalls int
+	lastOrder  []string
 }
 
 type playlistStub struct {
@@ -582,6 +584,21 @@ func (c *playlistStubConn) renameTo(id, name string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.byID[id].name = name
+}
+
+// reorderTo sets a playlist's item order (a user-side edit between runs).
+func (c *playlistStubConn) reorderTo(id string, names ...string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	pl := c.byID[id]
+	byName := make(map[string]kinds.Track, len(pl.tracks))
+	for _, t := range pl.tracks {
+		byName[t.Name] = t
+	}
+	pl.tracks = nil
+	for _, n := range names {
+		pl.tracks = append(pl.tracks, byName[n])
+	}
 }
 
 // trackNames returns a playlist's track names in order.
@@ -735,6 +752,48 @@ func (c *playlistStubConn) setFailPlace(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.failPlace = err
+}
+
+// --- kinds.PlaylistOrderProvider (issue #378) ---
+
+// SetPlaylistOrder rewrites the playlist's items into exactly the given
+// id sequence — membership preserved, unlisted tracks kept at the end.
+func (c *playlistStubConn) SetPlaylistOrder(ctx context.Context, playlistID string, orderedIDs []string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	pl := c.byID[playlistID]
+	if pl == nil {
+		return fmt.Errorf("playlist %q not found", playlistID)
+	}
+	c.orderCalls++
+	c.lastOrder = append([]string(nil), orderedIDs...)
+	byID := make(map[string]kinds.Track, len(pl.tracks))
+	for _, t := range pl.tracks {
+		byID[stubTrackID(t)] = t
+	}
+	var out []kinds.Track
+	seen := map[string]bool{}
+	for _, id := range orderedIDs {
+		if t, ok := byID[id]; ok && !seen[id] {
+			seen[id] = true
+			out = append(out, t)
+		}
+	}
+	for _, t := range pl.tracks {
+		if !seen[stubTrackID(t)] {
+			out = append(out, t)
+		}
+	}
+	pl.tracks = out
+	return nil
+}
+
+// stubTrackID is a stub track's service-local id.
+func stubTrackID(t kinds.Track) string {
+	for _, src := range t.Sources {
+		return src.ID
+	}
+	return ""
 }
 
 // --- kinds.PlaylistMetaProvider (the freshness checker's probe) ---

@@ -30,6 +30,9 @@ const (
 	ConflictFieldItems   = "items"
 	ConflictFieldRecord  = "record"
 	ConflictFieldMissing = "missing"
+	// ConflictFieldOrder is a member-side item reorder (issue #378): the
+	// same items in a different sequence than convergence left there.
+	ConflictFieldOrder = "order"
 )
 
 // Conflict statuses.

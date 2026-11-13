@@ -17,7 +17,7 @@ func TestServer_RecordMirrorCopyAndStamp(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.copyLedger = c
 
-	srv.library().RecordMirrorCopy(library.MirrorKindPlaylists, "spotify", "abc", "youtube-music", "xyz", "Road Trip", 3, "snap1")
+	srv.library().RecordMirrorCopy(library.MirrorKindPlaylists, "spotify", "abc", "youtube-music", "xyz", "Road Trip", 3, "snap1", "")
 	info := srv.copyInfoFor("playlists", "youtube-music", "xyz")
 	if info == nil {
 		t.Fatal("expected copy stamp")

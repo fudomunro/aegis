@@ -247,7 +247,7 @@ func (h *Handlers) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		result.Target = MirrorRef{Service: req.TargetService, ID: res.PlaylistID, Name: name, URL: res.URL, Count: res.Copied}
 		result.Copied = res.Copied
 		skips = res.Skips
-		h.RecordMirrorCopy(MirrorKindPlaylists, sourceService, req.SourceID, req.TargetService, res.PlaylistID, name, res.Copied, "")
+		h.RecordMirrorCopy(MirrorKindPlaylists, sourceService, req.SourceID, req.TargetService, res.PlaylistID, name, res.Copied, "", "")
 	case MirrorKindTracks:
 		res, err := dst.SaveLikedTracks(ctx, tracks)
 		if err != nil {
@@ -257,7 +257,7 @@ func (h *Handlers) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		result.Target = MirrorRef{Service: req.TargetService, Name: "liked/saved tracks", Count: res.Copied}
 		result.Copied = res.Copied
 		skips = res.Skips
-		h.RecordMirrorCopy(MirrorKindTracks, sourceService, "", req.TargetService, "", "liked/saved tracks", res.Copied, "")
+		h.RecordMirrorCopy(MirrorKindTracks, sourceService, "", req.TargetService, "", "liked/saved tracks", res.Copied, "", "")
 	}
 	result.Skips = toMirrorSkips(skips)
 	result.Skipped = len(skips)

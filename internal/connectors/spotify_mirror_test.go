@@ -887,3 +887,69 @@ func TestSpotifySearchAlbumID_MatchLadder(t *testing.T) {
 		t.Fatalf("queries = %v, want the upc lookup first", queries)
 	}
 }
+
+func TestSpotifySetPlaylistOrder_MovesInPlace(t *testing.T) {
+	type move struct {
+		RangeStart   int `json:"range_start"`
+		InsertBefore int `json:"insert_before"`
+	}
+	var puts []move
+	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/playlists/pl1":
+			writeMirrorJSON(w, map[string]any{"name": "Road trip"})
+		case r.Method == http.MethodGet && r.URL.Path == "/playlists/pl1/tracks":
+			writeMirrorJSON(w, map[string]any{"total": 3, "items": []any{
+				map[string]any{"track": map[string]any{"id": "a", "name": "A"}},
+				map[string]any{"track": map[string]any{"id": "b", "name": "B"}},
+				map[string]any{"track": map[string]any{"id": "c", "name": "C"}},
+			}})
+		case r.Method == http.MethodPut && r.URL.Path == "/playlists/pl1/tracks":
+			var body move
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode move: %v", err)
+			}
+			puts = append(puts, body)
+			writeMirrorJSON(w, map[string]any{"snapshot_id": "s2"})
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+
+	if err := c.SetPlaylistOrder(context.Background(), "pl1", []string{"c", "a", "b"}); err != nil {
+		t.Fatalf("SetPlaylistOrder: %v", err)
+	}
+	// c moves left past a and b — one positional move, no replace, so the
+	// playlist's membership is never rewritten (issue #378).
+	if len(puts) != 1 || puts[0].RangeStart != 2 || puts[0].InsertBefore != 0 {
+		t.Fatalf("moves = %+v, want [2→0]", puts)
+	}
+}
+
+func TestSpotifySetPlaylistOrder_NoOpWhenOrderStands(t *testing.T) {
+	var puts int
+	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/playlists/pl1":
+			writeMirrorJSON(w, map[string]any{"name": "Road trip"})
+		case r.Method == http.MethodGet && r.URL.Path == "/playlists/pl1/tracks":
+			writeMirrorJSON(w, map[string]any{"total": 2, "items": []any{
+				map[string]any{"track": map[string]any{"id": "a", "name": "A"}},
+				map[string]any{"track": map[string]any{"id": "b", "name": "B"}},
+			}})
+		case r.Method == http.MethodPut:
+			puts++
+			writeMirrorJSON(w, map[string]any{"snapshot_id": "s2"})
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	if err := c.SetPlaylistOrder(context.Background(), "pl1", []string{"a", "b"}); err != nil {
+		t.Fatalf("SetPlaylistOrder: %v", err)
+	}
+	if puts != 0 {
+		t.Fatalf("PUT calls = %d, want none for an order that already stands", puts)
+	}
+}

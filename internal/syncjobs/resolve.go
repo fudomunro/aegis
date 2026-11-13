@@ -62,6 +62,8 @@ func (r *Runners) applyConflict(ctx context.Context, rec SyncConflict, accept bo
 		return r.resolveItems(ctx, rec, row, ok, accept)
 	case rec.Field == ConflictFieldRecord:
 		return r.resolveRecord(ctx, rec, row, ok, accept)
+	case rec.Field == ConflictFieldOrder:
+		return r.resolveOrder(ctx, rec, row, ok, accept)
 	default:
 		return "", fmt.Errorf("%w: unknown conflict field %q", ErrSyncTerminal, rec.Field)
 	}
@@ -118,7 +120,7 @@ func (r *Runners) resolveTitle(ctx context.Context, rec SyncConflict, row copies
 		if err := plan.TitleOps.Rename(ctx, row.SourceService, row.SourceID, memberTitle); err != nil {
 			return "", planErr(err)
 		}
-		r.restampCopy(row, memberTitle)
+		r.restampCopy(row, memberTitle, row.Watermark)
 		if err := r.enqueueConverge(rec.Kind, rec.ID); err != nil {
 			return "", err
 		}
@@ -127,8 +129,41 @@ func (r *Runners) resolveTitle(ctx context.Context, rec SyncConflict, row copies
 	if err := plan.TitleOps.Rename(ctx, rec.Service, row.ExternalID, hubTitle); err != nil {
 		return "", planErr(err)
 	}
-	r.restampCopy(row, hubTitle)
+	r.restampCopy(row, hubTitle, row.Watermark)
 	return fmt.Sprintf("member title restored to %q", hubTitle), nil
+}
+
+// resolveOrder settles a member-side item reorder (issue #378): accept
+// makes the member's order canonical and fans out to the other copies,
+// reject restores the canonical order on the member. A reorder never
+// changes membership — items that exist only on the copy stay there.
+// The probe/write pair is the kind's OrderOps plan op.
+func (r *Runners) resolveOrder(ctx context.Context, rec SyncConflict, row copies.Record, haveRow bool, accept bool) (string, error) {
+	if !haveRow {
+		return "", fmt.Errorf("%w: the copy row for this conflict is gone", ErrSyncTerminal)
+	}
+	plan := r.planFor(rec.Kind)
+	if plan == nil || plan.OrderOps == nil {
+		return "", fmt.Errorf("%w: kind %q has no order resolution", ErrSyncTerminal, rec.Kind)
+	}
+	hub := r.conflictHub(rec, row)
+	watermark, found, err := plan.OrderOps.Resolve(ctx, hub, rec.Service, row.SourceID, row.ExternalID, accept)
+	if err != nil {
+		return "", planErr(err)
+	}
+	if !found {
+		return "the member copy is gone; nothing to decide", nil
+	}
+	r.restampCopy(row, row.Version.Name, watermark)
+	if !accept {
+		return "canonical order restored on the member", nil
+	}
+	// The member itself is unchanged: its watermark was refreshed to the
+	// order it holds so the next converge updates instead of conflicting.
+	if err := r.enqueueConverge(rec.Kind, rec.ID); err != nil {
+		return "", err
+	}
+	return "member order made canonical; fanning out", nil
 }
 
 // resolveItems adopts (accept) or keeps local (reject) the items a member
@@ -229,11 +264,13 @@ func (r *Runners) enqueueConverge(kind, conflictID string) error {
 	return err
 }
 
-// restampCopy refreshes the copy row after a rename so the watermark
+// restampCopy refreshes the copy row after a resolution so the watermark
 // records what is now on the member (and the next check stays quiet).
-func (r *Runners) restampCopy(row copies.Record, name string) {
+// name and watermark carry the fields the resolution changed; callers pass
+// the row's own values to preserve the rest.
+func (r *Runners) restampCopy(row copies.Record, name, watermark string) {
 	r.Mirror.RecordMirrorCopy(row.Kind, row.SourceService, row.SourceID,
-		row.Service, row.ExternalID, name, row.Version.ItemCount, row.Version.SnapshotID)
+		row.Service, row.ExternalID, name, row.Version.ItemCount, row.Version.SnapshotID, watermark)
 }
 
 // stampPlaced records per-item watermarks for a resolution write.

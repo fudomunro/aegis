@@ -2,8 +2,11 @@ package kinds
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -162,6 +165,68 @@ type TitleOps struct {
 	Rename func(ctx context.Context, service, id, name string) error
 }
 
+// OrderOps is the playlist shape's order propagation (issue #378).
+// Order is fidelity: the canonical home's item order fans out to its
+// copies, a member-side reorder is a non-hub edit left for the user, and
+// a reorder never changes membership (member-only items included).
+type OrderOps struct {
+	// Propagate probes the member's live order against the recorded
+	// watermark and — when the member's own order has not moved —
+	// rewrites the copy into the canonical order. A member-side reorder
+	// (same items, different sequence) is reported as Moved and left
+	// alone: the user accepts it (it becomes canonical) or rejects it
+	// (the canonical order is restored) via Resolve.
+	Propagate func(ctx context.Context, hub, member, hubID, memberID, recorded string) (OrderProbe, error)
+
+	// Resolve applies one order-conflict decision: accept writes the
+	// member's order onto the canonical home (the fan-out follows on the
+	// next converge), reject restores the canonical order on the member.
+	// found=false means a copy is gone (nothing to decide). The returned
+	// watermark is what to stamp on the member's copy row.
+	Resolve func(ctx context.Context, hub, member, hubID, memberID string, accept bool) (watermark string, found bool, err error)
+}
+
+// OrderProbe is one order-propagation attempt (issue #378).
+type OrderProbe struct {
+	// Watermark is the member copy's order marker to stamp: what this
+	// write left there (unchanged when Moved, so the pending member-side
+	// edit keeps re-detecting until it is resolved).
+	Watermark string
+	// Moved reports a member-side reorder — the write is left alone.
+	Moved bool
+	// MemberOrder / CanonicalOrder are the readable sequences for the
+	// conflict row, in the order each side holds.
+	MemberOrder    string
+	CanonicalOrder string
+}
+
+// OrderWatermark is the order marker for a copy's item sequence
+// (issue #378): two fingerprints packed as "<seq>.<set>" — the sequence
+// as it stands and the same items sorted. A live marker with the same
+// set fingerprint but a different sequence fingerprint is a member-side
+// reorder (same items, different order); anything else is membership
+// drift, which the items channel owns.
+func OrderWatermark(ids []string) string {
+	return shortFingerprint(ids) + "." + shortFingerprint(sortedCopy(ids))
+}
+
+// shortFingerprint hashes a sequence of item ids into a short marker.
+func shortFingerprint(ids []string) string {
+	h := sha256.New()
+	for _, id := range ids {
+		h.Write([]byte(id))
+		h.Write([]byte{0x1f})
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// sortedCopy returns the ids in sorted order.
+func sortedCopy(ids []string) []string {
+	out := append([]string(nil), ids...)
+	sort.Strings(out)
+	return out
+}
+
 // ConvergePlan is one kind's converge declaration (issue #382). Fields a
 // shape does not use stay nil; the engine iterates plan shapes and never
 // names a kind.
@@ -224,6 +289,11 @@ type ConvergePlan struct {
 	// TitleOps is the title-propagating shape's rename pair. Nil for
 	// kinds whose copies carry no title to resolve.
 	TitleOps *TitleOps
+
+	// OrderOps is the order-propagating shape's probe/write pair
+	// (issue #378). Nil for kinds whose copies carry no item order to
+	// reconcile.
+	OrderOps *OrderOps
 
 	// RecordResolve applies one etag-record conflict decision: accept
 	// writes the member's version to the canonical home, reject restores

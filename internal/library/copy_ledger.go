@@ -8,7 +8,9 @@ import (
 
 // recordMirrorCopy persists a successful playlist/liked-tracks mirror
 // (issue #76). Errors are logged by the caller and never fail the mirror.
-func (h *Handlers) RecordMirrorCopy(kind, sourceService, sourceID, targetService, targetID, name string, itemCount int, snapshotID string) {
+// watermark carries the kind's own marker (the playlist shape's order
+// watermark, issue #378) and is opaque to the ledger.
+func (h *Handlers) RecordMirrorCopy(kind, sourceService, sourceID, targetService, targetID, name string, itemCount int, snapshotID, watermark string) {
 	if h == nil || h.Copies == nil {
 		return
 	}
@@ -24,6 +26,7 @@ func (h *Handlers) RecordMirrorCopy(kind, sourceService, sourceID, targetService
 		SyncMode:      copies.SyncModeForKind(kind),
 		Provenance:    copies.CopyProvenanceMirror,
 		Status:        copies.CopyStatusInSync,
+		Watermark:     watermark,
 		Version: copies.Version{
 			ExternalID: targetID,
 			SnapshotID: snapshotID,

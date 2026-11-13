@@ -119,7 +119,7 @@ func (h *Handlers) HandleEntityMirror(w http.ResponseWriter, r *http.Request, re
 		for _, rec := range res.Placed {
 			h.RecordMirrorItemCopy(MirrorKindContacts, rec.Name, req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
 		}
-		h.RecordMirrorCopy(MirrorKindContacts, sourceService, "", req.TargetService, "", "contacts", res.Copied, "")
+		h.RecordMirrorCopy(MirrorKindContacts, sourceService, "", req.TargetService, "", "contacts", res.Copied, "", "")
 		result = MirrorResult{
 			Kind: req.Kind, Source: srcRef,
 			Target:    MirrorRef{Service: req.TargetService, Name: "contacts", Count: res.Copied},
@@ -170,7 +170,7 @@ func (h *Handlers) HandleEntityMirror(w http.ResponseWriter, r *http.Request, re
 		for _, rec := range res.Placed {
 			h.RecordMirrorItemCopy(MirrorKindEvents, rec.Name, req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
 		}
-		h.RecordMirrorCopy(MirrorKindEvents, sourceService, "", req.TargetService, "", "events", res.Copied, "")
+		h.RecordMirrorCopy(MirrorKindEvents, sourceService, "", req.TargetService, "", "events", res.Copied, "", "")
 		result = MirrorResult{
 			Kind: req.Kind, Source: srcRef,
 			Target:    MirrorRef{Service: req.TargetService, Name: "events", Count: res.Copied},

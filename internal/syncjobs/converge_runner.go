@@ -61,6 +61,10 @@ type convergeJobPayload struct {
 	// member-side rename — a conflict, not an overwrite.
 	RowName       string `json:"row_name,omitempty"`
 	PlaylistsDone int    `json:"playlists_done,omitempty"`
+	// OrderMark is the order watermark we last set on the member (the copy
+	// row's watermark): the member's own sequence moving off it is a
+	// member-side reorder — a conflict, not an overwrite (issue #378).
+	OrderMark string `json:"order_mark,omitempty"`
 
 	// Accumulated across steps for the admin panel.
 	Planned    int  `json:"planned,omitempty"`
@@ -79,6 +83,7 @@ func (p *convergeJobPayload) resetPlaylistChain() {
 	p.ItemCursor = ""
 	p.TargetID = ""
 	p.RowName = ""
+	p.OrderMark = ""
 }
 
 // SyncConvergeKinds lists the kinds a converge runner is registered for
@@ -295,7 +300,7 @@ func (r *convergeRunner) runCollectionStep(ctx context.Context, p convergeJobPay
 	case plan.Shape == kinds.ConvergeEntities:
 		memberCount = page.HubTotal
 	}
-	s.Mirror.RecordMirrorCopy(p.Kind, p.SourceService, "", target, "", plan.RowName, memberCount, "")
+	s.Mirror.RecordMirrorCopy(p.Kind, p.SourceService, "", target, "", plan.RowName, memberCount, "", "")
 
 	// Member-only items are non-hub creates: recorded here (the watermark
 	// count diverges from the canonical total) for accept — adopt onto
@@ -485,16 +490,44 @@ func (r *convergeRunner) runPlaylistStep(ctx context.Context, p convergeJobPaylo
 		return r.step(p, target, false, ""), nil
 	}
 
-	// Canonical source exhausted on this member: stamp the copy row the
-	// freshness pass reads — the member's item count as it stands now,
-	// and the title evidence (a conflicted copy keeps the name we last
-	// set).
+	// Canonical source exhausted on this member: propagate the canonical
+	// order (issue #378) before stamping, so the row records what this
+	// run left there. A member-side reorder is left alone and reported —
+	// the user accepts it (it becomes canonical) or rejects it (the
+	// canonical order is restored). The watermark of a pending move stays
+	// on its recorded baseline so it keeps re-detecting until resolved.
+	orderMark := p.OrderMark
+	if plan.OrderOps != nil && p.TargetID != "" {
+		probe, oerr := plan.OrderOps.Propagate(ctx, p.SourceService, target, p.SourceID, p.TargetID, p.OrderMark)
+		if oerr != nil {
+			return r.step(p, target, false, ""), planErr(oerr)
+		}
+		orderMark = probe.Watermark
+		if probe.Moved {
+			p.Conflicts++
+			s.recordConflict(SyncConflict{
+				Kind:        p.Kind,
+				Service:     target,
+				EntityKey:   library.MirrorEntityKey(p.Kind, p.SourceService, p.SourceID),
+				ExternalID:  p.TargetID,
+				Subject:     p.Name,
+				Field:       ConflictFieldOrder,
+				MemberValue: probe.MemberOrder,
+				LastValue:   probe.CanonicalOrder,
+				Source:      ConflictSourceConverge,
+			})
+		}
+	}
+
+	// Stamp the copy row the freshness pass reads — the member's item
+	// count as it stands now, the title evidence (a conflicted copy keeps
+	// the name we last set), and the order watermark.
 	stampedName := p.Name
 	if conflicted {
 		stampedName = p.RowName
 	}
 	s.Mirror.RecordMirrorCopy(p.Kind, p.SourceService, p.SourceID,
-		target, p.TargetID, stampedName, state.Count+copied, "")
+		target, p.TargetID, stampedName, state.Count+copied, "", orderMark)
 
 	// Member-only items are non-hub creates: recorded here (the watermark
 	// count diverges from the canonical total) for accept — adopt onto
@@ -550,11 +583,13 @@ func (r *convergeRunner) pickPlaylist(ctx context.Context, p *convergeJobPayload
 		p.ItemCursor = ""
 		p.TargetID = ""
 		p.RowName = ""
+		p.OrderMark = ""
 		entity := library.MirrorEntityKey(p.Kind, p.SourceService, p.SourceID)
 		for _, row := range s.Copies.GetByEntity(p.Kind, entity) {
 			if row.Service == target {
 				p.TargetID = row.ExternalID
 				p.RowName = row.Version.Name
+				p.OrderMark = row.Watermark
 				break
 			}
 		}

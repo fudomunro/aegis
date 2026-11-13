@@ -250,6 +250,108 @@ func (c *YouTubeMusicConnector) renamePlaylist(ctx context.Context, playlistID, 
 	return err
 }
 
+// youtubePlaylistEntry is one playlistItems.list entry: the playlist-item
+// id a delete names and the video id the order works in.
+type youtubePlaylistEntry struct {
+	itemID  string
+	videoID string
+}
+
+// SetPlaylistOrder implements kinds.PlaylistOrderProvider (issue #378).
+// YouTube exposes no move operation, so each move reinserts the video at
+// its target position and then removes the old entry: the playlist never
+// holds fewer items than before (a transient duplicate is recoverable —
+// a transient loss is not). The desired ids are matched onto the
+// playlist's own entries in listing order; unknown ids are ignored and
+// unlisted entries keep their relative order at the end.
+func (c *YouTubeMusicConnector) SetPlaylistOrder(ctx context.Context, playlistID string, orderedIDs []string) error {
+	entries, err := youtubePlaylistEntries(ctx, c, playlistID)
+	if err != nil {
+		return err
+	}
+	ids := make([]string, len(entries))
+	for i, e := range entries {
+		ids[i] = e.videoID
+	}
+	target := orderEntryIndexes(orderedIDs, ids)
+	// Insertion sort on the working order: every move pulls an entry from
+	// the right of its target slot, reinserts the video at the slot, and
+	// removes the old entry — in that order, so the video is never absent.
+	work := make([]int, len(target))
+	for i := range work {
+		work[i] = i
+	}
+	for i, want := range target {
+		j := i
+		for work[j] != want {
+			j++
+		}
+		if j == i {
+			continue
+		}
+		if _, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "POST", "/playlistItems",
+			url.Values{"part": []string{"snippet"}},
+			map[string]any{"snippet": map[string]any{
+				"playlistId": playlistID,
+				"resourceId": map[string]any{"kind": "youtube#video", "videoId": entries[want].videoID},
+				"position":   i,
+			}}); err != nil {
+			return err
+		}
+		if _, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "DELETE", "/playlistItems",
+			url.Values{"id": []string{entries[want].itemID}}, nil); err != nil {
+			return err
+		}
+		work = append(work[:j], work[j+1:]...)
+		work = append(work[:i], append([]int{want}, work[i:]...)...)
+	}
+	return nil
+}
+
+// youtubePlaylistEntries pages a playlist's entries in order — the move
+// positions SetPlaylistOrder computes against. An entry with no video id
+// cannot be reinserted (and a reorder is refused rather than risked:
+// order fidelity never outranks the never-delete rule).
+func youtubePlaylistEntries(ctx context.Context, c *YouTubeMusicConnector, playlistID string) ([]youtubePlaylistEntry, error) {
+	var out []youtubePlaylistEntry
+	cursor := ""
+	for i := 0; i < shared.LibraryPageCap; i++ {
+		q := url.Values{
+			"part":       []string{"snippet"},
+			"playlistId": []string{playlistID},
+			"maxResults": []string{"50"},
+		}
+		if cursor != "" {
+			q.Set("pageToken", cursor)
+		}
+		raw, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "GET", "/playlistItems", q, nil)
+		if err != nil {
+			return nil, err
+		}
+		items, _ := raw["items"].([]any)
+		for _, item := range items {
+			e, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			itemID, _ := e["id"].(string)
+			snippet, _ := e["snippet"].(map[string]any)
+			res, _ := snippet["resourceId"].(map[string]any)
+			videoID, _ := res["videoId"].(string)
+			if itemID == "" || videoID == "" {
+				return nil, fmt.Errorf("youtube playlist %q holds an item that cannot be reordered", playlistID)
+			}
+			out = append(out, youtubePlaylistEntry{itemID: itemID, videoID: videoID})
+		}
+		next, _ := raw["nextPageToken"].(string)
+		if next == "" {
+			return out, nil
+		}
+		cursor = next
+	}
+	return out, nil
+}
+
 // SaveLikedTracks implements kinds.LikedTrackWriteProvider by rating the
 // resolved videos "like".
 func (c *YouTubeMusicConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
