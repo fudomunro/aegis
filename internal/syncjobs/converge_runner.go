@@ -267,9 +267,10 @@ func (r *convergeRunner) runCollectionStep(ctx context.Context, p convergeJobPay
 	}
 
 	// Per-item watermarks on the member, then the collection row at chain
-	// end — the rows freshness reads.
+	// end — the rows freshness reads. The rows key on the item's identity
+	// (issue #384) so a rename on the canonical home does not orphan them.
 	for _, rec := range res.Placed {
-		s.Mirror.RecordMirrorItemCopy(p.Kind, rec.Name, target, rec.ExternalID, rec.Name, rec.ETag)
+		s.Mirror.RecordMirrorItemCopy(p.Kind, rec.StampName(), target, rec.ExternalID, rec.Name, rec.ETag)
 	}
 	// If-Match refusals are the watermark signal that a member record
 	// changed underfoot: recorded as conflicts, never overwritten.
@@ -368,7 +369,7 @@ func (s *Runners) recordConflicts(kind, target string, conflicts []kinds.PlaceCo
 		s.recordConflict(SyncConflict{
 			Kind:        kind,
 			Service:     target,
-			EntityKey:   kinds.ItemEntityKey(kind, c.Name),
+			EntityKey:   kinds.ItemEntityKey(kind, c.StampName()),
 			ExternalID:  c.ID,
 			Subject:     c.Name,
 			Field:       ConflictFieldRecord,

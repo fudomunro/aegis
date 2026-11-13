@@ -307,8 +307,22 @@ type ConvergePlan struct {
 // ItemEntityKey is the copy-ledger entity key for one per-item watermark
 // row (issue #382): the convention RecordMirrorItemCopy stamps, the
 // entity plans' AttachRefs read back, and the conflict store indexes.
+// name is the item's identity key where it has one (issue #384) and the
+// display name otherwise.
 func ItemEntityKey(kind, name string) string {
 	return kind + ":" + strings.TrimSpace(name)
+}
+
+// itemRefFor finds one item's watermark ref under its identity key
+// (issue #384), falling back to the legacy display-name key so rows
+// written before the identity-key convention still take the update path
+// on the first run after it lands instead of re-placing every copy.
+func itemRefFor(refs map[string]ItemRef, kind, itemKey, legacyName string) (ItemRef, bool) {
+	if ref, ok := refs[ItemEntityKey(kind, itemKey)]; ok {
+		return ref, true
+	}
+	ref, ok := refs[ItemEntityKey(kind, legacyName)]
+	return ref, ok
 }
 
 // withETag records an etag watermark on a source's Extra map.
@@ -332,7 +346,7 @@ func itemStampsFrom(placed []PlaceRecord, service string) []ItemStamp {
 	out := make([]ItemStamp, 0, len(placed))
 	for _, rec := range placed {
 		out = append(out, ItemStamp{
-			EntityName: rec.Name,
+			EntityName: rec.StampName(),
 			Service:    service,
 			ExternalID: rec.ExternalID,
 			Name:       rec.Name,

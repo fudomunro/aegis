@@ -16,6 +16,10 @@ import (
 // are reported in MirrorResult instead of picking a winner.
 
 // recordMirrorItemCopy stores per-item etag/sync watermarks (issue #146).
+// entityName is the item's identity key where it has one (issue #384) and
+// the display name otherwise; a row written under the older display-name
+// key is retired here so landing the identity-key convention migrates it
+// instead of leaving two rows for one copy.
 func (h *Handlers) RecordMirrorItemCopy(kind, entityName, service, externalID, name, etag string) {
 	if h == nil || h.Copies == nil {
 		return
@@ -42,6 +46,9 @@ func (h *Handlers) RecordMirrorItemCopy(kind, entityName, service, externalID, n
 			Name:       name,
 		},
 	})
+	if legacy := kinds.ItemEntityKey(kind, name); legacy != entity {
+		_ = h.Copies.Delete(kind, legacy, service, externalID)
+	}
 }
 
 // handleEntityMirror copies contacts or events between services
@@ -117,7 +124,7 @@ func (h *Handlers) HandleEntityMirror(w http.ResponseWriter, r *http.Request, re
 			return
 		}
 		for _, rec := range res.Placed {
-			h.RecordMirrorItemCopy(MirrorKindContacts, rec.Name, req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
+			h.RecordMirrorItemCopy(MirrorKindContacts, rec.StampName(), req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
 		}
 		h.RecordMirrorCopy(MirrorKindContacts, sourceService, "", req.TargetService, "", "contacts", res.Copied, "", "")
 		result = MirrorResult{
@@ -168,7 +175,7 @@ func (h *Handlers) HandleEntityMirror(w http.ResponseWriter, r *http.Request, re
 			return
 		}
 		for _, rec := range res.Placed {
-			h.RecordMirrorItemCopy(MirrorKindEvents, rec.Name, req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
+			h.RecordMirrorItemCopy(MirrorKindEvents, rec.StampName(), req.TargetService, rec.ExternalID, rec.Name, rec.ETag)
 		}
 		h.RecordMirrorCopy(MirrorKindEvents, sourceService, "", req.TargetService, "", "events", res.Copied, "", "")
 		result = MirrorResult{

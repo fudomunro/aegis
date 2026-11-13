@@ -54,6 +54,34 @@ func CalendarEventIdentityKey(e CalendarEvent) string {
 	return "title:" + title + "|start:" + start + "|allday:" + flag
 }
 
+// EventItemKey is the copy-watermark key for one event (issue #384): the
+// iCal UID where it has one, so a retitle on the canonical home does not
+// orphan the row. An event with no UID keys by its title, what all rows
+// used before.
+func EventItemKey(e CalendarEvent) string {
+	if k := CalendarEventIdentityKey(e); strings.HasPrefix(k, "ical:") {
+		return k
+	}
+	return e.Title
+}
+
+// EventICalUID is the event's iCal UID — the one an outgoing copy should
+// carry — or "" when it has none.
+func EventICalUID(e CalendarEvent) string {
+	if id := strings.TrimSpace(e.EntityID); id != "" {
+		return id
+	}
+	for _, src := range e.Sources {
+		if id := strings.TrimSpace(ExtraString(src.Extra, "ical_uid")); id != "" {
+			return id
+		}
+		if id := strings.TrimSpace(ExtraString(src.Extra, "uid")); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
 // calendarEventMatchKind records how identity was established for multi-source merges.
 func calendarEventMatchKind(key string) string {
 	switch {

@@ -28,10 +28,10 @@ func newEventsKind(h Host, e *Engine, d Deps) Kind {
 	k.mark, k.copies = Stamps(h, "events", forEachCalendarEventSource)
 	def := *BuiltinKindByID("events")
 	k.providerKind = providerKind{
-		def:      def,
-		provides: providerProvides[CalendarEventProvider],
+		def:          def,
+		provides:     providerProvides[CalendarEventProvider],
 		writeCapable: providerProvides[CalendarEventWriteProvider],
-		converge: eventsConvergePlan(h, def.ID),
+		converge:     eventsConvergePlan(h, def.ID),
 		routes: []Route{
 			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve, GrantKey: eventsRouteKey},
 			// Freebusy is the events availability view, not a LibraryKind —
@@ -176,7 +176,7 @@ func eventsConvergePlan(h Host, kind string) *ConvergePlan {
 			out := make([]CalendarEvent, len(events))
 			copy(out, events)
 			for i := range out {
-				ref, ok := refs[ItemEntityKey(kind, out[i].Title)]
+				ref, ok := itemRefFor(refs, kind, EventItemKey(out[i]), out[i].Title)
 				if !ok {
 					continue
 				}
@@ -254,11 +254,17 @@ func eventsConvergePlan(h Host, kind string) *ConvergePlan {
 				merged := memberEV
 				merged.Sources = upsertEventRef(memberEV.Sources, hub,
 					eventRefID(hubEV, hub), eventRefETag(hubEV, hub))
+				// Identity survives an accept: the member's content on the
+				// hub, the hub's durable id (issue #384) — so the watermark
+				// rows keep keying the same event through later retitles.
+				if uid := EventICalUID(hubEV); uid != "" && EventICalUID(merged) == "" {
+					merged.EntityID = uid
+				}
 				if _, err := dst.PlaceEvents(ctx, []CalendarEvent{merged}); err != nil {
 					return nil, true, err
 				}
 				return []ItemStamp{{
-					EntityName: subject,
+					EntityName: EventItemKey(merged),
 					Service:    member,
 					ExternalID: memberID,
 					Name:       subject,

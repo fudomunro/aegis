@@ -127,6 +127,48 @@ func TestConvergeEnrichesEntityRefsFromWatermarks(t *testing.T) {
 	}
 }
 
+func TestConvergeEntities_RenameKeepsUpdatePath(t *testing.T) {
+	// The watermark row keys on the contact's durable identity (issue
+	// #384): a rename on the canonical home still finds it, so the re-run
+	// carries the member's ref and updates in place instead of placing a
+	// fresh copy under the new name.
+	hub := &entityStubConn{contacts: []kinds.Contact{{
+		Name: "Ada", Emails: []string{"a@x"}, Extra: map[string]any{"uid": "card-1"},
+	}}}
+	member := &entityStubConn{}
+	_, store, w := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"},
+		map[string]connectors.ServiceConnector{"google": hub, "icloud": member})
+
+	runConverge(t, store, w, "contacts")
+	if len(member.heldContacts()) != 1 {
+		t.Fatalf("member holds %v, want Ada placed once", member.heldContacts())
+	}
+
+	hub.mu.Lock()
+	hub.contacts[0].Name = "Ada Lovelace"
+	hub.mu.Unlock()
+
+	runConverge(t, store, w, "contacts")
+	if got := member.heldContacts(); len(got) != 1 {
+		t.Fatalf("member holds %v, want one contact updated in place after the rename", got)
+	}
+	member.mu.Lock()
+	in := append([]kinds.Contact(nil), member.lastContactIn...)
+	member.mu.Unlock()
+	if len(in) != 1 {
+		t.Fatalf("second input = %+v, want one contact", in)
+	}
+	id := ""
+	for _, src := range in[0].Sources {
+		if src.Service == "icloud" {
+			id = src.ID
+		}
+	}
+	if id != "id-Ada" {
+		t.Fatalf("enriched ref = %q, want the member's original id-Ada", id)
+	}
+}
+
 func TestFreshnessRecordsWatermarkDivergence(t *testing.T) {
 	hub := newPlaylistStubConn("google")
 	hubP1 := hub.seed("Road trip", "A", "B")
@@ -351,7 +393,9 @@ func TestResolveRecordAcceptAndReject(t *testing.T) {
 		t.Fatal("accept must fan out")
 	}
 
-	// A fresh record conflict on the same locus, resolved the other way.
+	// A fresh record conflict on the same copy, resolved the other way.
+	// The accept re-keyed the member's watermark row to the item's
+	// identity key (issue #384) — later detections land on that locus.
 	member.mu.Lock()
 	member.contacts = []kinds.Contact{{
 		Name: "Ada", Emails: []string{"c@x"},
@@ -359,7 +403,7 @@ func TestResolveRecordAcceptAndReject(t *testing.T) {
 	}}
 	member.mu.Unlock()
 	rec2 := openConflict(t, run, SyncConflict{
-		Kind: "contacts", Service: "icloud", EntityKey: "contacts:Ada",
+		Kind: "contacts", Service: "icloud", EntityKey: "contacts:email:b@x",
 		ExternalID: "id-Ada", Subject: "Ada", Field: ConflictFieldRecord,
 		MemberValue: "changed again", Source: ConflictSourceConverge,
 	})

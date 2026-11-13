@@ -7,6 +7,18 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Identity-keyed copy watermarks (issue #384).** Per-item watermark rows
+  key on the item's durable identity where it has one — vCard UID, email,
+  iCal UID — with the display name as the fallback for items that carry
+  none. A rename (or retitle) on the canonical home no longer orphans the
+  row: the re-run finds it and takes the If-Match update path instead of
+  placing a fresh copy under the new name. Rows written under the older
+  display-name key still resolve (the lookup falls back) and are retired
+  as they are re-stamped, so landing this does not re-place tracked
+  copies. An accept of a record conflict keeps the hub's durable id on the
+  merged write, so the rows keep keying the same card or event through
+  later renames.
+
 - **Playlist order reconciliation (issue #378).** Order is fidelity: a
   playlist reordered on its canonical home is re-ordered on its converged
   copies. The write contract is a new `PlaylistOrderProvider`

@@ -342,18 +342,31 @@ func (c *entityStubConn) ListUserContacts(ctx context.Context) ([]kinds.Contact,
 
 func (c *entityStubConn) PlaceContacts(ctx context.Context, in []kinds.Contact) (kinds.PlaceEntitiesResult, error) {
 	names := make([]string, 0, len(in))
+	entityNames := make([]string, 0, len(in))
 	for _, ct := range in {
 		names = append(names, ct.Name)
+		entityNames = append(entityNames, kinds.ContactItemKey(ct))
 	}
-	return c.place(names, func(i int) {
+	return c.place(names, entityNames, func(i int) string {
 		ct := in[i]
+		cands := stubRefCandidates(ct.Sources, ct.Name)
 		for j := range c.contacts {
-			if c.contacts[j].Name == ct.Name {
-				c.contacts[j] = ct // create-or-update: the edit lands
-				return
+			ref := stubItemRef(c.contacts[j].Sources, c.contacts[j].Name)
+			if containsString(cands, ref) {
+				c.contacts[j] = ensureStubRef(ct, ref)
+				return ref
 			}
 		}
-		c.contacts = append(c.contacts, ct)
+		for j := range c.contacts {
+			if c.contacts[j].Name == ct.Name {
+				ref := stubItemRef(c.contacts[j].Sources, c.contacts[j].Name)
+				c.contacts[j] = ensureStubRef(ct, ref)
+				return ref
+			}
+		}
+		ref := "id-" + ct.Name
+		c.contacts = append(c.contacts, ensureStubRef(ct, ref))
+		return ref
 	}, func() {
 		c.lastContactIn = append([]kinds.Contact(nil), in...)
 	})
@@ -372,28 +385,111 @@ func (c *entityStubConn) ListCalendarEvents(ctx context.Context) ([]kinds.Calend
 
 func (c *entityStubConn) PlaceEvents(ctx context.Context, in []kinds.CalendarEvent) (kinds.PlaceEntitiesResult, error) {
 	names := make([]string, 0, len(in))
+	entityNames := make([]string, 0, len(in))
 	for _, ev := range in {
 		names = append(names, ev.Title)
+		entityNames = append(entityNames, kinds.EventItemKey(ev))
 	}
-	return c.place(names, func(i int) {
+	return c.place(names, entityNames, func(i int) string {
 		ev := in[i]
+		cands := stubRefCandidates(ev.Sources, ev.Title)
 		for j := range c.events {
-			if c.events[j].Title == ev.Title {
-				c.events[j] = ev // create-or-update: the edit lands
-				return
+			ref := stubItemRef(c.events[j].Sources, c.events[j].Title)
+			if containsString(cands, ref) {
+				c.events[j] = ensureStubEventRef(ev, ref)
+				return ref
 			}
 		}
-		c.events = append(c.events, ev)
+		for j := range c.events {
+			if c.events[j].Title == ev.Title {
+				ref := stubItemRef(c.events[j].Sources, c.events[j].Title)
+				c.events[j] = ensureStubEventRef(ev, ref)
+				return ref
+			}
+		}
+		ref := "id-" + ev.Title
+		c.events = append(c.events, ensureStubEventRef(ev, ref))
+		return ref
 	}, func() {
 		c.lastEventIn = append([]kinds.CalendarEvent(nil), in...)
 	})
+}
+
+// stubItemRef is one item's stub-side ref id: the "id-"-space source an
+// earlier placement attached, else the synthesized create id. The ref —
+// not the display name — is what a re-run matches on, so a rename on the
+// canonical home still takes the update path (issue #384).
+func stubItemRef(sources any, name string) string {
+	for _, id := range stubRefIDs(sources) {
+		return id
+	}
+	return "id-" + name
+}
+
+// stubRefCandidates lists every ref id an input item could name: the
+// "id-"-space sources it carries (its own member ref and any foreign
+// ones a merge dragged along) plus the synthesized create id.
+func stubRefCandidates(sources any, name string) []string {
+	out := stubRefIDs(sources)
+	return append(out, "id-"+name)
+}
+
+// stubRefIDs lists the "id-"-space source ids an item carries.
+func stubRefIDs(sources any) []string {
+	var out []string
+	switch list := sources.(type) {
+	case []kinds.ContactSource:
+		for _, src := range list {
+			if strings.HasPrefix(src.ID, "id-") {
+				out = append(out, src.ID)
+			}
+		}
+	case []kinds.CalendarEventSource:
+		for _, src := range list {
+			if strings.HasPrefix(src.ID, "id-") {
+				out = append(out, src.ID)
+			}
+		}
+	}
+	return out
+}
+
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// ensureStubRef stamps the item's stub ref onto its sources so the next
+// placement matches by ref even after a rename.
+func ensureStubRef(ct kinds.Contact, ref string) kinds.Contact {
+	for _, src := range ct.Sources {
+		if src.ID == ref {
+			return ct
+		}
+	}
+	ct.Sources = append(ct.Sources, kinds.ContactSource{Service: "stub", ID: ref})
+	return ct
+}
+
+func ensureStubEventRef(ev kinds.CalendarEvent, ref string) kinds.CalendarEvent {
+	for _, src := range ev.Sources {
+		if src.ID == ref {
+			return ev
+		}
+	}
+	ev.Sources = append(ev.Sources, kinds.CalendarEventSource{Service: "stub", ID: ref})
+	return ev
 }
 
 // place records one placement step: upsert each item via put (never
 // removing anything already held), reporting any armed failures, skips,
 // and conflicts once. Names armed as conflicts or skips are refused like
 // the real write paths — reported, never placed, never counted.
-func (c *entityStubConn) place(names []string, put func(i int), capture func()) (kinds.PlaceEntitiesResult, error) {
+func (c *entityStubConn) place(names, entityNames []string, put func(i int) (ref string), capture func()) (kinds.PlaceEntitiesResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.placeCalls++
@@ -419,12 +515,17 @@ func (c *entityStubConn) place(names []string, put func(i int), capture func()) 
 		if refused[name] {
 			continue
 		}
-		put(i)
+		ref := put(i)
+		entityName := name
+		if i < len(entityNames) && entityNames[i] != "" {
+			entityName = entityNames[i]
+		}
 		res.Copied++
 		res.Placed = append(res.Placed, kinds.PlaceRecord{
 			Name:       name,
-			ExternalID: "id-" + name,
+			ExternalID: ref,
 			ETag:       fmt.Sprintf("etag-%d-%d", c.placeCalls, i),
+			EntityName: entityName,
 		})
 	}
 	return res, nil

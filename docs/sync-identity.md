@@ -37,10 +37,11 @@ Placement and existence filters match the way the merge layer does
 3. Every placed item records **which identity matched** (`matched_by` on
    `PlaceRecord`), so matches and skips are explainable.
 
-One caveat sits outside the ladder: per-item copy watermarks key on the
-display name (`ItemEntityKey`), not on the identity keys above — a rename
-on the canonical home orphans the row, and the next run places a fresh copy
-instead of updating in place.
+Per-item copy watermarks key on the same ladder: the item's durable
+identity where it has one (vCard UID, email, iCal UID), with the display
+name as the fallback for items that carry none. A rename on the canonical
+home therefore keeps the row — and the If-Match update path — instead of
+orphaning it.
 
 YouTube Music exposes no ISRC and no durations in search, so its name
 fallback is title-checked rather than duration-guarded; MusicBrainz
