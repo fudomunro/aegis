@@ -36,10 +36,11 @@ stores address-book or calendar content.
 
 When Nextcloud (or another DAV server) is the home copy, claim
 `canonical_for: ["contacts"]` / `["events"]` here and remove those keys from
-Google. Mirror with `POST /v1/library/mirror` (`kind`: `contacts` or
-`events`): writes use `If-Match` / etags so a newer remote edit is never
-overwritten — conflicts are reported in `conflicts[]`. Per-item etag
-watermarks land in the copy ledger for incremental sync. Mirrored CalDAV
+Google. With both sources connected, convergence fans the kind out from the
+canonical home to the other write-capable members: writes use `If-Match` /
+etags so a newer remote edit is never overwritten — a member-side edit
+surfaces as a conflict to accept or reject. Per-item etag watermarks land in
+the copy ledger for incremental sync. Mirrored CalDAV
 events feed `GET /v1/library/freebusy`.
 
 **iCloud** needs an app-specific password (appleid.apple.com → App-Specific

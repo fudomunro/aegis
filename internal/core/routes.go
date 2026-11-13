@@ -55,7 +55,6 @@ func registerRoutes(mux *http.ServeMux, srv *Server, fakeUpstream *connectors.Fa
 	// Library writes are authorized by the request key's data grant (a
 	// write level unlocks them); the admin credential stays reserved for
 	// policy edits, OAuth, and app registration.
-	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandleLibraryMirror)))
 	// Photo share / ownership-claim PoC (issue #20).
 	mux.HandleFunc("POST /v1/library/photos/share", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandlePhotoShare)))
 	mux.HandleFunc("POST /v1/library/links", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandleEntityLinks)))

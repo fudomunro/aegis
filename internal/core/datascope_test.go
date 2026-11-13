@@ -121,7 +121,7 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/library/mirror", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/library/photos/share", nil)
 	req.Header.Set("X-Api-Key", "YOUR_DEMO_KEY")
 	h(w, req)
 	if w.Code != http.StatusForbidden {

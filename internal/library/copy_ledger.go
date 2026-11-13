@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // recordMirrorCopy persists a successful playlist/liked-tracks mirror
@@ -37,6 +38,42 @@ func (h *Handlers) RecordMirrorCopy(kind, sourceService, sourceID, targetService
 	if err != nil {
 		// Fail-open: the copy already exists upstream; ledger is best-effort.
 		return
+	}
+}
+
+// RecordMirrorItemCopy stores per-item etag/sync watermarks (issue #146).
+// entityName is the item's identity key where it has one (issue #384) and
+// the display name otherwise; a row written under the older display-name
+// key is retired here so landing the identity-key convention migrates it
+// instead of leaving two rows for one copy.
+func (h *Handlers) RecordMirrorItemCopy(kind, entityName, service, externalID, name, etag string) {
+	if h == nil || h.Copies == nil {
+		return
+	}
+	entity := kinds.ItemEntityKey(kind, entityName)
+	if strings.TrimSpace(externalID) == "" {
+		return
+	}
+	_, _ = h.Copies.Upsert(copies.Record{
+		Kind:          kind,
+		EntityKey:     entity,
+		SourceService: service,
+		SourceID:      externalID,
+		Service:       service,
+		ExternalID:    externalID,
+		Role:          copies.CopyRoleMirror,
+		SyncMode:      copies.CopySyncModeFull,
+		Provenance:    copies.CopyProvenanceMirror,
+		Status:        copies.CopyStatusInSync,
+		Watermark:     etag,
+		Version: copies.Version{
+			ExternalID: externalID,
+			ETag:       etag,
+			Name:       name,
+		},
+	})
+	if legacy := kinds.ItemEntityKey(kind, name); legacy != entity {
+		_ = h.Copies.Delete(kind, legacy, service, externalID)
 	}
 }
 

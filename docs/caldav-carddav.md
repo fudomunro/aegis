@@ -75,23 +75,14 @@ the kinds on DAV and remove them from Google:
 { "id": "dav-calendar",  "canonical_for": ["events"],   "...": "..." }
 ```
 
-Then mirror (dry-run first):
-
-```bash
-curl -X POST http://localhost:8080/v1/library/mirror \
-  -H "Authorization: Bearer $AEGIS_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"kind":"contacts","source_service":"dav-contacts","target_service":"google","dry_run":true}'
-
-curl -X POST http://localhost:8080/v1/library/mirror \
-  -H "Authorization: Bearer $AEGIS_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"kind":"events","source_service":"dav-calendar","target_service":"google-calendar","dry_run":true}'
-```
-
-Drop `dry_run` to write. Writes use `If-Match` / etags so a newer remote edit
-is **never** overwritten — the mirror reports it in `conflicts[]` instead of
-picking a winner. Per-item etag watermarks land in the copy ledger.
+Then let **convergence** do the copying: with both sources connected, each
+kind's sync group keeps the DAV side as the canonical home and the scheduled
+`converge` job fans contacts/events out to the other write-capable members.
+Writes use `If-Match` / etags so a newer remote edit is **never** overwritten
+— a member-side edit surfaces as a **conflict** to accept or reject instead
+of picking a winner. Per-item etag watermarks land in the copy ledger.
+For a one-off copy outside the group, enqueue a `mirror` job on the
+Advanced → Data sync panel.
 
 ## iCloud
 

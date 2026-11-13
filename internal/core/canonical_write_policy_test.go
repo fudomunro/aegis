@@ -78,6 +78,11 @@ func TestLibraryInstructions_MultiSourceMutationRule(t *testing.T) {
 	if !strings.Contains(instr, "does not auto-mirror") {
 		t.Fatalf("missing auto-mirror disclaimer: %s", instr)
 	}
+	// The one-shot mirror endpoint is retired (issue #389); instructions
+	// must not advertise it.
+	if strings.Contains(instr, "/v1/library/mirror") {
+		t.Fatalf("instructions advertise the retired mirror endpoint: %s", instr)
+	}
 }
 
 func TestPreRequest_InjectsWritePolicy(t *testing.T) {

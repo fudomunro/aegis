@@ -41,10 +41,10 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Identity matching** | Folding contacts/people on vCard UID / email → phone → handle → name | Not for playlists/tracks |
 | **Entity link** | User-confirmed cross-service identity (`entity_links.json`) | |
 | **Copy ledger** | Durable record of mirrored/backup copies | |
-| **Mirror** | Explicit copy of a playlist/liked tracks to another service | Not automatic write sync; eventual successor: **sync relationship** |
+| **Mirror** | The queued explicit copy of a playlist/liked tracks to another service (sync job type `mirror`) | Not automatic write sync; consistency comes from **convergence** on the **sync relationship**. Retired: the one-shot `POST /v1/library/mirror` API |
 | **Sync relationship** | Per-(connection, Kind) pairing established when data is connected; sync jobs keep that Kind's members consistent with its **canonical home** | Not a **sync job** (queue unit) or **sync maintenance** (connector-reliability loop); see the sync-word table below |
 | **Sync group** | All sync relationships for one library Kind — the connected sources that provide it | One member is the **canonical home**; a local file import is a read-only member |
-| **Convergence** | The sync job that moves a kind's data from its **canonical home** out to the group's other write-capable members | Job type `converge`. Fan-out only — never deletes on a member; a member-side edit surfaces as a **Conflict**. Not **mirror** (explicit one-shot copy) |
+| **Convergence** | The sync job that moves a kind's data from its **canonical home** out to the group's other write-capable members | Job type `converge`. Fan-out only — never deletes on a member; a member-side edit surfaces as a **Conflict**. Not **mirror** (deliberate pairwise copy) |
 | **Converge plan** | The kind-owned declaration of how **convergence** and conflict resolution read, match, and place one kind | Lives beside the kind's data with its routes and stamping. The sync engine stays a reconciliation policy over kinds — it schedules, chains, retries, and records; it never names a kind |
 | **Conflict** | A non-hub edit on a member copy, resolved by **accept** (make the edit canonical, then fan out) or **reject** (re-converge that member) | Detected from watermark/freshness divergence. A resolved conflict is kept as history; only a new member-side value reopens it. Adopting a member's deletions lands with delete propagation |
 | **Content transport** | `/v1/services/{id}/…` for bytes and local import only | Avoid “ingest transport”; error text may say “content/ingest only” once |
@@ -62,7 +62,7 @@ Five different things wear the word “sync” around here. Keep them apart:
 | **Sync job** | One durable queue unit of data-movement work | The executor, not the relationship |
 | **Sync maintenance** | The connector-reliability self-repair loop | Not data-movement policy |
 | **`sync_mode`** | Copy-ledger row marker (`full` / `optimistic`) | A field name, not a concept |
-| **Mirror** | Explicit one-shot copy between two services | Retires into sync relationships; do not extend it |
+| **Mirror** | The queued explicit copy between two services (job types `mirror` / `repair`) | Retired: the one-shot `POST /v1/library/mirror` API; consistency retires into sync relationships — do not extend the pairwise copy |
 
 A sync relationship's members converge on its **canonical home**: edits on
 it (creates, renames, order) fan out to the other members. An edit on a

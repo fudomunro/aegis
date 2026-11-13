@@ -231,3 +231,32 @@ func TestStampOtherKinds(t *testing.T) {
 		t.Fatal("track copy stamp missing")
 	}
 }
+
+func TestRecordMirrorItemCopy_StoresETagWatermark(t *testing.T) {
+	ledger := mustCopyLedger(t)
+	s := &Server{copyLedger: ledger}
+	s.library().RecordMirrorItemCopy(library.MirrorKindContacts, "Ada Lovelace", "dav-contacts", "ada.vcf", "Ada Lovelace", `"etag-1"`)
+	recs := ledger.List(copies.Filter{Kind: library.MirrorKindContacts})
+	if len(recs) != 1 {
+		t.Fatalf("got %d records", len(recs))
+	}
+	if recs[0].Watermark != `"etag-1"` || recs[0].Version.ETag != `"etag-1"` {
+		t.Fatalf("watermark = %+v", recs[0])
+	}
+}
+
+func TestRecordMirrorItemCopy_MigratesLegacyNameRows(t *testing.T) {
+	// A row written under the older display-name key is retired when the
+	// item's identity key lands (issue #384) — one row per copy.
+	ledger := mustCopyLedger(t)
+	s := &Server{copyLedger: ledger}
+	s.library().RecordMirrorItemCopy(library.MirrorKindContacts, "Ada", "icloud", "ada.vcf", "Ada", `"etag-1"`)
+	s.library().RecordMirrorItemCopy(library.MirrorKindContacts, "uid:card-1", "icloud", "ada.vcf", "Ada", `"etag-2"`)
+	recs := ledger.List(copies.Filter{Kind: library.MirrorKindContacts})
+	if len(recs) != 1 {
+		t.Fatalf("got %d records, want the legacy row retired", len(recs))
+	}
+	if recs[0].EntityKey != "contacts:uid:card-1" || recs[0].Watermark != `"etag-2"` {
+		t.Fatalf("row = %+v, want the identity-keyed row", recs[0])
+	}
+}

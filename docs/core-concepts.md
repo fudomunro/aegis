@@ -233,7 +233,7 @@ After the overlap call-outs above, the stable concepts.
 | **Entity merge / entity_id** | Fold provider rows into one neutral item via ISRC/UPC/MBID/ical_UID preferred over name. | `internal/kinds/merge.go`, `entity_links.go` |
 | **EntityLink** | User-confirmed cross-service identity stored in `entity_links.json`. | `entity_links.go:22` |
 | **CopyInfo / copy ledger** | Best-effort record of mirrored/backup copies (issue #76). | `copy_ledger.go`, `models.go:812` |
-| **Mirror** | Deliberate copy of a playlist/liked tracks to another service (`POST /v1/library/mirror`). | `mirror.go` |
+| **Mirror** | Deliberate copy of a playlist/liked tracks to another service — a queued `mirror`/`repair` job; consistency comes from convergence. | `internal/library/mirror.go`, `internal/syncjobs/mirror_runner.go` |
 | **Truncated** | Response flag when a list is incomplete upstream (page cap); agents must check before claiming completeness. Independent of `next_cursor` paging (issue #185). | `kind.go` instructions, `internal/kinds` |
 | **next_cursor** | Opaque continue token for `/v1/library/{kind}` pages (`limit` default 100 / max 500). Omitted at end of the filtered set. | `types/page.go` |
 | **User-defined kind (UDK)** | Schema pack under `user-kinds/` loaded into the same library pipeline; never self-enables or shadows built-ins. Product concept is “user-defined kind”; the file/directory is a schema pack. | `internal/kinds/userdefined_schema.go`, `docs/user-defined-kinds.md` |

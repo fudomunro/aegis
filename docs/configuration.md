@@ -273,7 +273,7 @@ sources from a configured home service are stamped `canonical: true`.
 
 Merge sorts canonical sources first. `CanonicalService()` (and the JSON
 `sources[]` order) tell agents where the home copy is. System instructions say
-to prefer that service for writes or mirrors. The admin service card shows a
+to prefer that service for writes. The admin service card shows a
 `canonical: …` badge; library cards mark items with a canonical source.
 
 #### Write / access policy
@@ -288,51 +288,10 @@ pre-request injection adds a short write-policy block:
 Library instructions always include the multi-source mutation rule: write to
 `sources[].canonical` first, then ask the user before updating other copies.
 Aegis still does **not** route or mirror writes automatically — agents call
-the service proxy for whichever service they choose. Use
-[POST /v1/library/mirror](configuration.md) for a
-deliberate copy to a secondary service.
-
-#### Mirror / backup sync
-
-To keep a **backup** of a playlist or liked-tracks list on another service
-(admin surface — the agent key is refused; use the admin key or a tailnet
-admin login):
-
-```
-POST /v1/library/mirror
-Authorization: Bearer <admin-key> # or tailnet admin login
-Content-Type: application/json
-
-{
-  "kind": "playlists",
-  "source_service": "spotify",
-  "source_id": "37i9dQZF1DXcBWIGoYBM5M",
-  "target_service": "youtube-music",
-  "name": "Today's Top Hits (backup)",
-  "dry_run": false
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `kind` | `playlists` or `tracks` (liked/saved tracks) |
-| `source_service` | Service to read from; empty uses the configured `canonical_for` home |
-| `source_id` | Service-local playlist ID (required for `playlists`) |
-| `target_service` | Service to write to (required; must differ from source) |
-| `name` | Optional playlist title on the target — set on creation and re-applied on every placement, so a chained copy renames the playlist when the title changes |
-| `dry_run` | Plan only — no writes to the target |
-
-Response reports `planned`, `copied`, `skipped`, and per-track `skips`. Set
-`dry_run` first when the match quality matters.
-
-**Supported services:** `spotify` and `youtube-music` as either side.
-Cross-service track matching is **name-based** — expect skips and
-review them before treating a mirror as a complete backup. A single call
-copies at most 200 tracks (`truncated: true` when more remain).
-
-Requires **write** permission on the target for that kind and **read** on the
-source. Aegis stores no media; it reads source metadata and writes through
-the target's API using the stored OAuth token.
+the service proxy for whichever service they choose. Deliberate copies are
+owner-driven: a `mirror` job on the sync queue (below) copies a playlist or
+liked-tracks list to another service, and `converge` keeps each kind's sync
+group consistent with its canonical home.
 
 Immich is supported as a **local/foreign canonical photo source** (see
 [Immich](connect/immich.md)). Additional foreign-DB /
@@ -351,7 +310,7 @@ copy:
 
 | Producer | What is recorded |
 |----------|------------------|
-| `POST /v1/library/mirror` | One row per mirrored playlist / liked-tracks list (target service + id, item count, name) |
+| Sync `mirror` / `repair` jobs and `converge` placements | One row per copied playlist / liked-tracks list (target service + id, item count, name) |
 | Google Takeout import | One **optimistic snapshot** row per export path (watermark + stored counts) |
 
 **Sync fidelity is per kind**:
@@ -473,8 +432,9 @@ apart.
 
 ### Mirror and repair jobs
 
-`mirror` turns the one-shot `POST /v1/library/mirror` copy into queued work
-that finishes the whole list without a caller loop. Each step reads one page
+`mirror` is the deliberate-copy job: it copies a playlist or liked-tracks
+list from one service to another and finishes the whole list without a
+caller loop. Each step reads one page
 of the source and **appends to a single target playlist** — a 500-track
 playlist is one playlist on the target, not three. The source cursor and the
 target playlist id ride in the job payload, so a restart resumes exactly where

@@ -36,7 +36,7 @@ Keep these apart — "repair" already names two different things.
 
 Product English follows `docs/glossary.md` (*copy ledger*, *mirror*, *canonical
 home*). "Sync" here is reliability language, not "automatic write sync" —
-mirrors stay explicit and user-initiated.
+mirror jobs stay explicit and user-initiated.
 
 ## Why a loop, not a backlog
 

@@ -36,7 +36,6 @@ func TestAPIRouteAllowed(t *testing.T) {
 		{http.MethodPost, "/v1/apps/token"},
 		{http.MethodPost, "/v1/apps/revoke"},
 		// Grant-decided library writes.
-		{http.MethodPost, "/v1/library/mirror"},
 		{http.MethodPost, "/v1/library/photos/share"},
 		{http.MethodPost, "/v1/library/links"},
 		{http.MethodDelete, "/v1/library/links/abc"},
