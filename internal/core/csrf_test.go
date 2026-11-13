@@ -173,7 +173,7 @@ func TestCSRFGuard_TextPlainRejectedOnJSONSurfaces(t *testing.T) {
 		"/v1/admin/apps",
 		"/v1/admin/cache/clear",
 		"/v1/admin/mail/sync",
-		"/v1/library/mirror",
+		"/v1/library/photos/share",
 	} {
 		req := httptest.NewRequest("POST", path, strings.NewReader(`{}`))
 		req.Header.Set("Content-Type", "text/plain")
@@ -231,7 +231,7 @@ func TestWriteRoutes_CrossOriginFormAndTextPlain(t *testing.T) {
 		{http.MethodPost, "/v1/admin/cache/clear", "text/plain", `{}`, true},
 		{http.MethodPost, "/v1/admin/mail/sync", "text/plain", `{"max_messages":1}`, true},
 		{http.MethodPost, "/v1/admin/udk/sources", "text/plain", `{"id":"x"}`, true},
-		{http.MethodPost, "/v1/library/mirror", "text/plain", `{}`, true},
+		{http.MethodPost, "/v1/library/photos/share", "text/plain", `{}`, true},
 		{http.MethodDelete, "/v1/library/links/abc", "application/json", `{}`, true},
 	}
 
@@ -409,7 +409,7 @@ func TestAllowUnsafeContentType(t *testing.T) {
 		{"/v1/admin/apps", "text/html", http.StatusForbidden},
 		{"/v1/apps/authorize", "application/x-www-form-urlencoded", http.StatusOK},
 		{"/v1/apps/authorize", "multipart/form-data", http.StatusOK},
-		{"/v1/library/mirror", "application/x-www-form-urlencoded", http.StatusForbidden},
+		{"/v1/library/photos/share", "application/x-www-form-urlencoded", http.StatusForbidden},
 		{"/v1/services/immich/photos", "image/png", http.StatusOK},
 		{"/v1/admin/cache/clear", "", http.StatusOK},
 	}

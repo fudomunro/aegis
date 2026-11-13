@@ -483,7 +483,6 @@ mux.<span class="fn">HandleFunc</span>(<span class="str">"POST /v1/pre-request"<
 <span class="kw">for</span> path, handler := <span class="kw">range</span> srv.<span class="fn">libraryRouteHandlers</span>() {
     mux.<span class="fn">HandleFunc</span>(path, srv.<span class="fn">AuthMiddleware</span>(handler))
 }
-mux.<span class="fn">HandleFunc</span>(<span class="str">"POST /v1/library/mirror"</span>, srv.<span class="fn">AuthMiddleware</span>(srv.HandleLibraryMirror))
 mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/services/"</span>, srv.<span class="fn">AuthMiddleware</span>(srv.HandleServiceProxy))
 mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/auth/"</span>, srv.handleAuthRoutes)  <span class="cm">// login/callback public</span>
 mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/admin"</span>, srv.HandleAdmin)          <span class="cm">// shell public; JSON authed</span></code></pre>
@@ -898,7 +897,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
     Registered kinds at this version:
     <code>playlists</code>, <code>tracks</code>, <code>albums</code>, <code>artists</code>, <code>contacts</code>, <code>photos</code>, <code>events</code>, <code>messages</code>, <code>transactions</code>, <code>places</code>, <code>documents</code>.
     Extra library routes: <code>/v1/library/review</code>,
-    <code>/v1/library/links</code>, <code>POST /v1/library/mirror</code>.
+    <code>/v1/library/links</code>.
   </p>
 
   <div class="diagram">

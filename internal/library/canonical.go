@@ -27,8 +27,8 @@ func MultiSourceMutationRule() string {
 	return "Multi-source mutation: when an item has multiple sources[], write to the " +
 		"canonical source first (sources[].canonical, or the configured home service). " +
 		"Aegis does not auto-mirror writes to secondary services — ask the user before updating other copies. " +
-		"To copy a playlist or liked tracks onto another service deliberately, use POST /v1/library/mirror " +
-		"({\"kind\":\"playlists\"|\"tracks\", \"source_service\", \"source_id\", \"target_service\", \"dry_run\"})."
+		"Deliberate cross-service copies are owner-driven (sync keeps each kind's group consistent with its " +
+		"canonical home); do not initiate copies yourself."
 }
 
 // writePolicyNotice returns system-instruction text for this service's write

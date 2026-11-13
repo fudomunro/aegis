@@ -5,6 +5,23 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Removed
+
+- **One-shot mirror API (`POST /v1/library/mirror`, issue #389).** The
+  request-driven copy surface is gone in a clean cut: the queued `mirror` /
+  `repair` jobs already carry deliberate-copy work (chained steps, one
+  target playlist, durable cursor), and `converge` keeps each kind's sync
+  group consistent with its canonical home — including contacts and events,
+  which had no queued mirror job and now copy only through convergence.
+  The route, the `HandleLibraryMirror` / `HandleEntityMirror` handlers, and
+  their request/response types are deleted; the sync seam they shared
+  (connector placement adapters, copy-ledger stamping, `MirrorSource` /
+  `MirrorTarget`) is untouched and keeps serving the queue. Library
+  instruction copy no longer points agents at the endpoint (it was
+  admin-tier anyway); deliberate copies are owner-driven via the Data sync
+  panel. Copy-ledger rows written by past one-shot mirrors remain valid for
+  freshness and repair.
+
 ### Added
 
 - **Identity-keyed copy watermarks (issue #384).** Per-item watermark rows

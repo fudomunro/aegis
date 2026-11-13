@@ -26,7 +26,6 @@ var adminWriteCases = []struct {
 	{"apps-create", http.MethodPost, "/v1/admin/apps", `{"name":"evil","scopes":{"tracks":"read"}}`},
 	{"udk-source", http.MethodPut, "/v1/admin/udk/kinds/k/sources/s", `{"path":"/etc/passwd"}`},
 	{"udk-extra", http.MethodPost, "/v1/admin/udk/kinds/k/extra", `{"path":"/etc/passwd"}`},
-	{"mirror", http.MethodPost, "/v1/library/mirror", `{"kind":"tracks"}`},
 	{"photos-share", http.MethodPost, "/v1/library/photos/share", `{"service":"immich","id":"p1"}`},
 	{"links-create", http.MethodPost, "/v1/library/links", `{"kind":"playlist","sources":[]}`},
 	{"mail-sync", http.MethodPost, "/v1/admin/mail/sync", `{}`},

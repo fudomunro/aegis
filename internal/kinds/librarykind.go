@@ -143,7 +143,7 @@ func (k LibraryKind) Instructions(baseURL string) string {
 			"when true, say so and note that some items may still be missing upstream. "+
 			"truncated means upstream page-cap incompleteness, not 'more pages in this response'.\n"+
 			"sources[].canonical marks the authoritative non-Aegis location for that item; "+
-			"prefer that service for writes or mirrors.%s",
+			"prefer that service for writes.%s",
 		k.Label, k.Usage, root, k.Path, k.Summary, k.SyncRule, searchHint, k.ExampleQuestion,
 		k.instructionSuffix(root),
 	)

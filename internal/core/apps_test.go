@@ -213,7 +213,6 @@ func TestAppPathAllowed(t *testing.T) {
 	}
 	denied := []string{
 		"/v1/admin/apps",
-		"/v1/library/mirror",
 		"/v1/library/review",
 		"/v1/library/links",
 		"/v1/services/google-calendar/me/events",

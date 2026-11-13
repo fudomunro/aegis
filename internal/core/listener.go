@@ -79,8 +79,8 @@ func apiAllowlistGate(next http.Handler) http.Handler {
 
 // apiRouteAllowed is the API listener allowlist (docs/external-access.md
 // "Model"). Everything else answers 404 there and is served only by the
-// admin listener. Library entries are read-only: writes (mirror, photo
-// share, entity-link mutations) stay admin-side even though they share the
+// admin listener. Library entries are read-only: writes (photo share,
+// entity-link mutations) stay admin-side even though they share the
 // /v1/library prefix. Mail retrieval is part of the library surface (issue
 // #311); mail ingest stays admin-side.
 func apiRouteAllowed(method, path string) bool {
@@ -100,17 +100,15 @@ func apiRouteAllowed(method, path string) bool {
 		return method == http.MethodGet || method == http.MethodHead ||
 			method == http.MethodPost
 	case strings.HasPrefix(path, "/v1/library/"):
-		// Library writes are grant-decided: mirror, photo share, and
-		// entity-link mutations join the API surface and the request
-		// key's write data grant authorizes them. Merge review and the
-		// copy ledger expose owner-internal maintenance state that kind
-		// grants do not filter, so they stay admin-side — the deny list
-		// stays explicit. The read allow side derives from the kind Route
-		// declarations (issue #312); an unlisted multi-segment path is
-		// not an agent route.
+		// Library writes are grant-decided: photo share and entity-link
+		// mutations join the API surface and the request key's write data
+		// grant authorizes them. Merge review and the copy ledger expose
+		// owner-internal maintenance state that kind grants do not filter,
+		// so they stay admin-side — the deny list stays explicit. The read
+		// allow side derives from the kind Route declarations (issue #312);
+		// an unlisted multi-segment path is not an agent route.
 		switch {
-		case path == "/v1/library/mirror" && method == http.MethodPost,
-			path == "/v1/library/photos/share" && method == http.MethodPost,
+		case path == "/v1/library/photos/share" && method == http.MethodPost,
 			path == "/v1/library/links" && method == http.MethodPost,
 			strings.HasPrefix(path, "/v1/library/links/") && method == http.MethodDelete:
 			return true
