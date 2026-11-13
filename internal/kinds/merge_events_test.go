@@ -1,11 +1,15 @@
 package kinds
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+	"time"
+)
 
 func TestCalendarEventIdentityKey_PrefersICalUID(t *testing.T) {
 	e := NewCalendarEvent("google-calendar", "Google Calendar", "id1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
 	e.EntityID = "uid@google.com"
-	if got := CalendarEventIdentityKey(e); got != "ical:uid@google.com" {
+	if got := CalendarEventIdentityKey(e); got != "ical:uid@google.com|start:2024-06-01T09:00:00Z" {
 		t.Fatalf("key = %q", got)
 	}
 }
@@ -16,7 +20,7 @@ func TestCalendarEventIdentityKey_ReadsBothExtraSpellings(t *testing.T) {
 	for _, key := range []string{"ical_uid", "uid"} {
 		e := NewCalendarEvent("dav", "DAV", "id1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
 		e.Sources[0].Extra = map[string]any{key: "uid@dav"}
-		if got := CalendarEventIdentityKey(e); got != "ical:uid@dav" {
+		if got := CalendarEventIdentityKey(e); got != "ical:uid@dav|start:2024-06-01T09:00:00Z" {
 			t.Fatalf("key via %s = %q", key, got)
 		}
 	}
@@ -81,5 +85,61 @@ func TestMergeCalendarEvents_MergesAttendeesAsContacts(t *testing.T) {
 	}
 	if merged[0].Organizer == nil || merged[0].Organizer.Name != "Grace" {
 		t.Fatalf("organizer = %+v", merged[0].Organizer)
+	}
+}
+
+// Recurring instances share one iCal UID (RFC 5545; Google's expanded
+// instances share iCalUID too). Each occurrence must stay its own entry —
+// collapsing them stacked one entry with a source chip per occurrence.
+func TestMergeCalendarEvents_RecurringInstancesStayDistinct(t *testing.T) {
+	var in []CalendarEvent
+	for i := 0; i < 12; i++ {
+		day := time.Date(2024, 6, 1+i, 9, 0, 0, 0, time.UTC)
+		e := NewCalendarEvent("google-calendar", "Google Calendar",
+			fmt.Sprintf("standup_%d", i), "Standup",
+			day.Format(time.RFC3339), day.Add(15*time.Minute).Format(time.RFC3339), false)
+		e.EntityID = "standup@ical"
+		in = append(in, e)
+	}
+	merged := MergeCalendarEvents(in)
+	if len(merged) != 12 {
+		t.Fatalf("merged = %d events, want 12 (one per occurrence)", len(merged))
+	}
+	for _, e := range merged {
+		if len(e.Sources) != 1 {
+			t.Fatalf("occurrence %q carries %d sources, want 1: %+v", e.StartAt, len(e.Sources), e.Sources)
+		}
+	}
+}
+
+// The same occurrence on two services still merges — the start qualifies
+// the series UID, it does not split a genuine cross-service match.
+func TestMergeCalendarEvents_SameOccurrenceAcrossServicesMerges(t *testing.T) {
+	a := NewCalendarEvent("google-calendar", "Google Calendar", "a1", "Standup", "2024-06-03T09:00:00Z", "2024-06-03T09:15:00Z", false)
+	a.EntityID = "standup@ical"
+	b := NewCalendarEvent("caldav", "CalDAV", "standup@ical", "Standup", "2024-06-03T09:00:00Z", "2024-06-03T09:15:00Z", false)
+	b.EntityID = "standup@ical"
+
+	merged := MergeCalendarEvents([]CalendarEvent{a, b})
+	if len(merged) != 1 {
+		t.Fatalf("merged = %d events, want 1: %+v", len(merged), merged)
+	}
+	if len(merged[0].Sources) != 2 || merged[0].Match != "ical_uid" {
+		t.Fatalf("entry = %+v", merged[0])
+	}
+}
+
+func TestMergeCalendarEvents_DedupsRepeatSourceRefs(t *testing.T) {
+	a := NewCalendarEvent("google-calendar", "Google Calendar", "e1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
+	a.EntityID = "standup@ical"
+	b := NewCalendarEvent("google-calendar", "Google Calendar", "e1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
+	b.EntityID = "standup@ical"
+
+	merged := MergeCalendarEvents([]CalendarEvent{a, b})
+	if len(merged) != 1 {
+		t.Fatalf("merged = %d events, want 1", len(merged))
+	}
+	if len(merged[0].Sources) != 1 {
+		t.Fatalf("sources = %+v, want one ref for the one place the event lives", merged[0].Sources)
 	}
 }

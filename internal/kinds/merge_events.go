@@ -20,19 +20,33 @@ func calendarEventStartNormalized(raw string) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
+// calendarEventOccurrenceKey keys one occurrence of an iCal series: the UID
+// names the series, the normalized start names the instance. Expanded
+// recurring instances share one UID (RFC 5545; Google's expanded instances
+// share iCalUID) and must stay distinct entries — keying on the UID alone
+// folds every occurrence into one entry stacked with duplicate sources.
+func calendarEventOccurrenceKey(uid, startAt string) string {
+	key := "ical:" + strings.ToLower(strings.TrimSpace(uid))
+	if s := calendarEventStartNormalized(startAt); s != "" {
+		key += "|start:" + s
+	}
+	return key
+}
+
 // CalendarEventIdentityKey is the sort/merge key used by the library aggregate.
-// Prefer durable iCalUID when present; otherwise title + start + all_day.
+// Prefer durable iCalUID when present, qualified by the occurrence's start so
+// recurring instances stay distinct; otherwise title + start + all_day.
 // Events without any identity fall back to service:id so they stay distinct.
 func CalendarEventIdentityKey(e CalendarEvent) string {
 	if id := strings.TrimSpace(e.EntityID); id != "" {
-		return "ical:" + strings.ToLower(id)
+		return calendarEventOccurrenceKey(id, e.StartAt)
 	}
 	for _, src := range e.Sources {
 		if id := strings.TrimSpace(ExtraString(src.Extra, "ical_uid")); id != "" {
-			return "ical:" + strings.ToLower(id)
+			return calendarEventOccurrenceKey(id, e.StartAt)
 		}
 		if id := strings.TrimSpace(ExtraString(src.Extra, "uid")); id != "" {
-			return "ical:" + strings.ToLower(id)
+			return calendarEventOccurrenceKey(id, e.StartAt)
 		}
 	}
 	start := calendarEventStartNormalized(e.StartAt)
@@ -56,11 +70,13 @@ func CalendarEventIdentityKey(e CalendarEvent) string {
 
 // EventItemKey is the copy-watermark key for one event (issue #384): the
 // iCal UID where it has one, so a retitle on the canonical home does not
-// orphan the row. An event with no UID keys by its title, what all rows
+// orphan the row. Deliberately series-level — unlike the merge key, which
+// qualifies the UID with the occurrence's start so recurring instances stay
+// distinct entries. An event with no UID keys by its title, what all rows
 // used before.
 func EventItemKey(e CalendarEvent) string {
-	if k := CalendarEventIdentityKey(e); strings.HasPrefix(k, "ical:") {
-		return k
+	if uid := EventICalUID(e); uid != "" {
+		return "ical:" + strings.ToLower(strings.TrimSpace(uid))
 	}
 	return e.Title
 }
@@ -130,10 +146,29 @@ func mergeCalendarEventInto(dst *CalendarEvent, src CalendarEvent) {
 		dst.Organizer = &org
 	}
 	dst.Attendees = mergeCalendarAttendees(dst.Attendees, src.Attendees)
-	dst.Sources = append(dst.Sources, src.Sources...)
+	dst.Sources = appendEventSources(dst.Sources, src.Sources)
 	if len(dst.Extra) == 0 && len(src.Extra) > 0 {
 		dst.Extra = src.Extra
 	}
+}
+
+// appendEventSources appends only the locations dst does not already hold:
+// sources[] is the set of places an event lives, so a repeated (service, id)
+// ref is one place however many times a walk lists it — never another copy.
+func appendEventSources(dst, src []CalendarEventSource) []CalendarEventSource {
+	for _, s := range src {
+		dup := false
+		for _, d := range dst {
+			if d.Service == s.Service && d.ID == s.ID {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			dst = append(dst, s)
+		}
+	}
+	return dst
 }
 
 // mergeCalendarAttendees unions attendees using the same contact identity

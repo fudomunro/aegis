@@ -206,7 +206,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		Label:           "calendar events",
 		Usage:           "calendar events, meetings, appointments, or their schedule",
 		Summary:         "all calendar events from every connected calendar service in one neutral list (title, description, start_at, end_at, all_day, location, status, organizer, attendees as Contact identities, sources[])",
-		SyncRule:        "Events merge on durable iCalUID when present (match=ical_uid); otherwise same title + start time + all-day flag (match=title_start). Event content stays on the source service.",
+		SyncRule:        "Events merge on durable iCalUID + start when present (match=ical_uid); otherwise same title + start time + all-day flag (match=title_start). Each occurrence of a recurring event is its own entry. Event content stays on the source service.",
 		ExampleQuestion: "what is on my calendar?",
 		Keywords: []string{
 			"my calendar", "my schedule", "on my calendar",

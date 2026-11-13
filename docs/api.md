@@ -409,9 +409,11 @@ Neutral calendar-event fields (user-facing):
 | `match` | Cross-service identity: `ical_uid` or `title_start` (empty on single-source) |
 | `sources[]` | Service-local copies: `service`, `id`, `calendar_id`, `url`, `status`, `canonical` |
 
-Cross-service merge prefers **iCalUID** when a provider supplies it
+Cross-service merge prefers **iCalUID + start** when a provider supplies it
 (`match=ical_uid`); otherwise **title + start time + all-day flag**
 (`match=title_start`). Two different meetings at the same time must not merge.
+Each occurrence of a recurring event is its own entry — instances of one
+series share a UID, so the start is what distinguishes them.
 
 ```
 GET /v1/library/events
