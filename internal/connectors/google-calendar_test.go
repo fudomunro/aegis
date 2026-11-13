@@ -42,6 +42,7 @@ func TestGoogleCalendarConnector_ListCalendarEvents_MockAPI(t *testing.T) {
 						{
 							"id":       "ev1",
 							"iCalUID":  "standup@google.com",
+							"etag":     "etag-ev1",
 							"status":   "confirmed",
 							"summary":  "Standup",
 							"location": "Room 1",
@@ -104,6 +105,9 @@ func TestGoogleCalendarConnector_ListCalendarEvents_MockAPI(t *testing.T) {
 	}
 	if ev.Sources[0].ID != "ev1" || ev.Sources[0].URL == "" {
 		t.Fatalf("source = %+v", ev.Sources[0])
+	}
+	if kinds.ExtraString(ev.Sources[0].Extra, "etag") != "etag-ev1" {
+		t.Fatalf("etag extra = %v, want the live etag carried for freshness", ev.Sources[0].Extra)
 	}
 	if ev.Organizer == nil || len(ev.Organizer.Emails) != 1 || ev.Organizer.Emails[0] != "ada@example.com" {
 		t.Fatalf("organizer = %+v", ev.Organizer)

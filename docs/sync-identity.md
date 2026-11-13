@@ -51,8 +51,8 @@ enrichment supplies recording MBIDs where the provider has none.
 | Kind | Primary identity | Fallback | Ready | What blocks it |
 |------|------------------|----------|-------|----------------|
 | playlists | user-confirmed playlist link | duration-guarded name (items) | yes | — (item reorders of already-placed items are not re-ordered on members) |
-| contacts | vCard UID / email | phone → handle → name | yes | member-side creates are undetected until an entity freshness checker lands |
-| events | iCal UID | title + start | yes | member-side creates are undetected until an entity freshness checker lands |
+| contacts | vCard UID / email | phone → handle → name | yes | — |
+| events | iCal UID | title + start | yes | — |
 | tracks | ISRC / recording MBID | duration-guarded name | yes | — (YouTube Music copies match on the title key) |
 | albums | UPC / MBID | title + primary artist | yes | — (YouTube Music exposes no saved-albums library — album placement runs on providers that can save albums) |
 | artists | MBID | name | yes | — (YouTube Music follows are channel subscriptions matched on the channel title key) |
@@ -71,9 +71,6 @@ answer is on file if that ever changes.
 
 - Photo identity and write surface (photo ownership is being settled
   separately) — [#376](https://github.com/fudomunro/aegis/issues/376).
-- Entity freshness checker, so member-side *creates* of contacts and
-  events are detected the way renames and edits are —
-  [#377](https://github.com/fudomunro/aegis/issues/377).
 - Playlist order reconciliation on members (today's convergence preserves
   order for what it places, but does not re-order already-placed items) —
   [#378](https://github.com/fudomunro/aegis/issues/378).

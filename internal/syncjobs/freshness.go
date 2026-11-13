@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -368,18 +370,173 @@ func (c *snapshotChecker) Check(_ context.Context, rec copies.Record) (copies.Ve
 	return copies.Version{ExternalID: path, Name: name}, true, true, nil
 }
 
+// entityItem is one live member record the entity list carries: the
+// service-local id and the etag token placement's If-Match matches against.
+type entityItem struct {
+	id   string
+	etag string
+}
+
+// entityList is one service's live entity collection for a kind.
+type entityList struct {
+	byID      map[string]entityItem
+	count     int
+	truncated bool
+	fetchedAt time.Time
+}
+
+// entityListTTL bounds how long one live list serves a freshness walk.
+const entityListTTL = 30 * time.Second
+
+// entityChecker validates contact and event copies against the member's
+// live collection (issue #377). The list is the surface the DAV REPORT
+// already returns — one call carrying every item with its etag — so one
+// fetch answers the whole walk: an item row probes its etag watermark
+// (a member-side edit diverges it), and the collection row probes the item
+// count, which is where a member-side create surfaces — the created
+// contact has no watermark row of its own to diverge.
+//
+// No etag is invented: a live item without one leaves the watermark
+// comparison empty (compareCopyVersion only compares tokens present on
+// both sides), and a truncated list reports nothing at all — a capped
+// collection can neither prove absence nor a count.
+type entityChecker struct {
+	run     *Runners
+	service string
+	// maxAge bounds how long one list serves the walk; non-positive
+	// fetches on every check (tests), registration sets entityListTTL.
+	maxAge time.Duration
+
+	mu    sync.Mutex
+	lists map[string]entityList
+}
+
+// Services implements CopyChecker.
+func (c *entityChecker) Services() []string { return []string{c.service} }
+
+// Check implements CopyChecker.
+func (c *entityChecker) Check(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
+	kind := strings.TrimSpace(rec.Kind)
+	if kind != "contacts" && kind != "events" {
+		return copies.Version{}, false, false, nil
+	}
+	list, ok, err := c.listFor(ctx, kind)
+	if err != nil {
+		return copies.Version{}, false, false, err
+	}
+	if !ok || list.truncated {
+		return copies.Version{}, false, false, nil
+	}
+	if strings.TrimSpace(rec.ExternalID) == "" {
+		// The collection row: the live count is the member-side create
+		// probe. A count above the recorded watermark classifies as an
+		// items divergence (a shortfall does not — convergence restores).
+		return copies.Version{ItemCount: list.count}, true, true, nil
+	}
+	item, found := list.byID[rec.ExternalID]
+	if !found {
+		return copies.Version{}, false, true, nil
+	}
+	// Only the etag is comparable here: it covers renames and record
+	// edits alike, and entities have no per-field rename resolution, so
+	// a name change must classify as a record divergence, not a title one.
+	return copies.Version{ExternalID: rec.ExternalID, ETag: item.etag}, true, true, nil
+}
+
+// listFor returns the member's live items for one kind, fetching at most
+// once per maxAge window so one list serves the whole walk. ok is false
+// when the service cannot list that kind.
+func (c *entityChecker) listFor(ctx context.Context, kind string) (entityList, bool, error) {
+	c.mu.Lock()
+	if l, ok := c.lists[kind]; ok && c.maxAge > 0 && time.Since(l.fetchedAt) < c.maxAge {
+		c.mu.Unlock()
+		return l, true, nil
+	}
+	c.mu.Unlock()
+
+	var items []entityItem
+	var truncated bool
+	switch kind {
+	case "contacts":
+		p, ok := c.run.Connectors[c.service].(kinds.ContactProvider)
+		if !ok {
+			return entityList{}, false, nil
+		}
+		contacts, trunc, err := p.ListUserContacts(ctx)
+		if err != nil {
+			return entityList{}, false, err
+		}
+		truncated = trunc
+		for _, ct := range contacts {
+			for _, src := range ct.Sources {
+				if src.Service == c.service && src.ID != "" {
+					items = append(items, entityItem{id: src.ID, etag: kinds.ExtraString(src.Extra, "etag")})
+					break
+				}
+			}
+		}
+	case "events":
+		p, ok := c.run.Connectors[c.service].(kinds.CalendarEventProvider)
+		if !ok {
+			return entityList{}, false, nil
+		}
+		events, trunc, err := p.ListCalendarEvents(ctx)
+		if err != nil {
+			return entityList{}, false, err
+		}
+		truncated = trunc
+		for _, ev := range events {
+			for _, src := range ev.Sources {
+				if src.Service == c.service && src.ID != "" {
+					items = append(items, entityItem{id: src.ID, etag: kinds.ExtraString(src.Extra, "etag")})
+					break
+				}
+			}
+		}
+	default:
+		return entityList{}, false, nil
+	}
+
+	l := entityList{
+		byID:      make(map[string]entityItem, len(items)),
+		count:     len(items),
+		truncated: truncated,
+		fetchedAt: time.Now(),
+	}
+	for _, it := range items {
+		l.byID[it.id] = it
+	}
+	c.mu.Lock()
+	if c.lists == nil {
+		c.lists = make(map[string]entityList, 2)
+	}
+	c.lists[kind] = l
+	c.mu.Unlock()
+	return l, true, nil
+}
+
 // newCheckerRegistry wires the checkers this build supports. Music services
 // register from the connector map: any connector exposing
-// kinds.PlaylistMetaProvider gets the shared mirror checker. Local-snapshot
-// ingest sources (issue #286) register from the ingest registry the same
-// way. Services with no checker (Bluesky shares, DAV item etags) are
-// deliberately absent: their rows stay `unknown` until a checker lands,
-// which is the honest answer.
+// kinds.PlaylistMetaProvider gets the shared mirror checker, and any
+// connector exposing an entity provider (contacts, events) gets the entity
+// checker. Local-snapshot ingest sources (issue #286) register from the
+// ingest registry the same way. A service takes one checker — no service
+// exposes both a playlist/mail surface and an entity one today; services
+// with no checker at all (Bluesky shares) are deliberately absent: their
+// rows stay `unknown` until a checker lands, which is the honest answer.
 func newCheckerRegistry(run *Runners) *CheckerRegistry {
 	r := NewCheckerRegistry()
 	for id, conn := range run.Connectors {
 		if _, ok := conn.(kinds.PlaylistMetaProvider); ok {
 			r.Register(&musicMirrorChecker{run: run, service: id})
+			continue
+		}
+		if _, ok := conn.(kinds.ContactProvider); ok {
+			r.Register(&entityChecker{run: run, service: id, maxAge: entityListTTL})
+			continue
+		}
+		if _, ok := conn.(kinds.CalendarEventProvider); ok {
+			r.Register(&entityChecker{run: run, service: id, maxAge: entityListTTL})
 		}
 	}
 	for id, ing := range run.MailIngests {

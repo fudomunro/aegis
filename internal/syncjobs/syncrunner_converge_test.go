@@ -241,6 +241,29 @@ func TestConvergeRunner_StampsCopyRowsFreshnessReads(t *testing.T) {
 	}
 }
 
+func TestConvergeEntities_StampIsCanonicalCount(t *testing.T) {
+	// The collection row records the canonical count fanned out — the
+	// watermark a member-side create raises the live count above (issue
+	// #377) — not the placements this run managed, which a refused
+	// If-Match undercounts.
+	hub := &entityStubConn{contacts: []kinds.Contact{{Name: "Ada"}, {Name: "Bob"}}}
+	member := &entityStubConn{}
+	member.setConflicts([]kinds.PlaceConflict{
+		{Name: "Ada", Service: "icloud", ID: "id-Ada", Reason: "etag mismatch"},
+	}, nil)
+	run, store, w := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"},
+		map[string]connectors.ServiceConnector{"google": hub, "icloud": member})
+
+	runConverge(t, store, w, "contacts")
+	rec, ok := run.Copies.Get(library.MirrorKindContacts, "icloud", "")
+	if !ok {
+		t.Fatal("collection copy row must be stamped")
+	}
+	if rec.Version.ItemCount != 2 {
+		t.Fatalf("collection row count = %d, want the canonical 2 (this run placed 1)", rec.Version.ItemCount)
+	}
+}
+
 func TestConvergeRunner_RetriesUpstreamError(t *testing.T) {
 	hub := &entityStubConn{contacts: []kinds.Contact{{Name: "Ada"}}}
 	member := &entityStubConn{}

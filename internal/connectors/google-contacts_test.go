@@ -32,6 +32,7 @@ func TestGoogleContactsConnector_ListUserContacts_MockAPI(t *testing.T) {
 			"connections": []map[string]any{
 				{
 					"resourceName": "people/c123",
+					"etag":         "etag-c123",
 					"names": []map[string]any{
 						{"displayName": "Ada Lovelace"},
 					},
@@ -98,6 +99,9 @@ func TestGoogleContactsConnector_ListUserContacts_MockAPI(t *testing.T) {
 	}
 	if src.Extra["resource_name"] != "people/c123" {
 		t.Fatalf("ada resource_name extra = %v", src.Extra)
+	}
+	if src.Extra["etag"] != "etag-c123" {
+		t.Fatalf("ada etag extra = %v, want the live etag carried for freshness", src.Extra)
 	}
 	grace := contacts[1]
 	if grace.Name != "Grace Hopper" {

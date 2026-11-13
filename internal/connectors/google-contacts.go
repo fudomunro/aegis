@@ -350,12 +350,18 @@ func MapGooglePerson(person googlePeoplePerson) kinds.Contact {
 		contact.Organization = person.Organizations[0].Name
 	}
 	// Keep the People resource name on every source so photo.people[] and
-	// other cross-type links can resolve back to this Google contact.
-	if person.ResourceName != "" && len(contact.Sources) > 0 {
+	// other cross-type links can resolve back to this Google contact. The
+	// etag rides along as the freshness probe's watermark token (issue #377).
+	if len(contact.Sources) > 0 && (person.ResourceName != "" || person.ETag != "") {
 		if contact.Sources[0].Extra == nil {
 			contact.Sources[0].Extra = map[string]any{}
 		}
-		contact.Sources[0].Extra["resource_name"] = person.ResourceName
+		if person.ResourceName != "" {
+			contact.Sources[0].Extra["resource_name"] = person.ResourceName
+		}
+		if person.ETag != "" {
+			contact.Sources[0].Extra["etag"] = person.ETag
+		}
 	}
 	return contact
 }
