@@ -412,6 +412,20 @@ type PlaceConflict struct {
 	Service string `json:"service"`
 	ID      string `json:"id,omitempty"`
 	Reason  string `json:"reason,omitempty"`
+	// EntityName is the item's copy-watermark key (issue #384): the item's
+	// identity key where it has one, the display name otherwise. Empty
+	// falls back to Name.
+	EntityName string `json:"entity_name,omitempty"`
+}
+
+// StampName is the copy-watermark key this refusal is about: the item's
+// identity key (issue #384), or the display name for records that carry
+// none.
+func (c PlaceConflict) StampName() string {
+	if c.EntityName != "" {
+		return c.EntityName
+	}
+	return c.Name
 }
 
 // PlaceRecord is one successfully placed item with its target-side
@@ -425,6 +439,21 @@ type PlaceRecord struct {
 	// the skips beside them — are explainable (issue #366). Empty on a
 	// create with nothing to match.
 	MatchedBy string `json:"matched_by,omitempty"`
+	// EntityName is the item's copy-watermark key (issue #384): the item's
+	// identity key where it has one (vCard UID, iCal UID, …), the display
+	// name otherwise — so a rename does not orphan the row. Empty falls
+	// back to Name, what rows were keyed by before.
+	EntityName string `json:"entity_name,omitempty"`
+}
+
+// StampName is the copy-watermark key this placement stamps under: the
+// item's identity key (issue #384), or the display name for records that
+// carry none.
+func (r PlaceRecord) StampName() string {
+	if r.EntityName != "" {
+		return r.EntityName
+	}
+	return r.Name
 }
 
 // PlaceEntitiesResult reports an entity placement (contacts, events).

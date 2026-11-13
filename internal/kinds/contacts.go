@@ -18,10 +18,10 @@ func newContactsKind(h Host, e *Engine, d Deps) Kind {
 	k.mark, k.copies = Stamps(h, "contacts", forEachContactSource)
 	def := *BuiltinKindByID("contacts")
 	k.providerKind = providerKind{
-		def:      def,
-		provides: providerProvides[ContactProvider],
+		def:          def,
+		provides:     providerProvides[ContactProvider],
 		writeCapable: providerProvides[ContactWriteProvider],
-		converge: contactsConvergePlan(h, def.ID),
+		converge:     contactsConvergePlan(h, def.ID),
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -96,7 +96,7 @@ func contactsConvergePlan(h Host, kind string) *ConvergePlan {
 			out := make([]Contact, len(contacts))
 			copy(out, contacts)
 			for i := range out {
-				ref, ok := refs[ItemEntityKey(kind, contactDisplayName(out[i]))]
+				ref, ok := itemRefFor(refs, kind, ContactItemKey(out[i]), contactDisplayName(out[i]))
 				if !ok {
 					continue
 				}
@@ -162,7 +162,8 @@ func contactsConvergePlan(h Host, kind string) *ConvergePlan {
 			hubCT := findContactMatch(hubList, memberCT)
 			if contactDisplayName(hubCT) == "" {
 				// The edit may have changed the identity key itself — the
-				// watermark rows key on the display name, so fall back to it.
+				// watermark rows key on the identity/display name, so fall
+				// back to the subject the conflict was raised under.
 				hubCT = findContactByName(hubList, subject)
 			}
 			if accept {
@@ -173,6 +174,15 @@ func contactsConvergePlan(h Host, kind string) *ConvergePlan {
 				merged := memberCT
 				merged.Sources = upsertContactRef(memberCT.Sources, hub,
 					contactRefID(hubCT, hub), contactRefETag(hubCT, hub))
+				// Identity survives an accept: the member's content on the
+				// hub, the hub's durable id (issue #384) — so the watermark
+				// rows keep keying the same card through later renames.
+				if uid := ContactUID(hubCT); uid != "" && ContactUID(merged) == "" {
+					if merged.Extra == nil {
+						merged.Extra = map[string]any{}
+					}
+					merged.Extra["uid"] = uid
+				}
 				if _, err := dst.PlaceContacts(ctx, []Contact{merged}); err != nil {
 					return nil, true, err
 				}
@@ -180,7 +190,7 @@ func contactsConvergePlan(h Host, kind string) *ConvergePlan {
 				// to the live etag so the next converge updates instead of
 				// conflicting again.
 				return []ItemStamp{{
-					EntityName: subject,
+					EntityName: ContactItemKey(merged),
 					Service:    member,
 					ExternalID: memberID,
 					Name:       subject,

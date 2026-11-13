@@ -41,7 +41,8 @@ func (c *CardDAVConnector) PlaceContacts(ctx context.Context, contacts []kinds.C
 		if err == ErrConflict {
 			result.Conflicts = append(result.Conflicts, kinds.PlaceConflict{
 				Name: name, Service: CardDAVServiceID, ID: id,
-				Reason: "remote contact changed (If-Match failed); not overwritten",
+				Reason:     "remote contact changed (If-Match failed); not overwritten",
+				EntityName: kinds.ContactItemKey(ct),
 			})
 			continue
 		}
@@ -50,7 +51,7 @@ func (c *CardDAVConnector) PlaceContacts(ctx context.Context, contacts []kinds.C
 			continue
 		}
 		result.Copied++
-		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref"})
+		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref", EntityName: kinds.ContactItemKey(ct)})
 	}
 	return result, nil
 }
@@ -92,7 +93,7 @@ func (c *CalDAVConnector) PlaceEvents(ctx context.Context, events []kinds.Calend
 			continue
 		}
 		result.Copied++
-		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref"})
+		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref", EntityName: kinds.EventItemKey(ev)})
 	}
 	return result, nil
 }

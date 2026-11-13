@@ -188,8 +188,8 @@ func TestEventsPlan_RecordResolveAccept(t *testing.T) {
 		t.Fatalf("hub ref = %+v, want id e1 with hub-etag", hubRef)
 	}
 	if len(stamps) != 1 || stamps[0].Service != "membercal" || stamps[0].ExternalID != "m1" ||
-		stamps[0].EntityName != "Standup" || stamps[0].ETag != "live-etag" {
-		t.Fatalf("stamps = %+v, want the member's live etag", stamps)
+		stamps[0].EntityName != "ical:uid-1" || stamps[0].ETag != "live-etag" {
+		t.Fatalf("stamps = %+v, want the member's live etag under the event's identity key", stamps)
 	}
 }
 
@@ -371,8 +371,8 @@ func TestContactsPlan_RecordResolveAcceptFallsBackToName(t *testing.T) {
 	if hubRef == nil || hubRef.ID != "c1" || ExtraString(hubRef.Extra, "etag") != "hub-etag" {
 		t.Fatalf("hub ref = %+v, want the subject-matched c1", hubRef)
 	}
-	if len(stamps) != 1 || stamps[0].ETag != "live-etag" || stamps[0].EntityName != "Ada" {
-		t.Fatalf("stamps = %+v, want the member's live etag under the subject", stamps)
+	if len(stamps) != 1 || stamps[0].ETag != "live-etag" || stamps[0].EntityName != "email:ada@other.example" {
+		t.Fatalf("stamps = %+v, want the member's live etag under the new identity key", stamps)
 	}
 }
 
@@ -435,4 +435,94 @@ func TestOrderRefIDs_FillsSlotsAndKeepsExtras(t *testing.T) {
 // stubOrderTrack builds a track with a service-local ref id.
 func stubOrderTrack(id, name string) Track {
 	return Track{Name: name, Sources: []TrackSource{{Service: "icloud", ID: id}}}
+}
+
+// --- copy-watermark keys (issue #384) ---
+
+func TestContactItemKey_PrefersDurableIdentity(t *testing.T) {
+	// A vCard UID is the durable card identity: a rename keeps the key.
+	withUID := Contact{Name: "Ada", Extra: map[string]any{"uid": "card-1"}}
+	if got := ContactItemKey(withUID); got != "uid:card-1" {
+		t.Fatalf("ContactItemKey(uid) = %q, want uid:card-1", got)
+	}
+	// Email is next — rename-stable where the card carries no UID.
+	withEmail := Contact{Name: "Ada", Emails: []string{"ada@example.com"}}
+	if got := ContactItemKey(withEmail); got != "email:ada@example.com" {
+		t.Fatalf("ContactItemKey(email) = %q, want the email key", got)
+	}
+	// A card with no durable id keys by its display name — what every
+	// row was keyed by before.
+	if got := ContactItemKey(Contact{Name: "Ada"}); got != "Ada" {
+		t.Fatalf("ContactItemKey(name) = %q, want Ada", got)
+	}
+}
+
+func TestEventItemKey_PrefersICalUID(t *testing.T) {
+	ev := CalendarEvent{Title: "Standup", Sources: []CalendarEventSource{{
+		Service: "hubcal", ID: "e1", Extra: map[string]any{"ical_uid": "uid-1"},
+	}}}
+	if got := EventItemKey(ev); got != "ical:uid-1" {
+		t.Fatalf("EventItemKey(uid) = %q, want ical:uid-1", got)
+	}
+	// A retitle keeps the key — the point of the convention.
+	ev.Title = "Daily sync (retitled)"
+	if got := EventItemKey(ev); got != "ical:uid-1" {
+		t.Fatalf("EventItemKey(retitled) = %q, want the same key", got)
+	}
+	if got := EventItemKey(CalendarEvent{Title: "Standup"}); got != "Standup" {
+		t.Fatalf("EventItemKey(title) = %q, want Standup", got)
+	}
+}
+
+func TestEventsPlan_AttachRefsSurvivesARetitle(t *testing.T) {
+	// The watermark row keys on the event's iCal UID (issue #384): a
+	// retitle on the canonical home still finds it, so placement takes the
+	// If-Match update path instead of placing a fresh copy.
+	plan := eventsPlanWiring(t, &entityStub{}, &entityStub{})
+	retitled := canonicalEvent()
+	retitled.Title = "Daily sync (retitled)"
+	items := batchOf([]CalendarEvent{retitled})
+	refs := map[string]ItemRef{
+		ItemEntityKey("events", EventItemKey(retitled)): {ExternalID: "m1", ETag: "live-etag"},
+	}
+	out := batchItems[CalendarEvent](plan.AttachRefs(items, "membercal", refs))
+	if len(out) != 1 {
+		t.Fatalf("out = %v, want one event", out)
+	}
+	var ref *CalendarEventSource
+	for i := range out[0].Sources {
+		if out[0].Sources[i].Service == "membercal" {
+			ref = &out[0].Sources[i]
+		}
+	}
+	if ref == nil || ref.ID != "m1" || ExtraString(ref.Extra, "etag") != "live-etag" {
+		t.Fatalf("member ref = %+v, want id m1 with live-etag", ref)
+	}
+}
+
+func TestContactsPlan_AttachRefsFallsBackToLegacyNameRows(t *testing.T) {
+	// Rows written before the identity-key convention key on the display
+	// name: the lookup falls back so landing it does not re-place every
+	// tracked copy (issue #384).
+	plan := contactsConvergePlan(newConvergeStubHost(map[string]any{
+		"memberc": &entityStub{},
+	}), "contacts")
+	ct := Contact{Name: "Ada", Emails: []string{"ada@example.com"}}
+	items := batchOf([]Contact{ct})
+	refs := map[string]ItemRef{
+		ItemEntityKey("contacts", "Ada"): {ExternalID: "m1", ETag: "live-etag"},
+	}
+	out := batchItems[Contact](plan.AttachRefs(items, "memberc", refs))
+	if len(out) != 1 {
+		t.Fatalf("out = %v, want one contact", out)
+	}
+	var ref *ContactSource
+	for i := range out[0].Sources {
+		if out[0].Sources[i].Service == "memberc" {
+			ref = &out[0].Sources[i]
+		}
+	}
+	if ref == nil || ref.ID != "m1" || ExtraString(ref.Extra, "etag") != "live-etag" {
+		t.Fatalf("member ref = %+v, want the legacy name row found", ref)
+	}
 }

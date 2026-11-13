@@ -111,6 +111,19 @@ func ContactUID(c Contact) string {
 	return ""
 }
 
+// ContactItemKey is the copy-watermark key for one contact (issue #384):
+// the contact's durable identity — vCard UID, else email — where it has
+// one, so a rename on the canonical home does not orphan the row. A card
+// with no durable id keys by its display name, what all rows used before.
+func ContactItemKey(c Contact) string {
+	for _, k := range ContactIdentityKeys(c) {
+		if strings.HasPrefix(k, "uid:") || strings.HasPrefix(k, "email:") {
+			return k
+		}
+	}
+	return contactDisplayName(c)
+}
+
 // ContactIdentityKeys returns ordered merge keys for a contact: vCard UID
 // first (the durable card identity), then email, then phone, then handle.
 // Display name is a weak key — it is used only when the contact has no

@@ -30,7 +30,8 @@ func (c *GoogleContactsConnector) PlaceContacts(ctx context.Context, contacts []
 			if err == ErrConflict {
 				result.Conflicts = append(result.Conflicts, kinds.PlaceConflict{
 					Name: name, Service: GoogleContactsServiceID, ID: id,
-					Reason: "remote contact changed (etag mismatch); not overwritten",
+					Reason:     "remote contact changed (etag mismatch); not overwritten",
+					EntityName: kinds.ContactItemKey(ct),
 				})
 				continue
 			}
@@ -39,7 +40,7 @@ func (c *GoogleContactsConnector) PlaceContacts(ctx context.Context, contacts []
 				continue
 			}
 			result.Copied++
-			result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref"})
+			result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref", EntityName: kinds.ContactItemKey(ct)})
 			continue
 		}
 
@@ -47,7 +48,8 @@ func (c *GoogleContactsConnector) PlaceContacts(ctx context.Context, contacts []
 		if err == ErrConflict {
 			result.Conflicts = append(result.Conflicts, kinds.PlaceConflict{
 				Name: name, Service: GoogleContactsServiceID,
-				Reason: "remote contact changed; not overwritten",
+				Reason:     "remote contact changed; not overwritten",
+				EntityName: kinds.ContactItemKey(ct),
 			})
 			continue
 		}
@@ -56,7 +58,7 @@ func (c *GoogleContactsConnector) PlaceContacts(ctx context.Context, contacts []
 			continue
 		}
 		result.Copied++
-		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: createdID, ETag: createdETag})
+		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: createdID, ETag: createdETag, EntityName: kinds.ContactItemKey(ct)})
 	}
 	return result, nil
 }
@@ -74,7 +76,8 @@ func (c *GoogleCalendarConnector) PlaceEvents(ctx context.Context, events []kind
 			if err == ErrConflict {
 				result.Conflicts = append(result.Conflicts, kinds.PlaceConflict{
 					Name: name, Service: GoogleCalendarServiceID, ID: id,
-					Reason: "remote event changed (etag mismatch); not overwritten",
+					Reason:     "remote event changed (etag mismatch); not overwritten",
+					EntityName: kinds.EventItemKey(ev),
 				})
 				continue
 			}
@@ -83,7 +86,7 @@ func (c *GoogleCalendarConnector) PlaceEvents(ctx context.Context, events []kind
 				continue
 			}
 			result.Copied++
-			result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref"})
+			result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: id, ETag: newETag, MatchedBy: "ref", EntityName: kinds.EventItemKey(ev)})
 			continue
 		}
 
@@ -91,7 +94,8 @@ func (c *GoogleCalendarConnector) PlaceEvents(ctx context.Context, events []kind
 		if err == ErrConflict {
 			result.Conflicts = append(result.Conflicts, kinds.PlaceConflict{
 				Name: name, Service: GoogleCalendarServiceID,
-				Reason: "remote event changed; not overwritten",
+				Reason:     "remote event changed; not overwritten",
+				EntityName: kinds.EventItemKey(ev),
 			})
 			continue
 		}
@@ -100,7 +104,7 @@ func (c *GoogleCalendarConnector) PlaceEvents(ctx context.Context, events []kind
 			continue
 		}
 		result.Copied++
-		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: createdID, ETag: createdETag})
+		result.Placed = append(result.Placed, kinds.PlaceRecord{Name: name, ExternalID: createdID, ETag: createdETag, EntityName: kinds.EventItemKey(ev)})
 	}
 	return result, nil
 }

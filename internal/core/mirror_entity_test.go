@@ -143,3 +143,23 @@ func TestHandleEntityMirror_ContactsDryRun(t *testing.T) {
 		t.Fatalf("body = %s", w.Body.String())
 	}
 }
+
+func TestRecordMirrorItemCopy_MigratesLegacyNameRows(t *testing.T) {
+	// A row written under the older display-name key is retired when the
+	// item's identity key lands (issue #384) — one row per copy.
+	ledger, err := copies.Open(t.TempDir() + "/copy_ledger.db")
+	if err != nil {
+		t.Fatalf("copies.Open: %v", err)
+	}
+	defer ledger.Close()
+	s := &Server{copyLedger: ledger}
+	s.library().RecordMirrorItemCopy(library.MirrorKindContacts, "Ada", "icloud", "ada.vcf", "Ada", `"etag-1"`)
+	s.library().RecordMirrorItemCopy(library.MirrorKindContacts, "uid:card-1", "icloud", "ada.vcf", "Ada", `"etag-2"`)
+	recs := ledger.List(copies.Filter{Kind: library.MirrorKindContacts})
+	if len(recs) != 1 {
+		t.Fatalf("got %d records, want the legacy row retired", len(recs))
+	}
+	if recs[0].EntityKey != "contacts:uid:card-1" || recs[0].Watermark != `"etag-2"` {
+		t.Fatalf("row = %+v, want the identity-keyed row", recs[0])
+	}
+}
