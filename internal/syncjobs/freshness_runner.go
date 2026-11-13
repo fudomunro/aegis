@@ -79,9 +79,11 @@ func (r *freshnessRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error
 }
 
 // SyncFreshnessKinds are the library kinds a freshness_check runner is registered
-// for today. Copy rows for other kinds (contacts, events, photos) still show
-// up in the freshness rollup as unchecked — they simply have no checker yet.
-var SyncFreshnessKinds = []string{"messages", "playlists", "tracks"}
+// for today. Copy rows for other kinds (photos) still show up in the freshness
+// rollup as unchecked — they simply have no checker yet. Contacts and events
+// check against the entity probe (issue #377): per-item etag watermarks and
+// the collection count, which is where member-side creates surface.
+var SyncFreshnessKinds = []string{"messages", "playlists", "tracks", "contacts", "events"}
 
 // newFreshnessRunners builds one freshness runner per supported kind.
 func newFreshnessRunners(run *Runners) []SyncRunner {

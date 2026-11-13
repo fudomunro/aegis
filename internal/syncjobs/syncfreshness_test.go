@@ -11,10 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/library"
 )
 
 // --- version comparison ---
@@ -359,8 +361,8 @@ func TestNewFreshnessRunners_CoverSupportedKinds(t *testing.T) {
 			t.Fatalf("kind %s has no freshness runner", kind)
 		}
 	}
-	if _, ok := reg.For("contacts", SyncJobTypeFreshness); ok {
-		t.Fatal("contacts has no checker yet and must not advertise a runner")
+	if _, ok := reg.For("photos", SyncJobTypeFreshness); ok {
+		t.Fatal("photos has no checker yet and must not advertise a runner")
 	}
 }
 
@@ -741,5 +743,209 @@ func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
 	}
 	if byKind["playlists"].Unchecked != 0 {
 		t.Fatalf("playlists rollup = %+v, want every row checked", byKind["playlists"])
+	}
+}
+
+// --- entity checker (issue #377) ---
+
+// entityContact builds a listed contact carrying the service-local ref and
+// etag watermark the probe reads.
+func entityContact(service, id, name, etag string) kinds.Contact {
+	ct := kinds.NewContact(service, service, id, name, nil, nil)
+	ct.Sources[0].Extra = map[string]any{"etag": etag}
+	return ct
+}
+
+// entityEvent builds a listed event carrying the service-local ref and etag.
+func entityEvent(service, id, title, etag string) kinds.CalendarEvent {
+	return kinds.CalendarEvent{
+		Title: title,
+		Sources: []kinds.CalendarEventSource{{
+			Service: service,
+			ID:      id,
+			Extra:   map[string]any{"etag": etag},
+		}},
+	}
+}
+
+func TestEntityChecker_ProbesItemETagAndCount(t *testing.T) {
+	member := &entityStubConn{contacts: []kinds.Contact{
+		entityContact("icloud", "ada.vcf", "Ada", "e-new"),
+		entityContact("icloud", "bob.vcf", "Bob", "e-bob"),
+	}}
+	run := &Runners{Connectors: map[string]connectors.ServiceConnector{"icloud": member}}
+	c := &entityChecker{run: run, service: "icloud"}
+
+	// Per-item rows probe the live etag — the token the DAV list already
+	// returns. Only the etag is comparable: entities have no rename
+	// resolution, so a name change must land as a record divergence.
+	cur, exists, ok, err := c.Check(context.Background(), copies.Record{
+		Kind: "contacts", Service: "icloud", ExternalID: "ada.vcf",
+	})
+	if err != nil || !ok || !exists {
+		t.Fatalf("Check(item) = (%+v,%v,%v,%v)", cur, exists, ok, err)
+	}
+	if cur.ETag != "e-new" || cur.ExternalID != "ada.vcf" {
+		t.Fatalf("Check(item) = %+v, want the live etag", cur)
+	}
+	if cur.Name != "" || cur.ItemCount != 0 {
+		t.Fatalf("Check(item) = %+v, want the etag only", cur)
+	}
+
+	// The collection row probes the live count — where a member-side
+	// create surfaces (the created contact has no watermark row).
+	cur, exists, ok, err = c.Check(context.Background(), copies.Record{Kind: "contacts", Service: "icloud"})
+	if err != nil || !ok || !exists || cur.ItemCount != 2 {
+		t.Fatalf("Check(collection) = (%+v,%v,%v,%v), want 2 items", cur, exists, ok, err)
+	}
+
+	// A record the member no longer holds reports missing.
+	_, exists, ok, err = c.Check(context.Background(), copies.Record{
+		Kind: "contacts", Service: "icloud", ExternalID: "gone.vcf",
+	})
+	if err != nil || !ok || exists {
+		t.Fatalf("Check(gone) = (exists=%v ok=%v err=%v), want (false,true,nil)", exists, ok, err)
+	}
+
+	// A provider error is not evidence about the copy.
+	member.failList = errors.New("boom")
+	if _, _, _, err := c.Check(context.Background(), copies.Record{Kind: "contacts", Service: "icloud"}); err == nil {
+		t.Fatal("list failure must surface as an error so the row is left alone")
+	}
+	member.failList = nil
+
+	// Other kinds and services are not this checker's shape.
+	if _, _, ok, _ := c.Check(context.Background(), copies.Record{Kind: "photos", Service: "icloud", ExternalID: "x"}); ok {
+		t.Fatal("photos rows must not report a successful check")
+	}
+	noConn := &entityChecker{run: run, service: "bluesky"}
+	if _, _, ok, _ := noConn.Check(context.Background(), copies.Record{Kind: "contacts", Service: "bluesky"}); ok {
+		t.Fatal("a service that cannot list contacts must not report a successful check")
+	}
+}
+
+func TestEntityChecker_EventsShape(t *testing.T) {
+	member := &entityStubConn{events: []kinds.CalendarEvent{
+		entityEvent("dav-calendar", "ev1.ics", "Standup", "e-1"),
+		entityEvent("dav-calendar", "ev2.ics", "Offsite", "e-2"),
+	}}
+	run := &Runners{Connectors: map[string]connectors.ServiceConnector{"dav-calendar": member}}
+	c := &entityChecker{run: run, service: "dav-calendar"}
+
+	cur, exists, ok, err := c.Check(context.Background(), copies.Record{
+		Kind: "events", Service: "dav-calendar", ExternalID: "ev1.ics",
+	})
+	if err != nil || !ok || !exists || cur.ETag != "e-1" {
+		t.Fatalf("Check(item) = (%+v,%v,%v,%v), want the live etag", cur, exists, ok, err)
+	}
+	cur, exists, ok, err = c.Check(context.Background(), copies.Record{Kind: "events", Service: "dav-calendar"})
+	if err != nil || !ok || !exists || cur.ItemCount != 2 {
+		t.Fatalf("Check(collection) = (%+v,%v,%v,%v), want 2 items", cur, exists, ok, err)
+	}
+}
+
+func TestEntityChecker_TruncatedListIsUnchecked(t *testing.T) {
+	member := &entityStubConn{
+		contacts:  []kinds.Contact{entityContact("icloud", "ada.vcf", "Ada", "e")},
+		truncated: true,
+	}
+	run := &Runners{Connectors: map[string]connectors.ServiceConnector{"icloud": member}}
+	c := &entityChecker{run: run, service: "icloud"}
+
+	// A capped list can neither prove absence nor a count: rows stay as
+	// they are rather than reporting a false missing or a false create.
+	if _, _, ok, _ := c.Check(context.Background(), copies.Record{
+		Kind: "contacts", Service: "icloud", ExternalID: "ada.vcf",
+	}); ok {
+		t.Fatal("truncated list must leave item rows alone")
+	}
+	if _, _, ok, _ := c.Check(context.Background(), copies.Record{Kind: "contacts", Service: "icloud"}); ok {
+		t.Fatal("truncated list must leave the collection row alone")
+	}
+}
+
+func TestEntityChecker_OneListServesTheWalk(t *testing.T) {
+	member := &entityStubConn{contacts: []kinds.Contact{
+		entityContact("icloud", "ada.vcf", "Ada", "e-ada"),
+	}}
+	run := &Runners{Connectors: map[string]connectors.ServiceConnector{"icloud": member}}
+	c := &entityChecker{run: run, service: "icloud", maxAge: time.Minute}
+
+	coll := copies.Record{Kind: "contacts", Service: "icloud"}
+	cur, _, ok, _ := c.Check(context.Background(), coll)
+	if !ok || cur.ItemCount != 1 {
+		t.Fatalf("first check = %+v (ok=%v), want 1 item", cur, ok)
+	}
+	// The walk's later rows still read that one list.
+	member.contacts = append(member.contacts, entityContact("icloud", "bob.vcf", "Bob", "e-bob"))
+	cur, _, ok, _ = c.Check(context.Background(), coll)
+	if !ok || cur.ItemCount != 1 {
+		t.Fatalf("cached check = %+v (ok=%v), want the walk's first list", cur, ok)
+	}
+
+	// No cache bound: every check reads live state.
+	fresh := &entityChecker{run: run, service: "icloud"}
+	if cur, _, ok, _ := fresh.Check(context.Background(), coll); !ok || cur.ItemCount != 2 {
+		t.Fatalf("uncached check = %+v (ok=%v), want live count 2", cur, ok)
+	}
+}
+
+func TestFreshnessEntities_ClassifiesDivergence(t *testing.T) {
+	// The member holds an edited contact (etag diverged from its
+	// watermark), a contact created on the member (no watermark row —
+	// surfaced by the collection count), and has lost a contact the
+	// watermark still records.
+	member := &entityStubConn{contacts: []kinds.Contact{
+		entityContact("icloud", "ada.vcf", "Ada", "e-new"),
+		entityContact("icloud", "cal.vcf", "Cal", "e-cal"),
+	}}
+	hub := &entityStubConn{contacts: []kinds.Contact{entityContact("google", "g-ada", "Ada", "e-old")}}
+	run, _ := convergeStubRunners(t, "contacts", "google", []string{"google", "icloud"},
+		map[string]connectors.ServiceConnector{"google": hub, "icloud": member})
+
+	run.Mirror.RecordMirrorItemCopy("contacts", "Ada", "icloud", "ada.vcf", "Ada", "e-old")
+	run.Mirror.RecordMirrorItemCopy("contacts", "Gone", "icloud", "gone.vcf", "Gone", "e-gone")
+	run.Mirror.RecordMirrorCopy("contacts", "google", "", "icloud", "", "contacts", 1, "")
+
+	engine := NewFreshnessEngine(run, newCheckerRegistry(run))
+	batch, err := engine.RunBatch(context.Background(), "contacts", 0, 50)
+	if err != nil {
+		t.Fatalf("RunBatch: %v", err)
+	}
+	if !batch.Done || batch.Checked != 3 {
+		t.Fatalf("batch = %+v, want 3 rows checked", batch)
+	}
+	if batch.Stale != 2 || batch.Missing != 1 {
+		t.Fatalf("batch = %+v, want 2 stale (edit + create) and 1 missing", batch)
+	}
+
+	open := run.Conflicts.List(ConflictFilter{Status: ConflictStatusOpen})
+	if len(open) != 3 {
+		t.Fatalf("open conflicts = %+v, want record + missing + items", open)
+	}
+	byField := map[string]SyncConflict{}
+	for _, c := range open {
+		byField[c.Field] = c
+	}
+	rec := byField[ConflictFieldRecord]
+	if rec.Subject != "Ada" || rec.ExternalID != "ada.vcf" || rec.Service != "icloud" {
+		t.Fatalf("record conflict = %+v, want the member-side edit", rec)
+	}
+	if rec.EntityKey != kinds.ItemEntityKey("contacts", "Ada") {
+		t.Fatalf("record entity key = %q", rec.EntityKey)
+	}
+	if rec.Source != ConflictSourceFreshness {
+		t.Fatalf("record source = %q", rec.Source)
+	}
+	gone := byField[ConflictFieldMissing]
+	if gone.Subject != "Gone" || gone.ExternalID != "gone.vcf" {
+		t.Fatalf("missing conflict = %+v, want the vanished member copy", gone)
+	}
+	items := byField[ConflictFieldItems]
+	if items.MemberValue != "2 items" || items.LastValue != "1 items" {
+		t.Fatalf("items conflict = %+v, want member 2 vs watermark 1", items)
+	}
+	if items.EntityKey != library.MirrorEntityKey("contacts", "google", "") {
+		t.Fatalf("items entity key = %q", items.EntityKey)
 	}
 }

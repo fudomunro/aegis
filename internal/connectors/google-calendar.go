@@ -521,6 +521,7 @@ type googleCalendarEventAttendee struct {
 type googleCalendarEvent struct {
 	ID          string                  `json:"id"`
 	ICalUID     string                  `json:"iCalUID"`
+	ETag        string                  `json:"etag"`
 	Status      string                  `json:"status"`
 	Summary     string                  `json:"summary"`
 	Description string                  `json:"description"`
@@ -644,6 +645,10 @@ func MapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName st
 	extra := map[string]any{}
 	if raw.ICalUID != "" {
 		extra["ical_uid"] = raw.ICalUID
+	}
+	if raw.ETag != "" {
+		// The freshness probe's watermark token (issue #377).
+		extra["etag"] = raw.ETag
 	}
 	if raw.Start.TimeZone != "" {
 		extra["start_time_zone"] = raw.Start.TimeZone

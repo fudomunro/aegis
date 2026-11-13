@@ -7,6 +7,25 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Entity freshness checker (issue #377).** Contact and event copies get
+  a real freshness probe, closing the member-side create blind spot:
+  convergence saw renames and record edits through the etag watermarks,
+  but a contact created on a member had no watermark row to diverge. The
+  checker reads the member's live collection — the same list the DAV
+  REPORT already returns, one call per service carrying every item with
+  its etag — and answers both row shapes the freshness pass walks: an
+  item row probes its etag watermark (a member-side edit or rename
+  diverges it into a record conflict; a vanished copy into a missing one),
+  and the collection row probes the item count, where a member-side
+  create surfaces as an items divergence against the count convergence
+  fanned out. A truncated list reports nothing — a capped collection can
+  neither prove absence nor a count — and a live item without an etag
+  leaves the watermark comparison empty. Divergences classify into the
+  same conflict queue the playlist rows feed: accept adopts member-only
+  items onto the canonical home, reject keeps them local. `contacts` and
+  `events` join the kinds the freshness runners walk. Google People and
+  Calendar lists now carry the live etag on each source (the DAV lists
+  already did), so the probe works across every entity provider.
 - **Album and artist write placement (issue #375).** `albums` and `artists`
   get placement contracts (`AlbumWriteProvider` save semantics,
   `ArtistWriteProvider` follow semantics — both create-only, never

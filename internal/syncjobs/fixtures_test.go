@@ -308,6 +308,7 @@ type entityStubConn struct {
 	events    []kinds.CalendarEvent
 	failPlace error
 	failList  error
+	truncated bool
 	conflicts []kinds.PlaceConflict
 	skips     []kinds.PlaceSkip
 	// placeCalls and lastInput capture what placement received — the
@@ -336,7 +337,7 @@ func (c *entityStubConn) ListUserContacts(ctx context.Context) ([]kinds.Contact,
 	if c.failList != nil {
 		return nil, false, c.failList
 	}
-	return append([]kinds.Contact(nil), c.contacts...), false, nil
+	return append([]kinds.Contact(nil), c.contacts...), c.truncated, nil
 }
 
 func (c *entityStubConn) PlaceContacts(ctx context.Context, in []kinds.Contact) (kinds.PlaceEntitiesResult, error) {
@@ -366,7 +367,7 @@ func (c *entityStubConn) ListCalendarEvents(ctx context.Context) ([]kinds.Calend
 	if c.failList != nil {
 		return nil, false, c.failList
 	}
-	return append([]kinds.CalendarEvent(nil), c.events...), false, nil
+	return append([]kinds.CalendarEvent(nil), c.events...), c.truncated, nil
 }
 
 func (c *entityStubConn) PlaceEvents(ctx context.Context, in []kinds.CalendarEvent) (kinds.PlaceEntitiesResult, error) {
@@ -390,7 +391,8 @@ func (c *entityStubConn) PlaceEvents(ctx context.Context, in []kinds.CalendarEve
 
 // place records one placement step: upsert each item via put (never
 // removing anything already held), reporting any armed failures, skips,
-// and conflicts once.
+// and conflicts once. Names armed as conflicts or skips are refused like
+// the real write paths — reported, never placed, never counted.
 func (c *entityStubConn) place(names []string, put func(i int), capture func()) (kinds.PlaceEntitiesResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -405,8 +407,18 @@ func (c *entityStubConn) place(names []string, put func(i int), capture func()) 
 		return kinds.PlaceEntitiesResult{}, err
 	}
 	res := kinds.PlaceEntitiesResult{Conflicts: c.conflicts, Skips: c.skips}
+	refused := map[string]bool{}
+	for _, cf := range c.conflicts {
+		refused[cf.Name] = true
+	}
+	for _, sk := range c.skips {
+		refused[sk.Name] = true
+	}
 	c.conflicts, c.skips = nil, nil
 	for i, name := range names {
+		if refused[name] {
+			continue
+		}
 		put(i)
 		res.Copied++
 		res.Placed = append(res.Placed, kinds.PlaceRecord{

@@ -284,12 +284,16 @@ func (r *convergeRunner) runCollectionStep(ctx context.Context, p convergeJobPay
 	}
 
 	// Canonical collection exhausted on this member: stamp the collection
-	// row freshness reads — the member's items as they stand now. Only
-	// the shapes that track a member count (LoadMember) add one; the
-	// entity shapes stamp what this run placed.
+	// row freshness reads. The member-count shapes record the member's
+	// items as they stand now; the entity shapes record the canonical
+	// count this run fanned out — the watermark a member-side create
+	// raises the live count above (issue #377).
 	memberCount := res.Copied
-	if plan.LoadMember != nil {
+	switch {
+	case plan.LoadMember != nil:
 		memberCount = state.Count + res.Copied
+	case plan.Shape == kinds.ConvergeEntities:
+		memberCount = page.HubTotal
 	}
 	s.Mirror.RecordMirrorCopy(p.Kind, p.SourceService, "", target, "", plan.RowName, memberCount, "")
 

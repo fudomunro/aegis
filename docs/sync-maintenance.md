@@ -61,7 +61,7 @@ repro capture, and the agent harness — not the signals.
 | Logs | `<data-dir>/logs/aegis.log` (`log/slog`) | Error detail behind the counters: `service`, `path`, `error` |
 | Audit log | `audit_log.db` | Redaction precedent (no tokens, bodies, query strings, full paths); access anomalies |
 | Sync job queue | `internal/core/syncjobs/` (engine; #227) | States `queued`/`running`/`succeeded`/`failed`/`canceled`/`paused`; error classes `retryable`/`terminal`; restartable leased steps |
-| Freshness engine | `internal/core/syncfreshness_runner.go` | Per-kind rollup: `checked`/`in_sync`/`stale`/`missing`/`skipped` (messages, playlists, tracks today) |
+| Freshness engine | `internal/syncjobs/` (freshness runner + engine) | Per-kind rollup: `checked`/`in_sync`/`stale`/`missing`/`skipped` (messages, playlists, tracks, contacts, events today) |
 | CI gates | `.github/workflows/ci.yml` | `go vet`, race tests, **80% coverage floor**, staticcheck, gitleaks, 30s fuzz — the anti-degradation gates every fix PR must pass |
 | Replay seam | `httptest.NewServer` + configured `endpoint` | How fixtures replay offline without touching a provider |
 
