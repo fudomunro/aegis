@@ -192,7 +192,7 @@ func TestConvergePlaylists_AdoptsRecordedMemberPlaylist(t *testing.T) {
 	member.seedAs("PL-existing", "Old name", "A")
 	run, store, w := playlistGroup(t, hub, member)
 	run.Mirror.RecordMirrorCopy(library.MirrorKindPlaylists, "google", hubP1,
-		"icloud", "PL-existing", "Old name", 1, "")
+		"icloud", "PL-existing", "Old name", 1, "", "")
 
 	runConverge(t, store, w, "playlists")
 	if member.created != 0 {

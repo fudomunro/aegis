@@ -135,7 +135,7 @@ func TestFreshnessRecordsWatermarkDivergence(t *testing.T) {
 	run, _, _ := convergeTestRunners(t, "playlists", "google", []string{"google", "icloud"},
 		map[string]connectors.ServiceConnector{"google": hub, "icloud": member})
 	run.Mirror.RecordMirrorCopy(library.MirrorKindPlaylists, "google", hubP1,
-		"icloud", memberID, "Road trip", 2, "")
+		"icloud", memberID, "Road trip", 2, "", "")
 
 	// The member gains an item after the watermark was stamped.
 	member.addTrack(memberID, "X")
@@ -143,7 +143,7 @@ func TestFreshnessRecordsWatermarkDivergence(t *testing.T) {
 	// rather than conflicts, and must not be recorded even though its
 	// tokens would classify.
 	run.Mirror.RecordMirrorCopy(library.MirrorKindPlaylists, "icloud", "PL-x",
-		"google", "google-extra", "Old Name", 7, "")
+		"google", "google-extra", "Old Name", 7, "", "")
 	hub.seedAs("google-extra", "Ignored", "Z")
 
 	engine := NewFreshnessEngine(run, newCheckerRegistry(run))
@@ -178,7 +178,7 @@ func resolveFixture(t *testing.T) (*Runners, *playlistStubConn, *playlistStubCon
 	run, _, _ := convergeTestRunners(t, "playlists", "google", []string{"google", "icloud"},
 		map[string]connectors.ServiceConnector{"google": hub, "icloud": member})
 	run.Mirror.RecordMirrorCopy(library.MirrorKindPlaylists, "google", hubP1,
-		"icloud", memberID, "Road trip", 3, "")
+		"icloud", memberID, "Road trip", 3, "", "")
 	return run, hub, member, hubP1, memberID
 }
 

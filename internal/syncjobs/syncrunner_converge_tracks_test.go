@@ -127,7 +127,7 @@ func TestResolveTracksItemsAcceptAdoptsAndRejectKeepsLocal(t *testing.T) {
 	member.seed("A", "B", "X")
 	run, _, _ := likedGroup(t, hub, member)
 	run.Mirror.RecordMirrorCopy(library.MirrorKindTracks, "google-music", "",
-		"icloud", "", "liked/saved tracks", 3, "")
+		"icloud", "", "liked/saved tracks", 3, "", "")
 	rec := openConflict(t, run, SyncConflict{
 		Kind: "tracks", Service: "icloud",
 		EntityKey: library.MirrorEntityKey(library.MirrorKindTracks, "google-music", ""),

@@ -207,6 +207,99 @@ func (c *SpotifyConnector) PlacePlaylistItems(ctx context.Context, playlistID, n
 	return result, nil
 }
 
+// SetPlaylistOrder implements kinds.PlaylistOrderProvider (issue #378)
+// with positional moves — the reorder mode of the playlist-items PUT — so
+// the write is a permutation of what the playlist already holds and never
+// changes membership. The desired ids are matched onto the playlist's own
+// entries in listing order; unknown ids are ignored and unlisted entries
+// keep their relative order at the end.
+func (c *SpotifyConnector) SetPlaylistOrder(ctx context.Context, playlistID string, orderedIDs []string) error {
+	current, err := spotifyPlaylistEntryIDs(ctx, c, playlistID)
+	if err != nil {
+		return err
+	}
+	target := orderEntryIndexes(orderedIDs, current)
+	// Insertion sort on the working order: every move pulls an entry from
+	// the right of its target slot and inserts it there. insert_before
+	// then never points past the removed entry, which is the one shift
+	// the endpoint's position semantics make murky.
+	work := make([]int, len(target))
+	for i := range work {
+		work[i] = i
+	}
+	for i, want := range target {
+		j := i
+		for work[j] != want {
+			j++
+		}
+		if j == i {
+			continue
+		}
+		if _, _, err := apiJSON(ctx, c.host, SpotifyServiceID, "PUT",
+			"/playlists/"+url.PathEscape(playlistID)+"/tracks", nil,
+			map[string]any{"range_start": j, "insert_before": i}); err != nil {
+			return err
+		}
+		work = append(work[:j], work[j+1:]...)
+		work = append(work[:i], append([]int{want}, work[i:]...)...)
+	}
+	return nil
+}
+
+// spotifyPlaylistEntryIDs pages a playlist's entry ids in order — the
+// move positions SetPlaylistOrder computes against. Entries the list maps
+// to no track id (local files) come back as "" so the caller can still
+// count them in the position space.
+func spotifyPlaylistEntryIDs(ctx context.Context, c *SpotifyConnector, playlistID string) ([]string, error) {
+	var out []string
+	cursor := ""
+	for i := 0; i < shared.LibraryPageCap; i++ {
+		_, page, err := c.ListPlaylistItems(ctx, playlistID, cursor, 100)
+		if err != nil {
+			return nil, err
+		}
+		for _, t := range page.Tracks {
+			id := ""
+			for _, src := range t.Sources {
+				if src.Service == SpotifyServiceID {
+					id = src.ID
+				}
+			}
+			out = append(out, id)
+		}
+		if page.Next == "" {
+			return out, nil
+		}
+		cursor = page.Next
+	}
+	return out, nil
+}
+
+// orderEntryIndexes maps the desired id sequence onto the playlist's
+// current entries: for each wanted id, the next not-yet-taken entry
+// carrying it (positional for the "" ids of untargetable entries). Ids
+// with no entry are ignored; entries no id names are appended at the end
+// in their current order — a reorder never changes membership.
+func orderEntryIndexes(orderedIDs, current []string) []int {
+	taken := make([]bool, len(current))
+	out := make([]int, 0, len(current))
+	for _, id := range orderedIDs {
+		for i, have := range current {
+			if !taken[i] && have == id {
+				taken[i] = true
+				out = append(out, i)
+				break
+			}
+		}
+	}
+	for i := range current {
+		if !taken[i] {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
 // SaveLikedTracks implements kinds.LikedTrackWriteProvider.
 func (c *SpotifyConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
 	var result kinds.SaveLikedTracksResult

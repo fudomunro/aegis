@@ -3,6 +3,7 @@ package connectors
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -501,5 +502,63 @@ func TestYouTubeFollowArtists_SubscribeError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected subscribe error")
+	}
+}
+
+func TestYouTubeSetPlaylistOrder_ReinsertsBeforeRemoving(t *testing.T) {
+	var calls []string
+	c := newYouTubeMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/playlistItems":
+			writeMirrorJSON(w, map[string]any{"items": []any{
+				map[string]any{"id": "IA", "snippet": map[string]any{"resourceId": map[string]any{"videoId": "a"}}},
+				map[string]any{"id": "IB", "snippet": map[string]any{"resourceId": map[string]any{"videoId": "b"}}},
+				map[string]any{"id": "IC", "snippet": map[string]any{"resourceId": map[string]any{"videoId": "c"}}},
+			}})
+		case r.Method == http.MethodPost && r.URL.Path == "/playlistItems":
+			var body struct {
+				Snippet struct {
+					Position int `json:"position"`
+					VideoID  string
+					Resource struct {
+						VideoID string `json:"videoId"`
+					} `json:"resourceId"`
+				} `json:"snippet"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode insert: %v", err)
+			}
+			calls = append(calls, fmt.Sprintf("insert:%s@%d", body.Snippet.Resource.VideoID, body.Snippet.Position))
+			writeMirrorJSON(w, map[string]any{"id": "IN"})
+		case r.Method == http.MethodDelete && r.URL.Path == "/playlistItems":
+			calls = append(calls, "delete:"+r.URL.Query().Get("id"))
+			writeMirrorJSON(w, map[string]any{})
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+
+	if err := c.SetPlaylistOrder(context.Background(), "PL1", []string{"c", "a", "b"}); err != nil {
+		t.Fatalf("SetPlaylistOrder: %v", err)
+	}
+	// The video is reinserted at its slot before the old entry goes:
+	// a transient duplicate, never a transient loss (issue #378).
+	want := []string{"insert:c@0", "delete:IC"}
+	if strings.Join(calls, ",") != strings.Join(want, ",") {
+		t.Fatalf("calls = %v, want %v", calls, want)
+	}
+}
+
+func TestYouTubeSetPlaylistOrder_RefusesUntargetableItems(t *testing.T) {
+	c := newYouTubeMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeMirrorJSON(w, map[string]any{"items": []any{
+			map[string]any{"id": "IA", "snippet": map[string]any{"resourceId": map[string]any{"videoId": "a"}}},
+			map[string]any{"id": "IB", "snippet": map[string]any{"resourceId": map[string]any{}}},
+		}})
+	}))
+	err := c.SetPlaylistOrder(context.Background(), "PL1", []string{"b", "a"})
+	if err == nil || !strings.Contains(err.Error(), "cannot be reordered") {
+		t.Fatalf("err = %v, want the refuse (order fidelity never outranks the never-delete rule)", err)
 	}
 }

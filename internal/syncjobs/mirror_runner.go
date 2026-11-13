@@ -217,10 +217,10 @@ func (r *mirrorRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
 		switch p.Kind {
 		case library.MirrorKindPlaylists:
 			s.Mirror.RecordMirrorCopy(library.MirrorKindPlaylists, p.SourceService, p.SourceID,
-				p.TargetService, p.TargetID, name, p.Copied, "")
+				p.TargetService, p.TargetID, name, p.Copied, "", "")
 		case library.MirrorKindTracks:
 			s.Mirror.RecordMirrorCopy(library.MirrorKindTracks, p.SourceService, "",
-				p.TargetService, "", "liked/saved tracks", p.Copied, "")
+				p.TargetService, "", "liked/saved tracks", p.Copied, "", "")
 		}
 	}
 	return r.step(p, true), nil

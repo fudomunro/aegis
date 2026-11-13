@@ -905,7 +905,7 @@ func TestFreshnessEntities_ClassifiesDivergence(t *testing.T) {
 
 	run.Mirror.RecordMirrorItemCopy("contacts", "Ada", "icloud", "ada.vcf", "Ada", "e-old")
 	run.Mirror.RecordMirrorItemCopy("contacts", "Gone", "icloud", "gone.vcf", "Gone", "e-gone")
-	run.Mirror.RecordMirrorCopy("contacts", "google", "", "icloud", "", "contacts", 1, "")
+	run.Mirror.RecordMirrorCopy("contacts", "google", "", "icloud", "", "contacts", 1, "", "")
 
 	engine := NewFreshnessEngine(run, newCheckerRegistry(run))
 	batch, err := engine.RunBatch(context.Background(), "contacts", 0, 50)

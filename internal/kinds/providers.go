@@ -334,6 +334,23 @@ type PlaylistItemWriteProvider interface {
 	PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []Track) (PlacePlaylistItemsResult, error)
 }
 
+// PlaylistOrderProvider is implemented by connectors that can set a
+// playlist's item order (issue #378). Order is fidelity: a canonical
+// playlist reordered on its home is re-ordered on its copies, and a
+// member-side reorder is a non-hub edit the user resolves.
+type PlaylistOrderProvider interface {
+	// SetPlaylistOrder rewrites playlistID's items into exactly the given
+	// sequence of service-local item ids — the ids ListPlaylistItems
+	// reports (Sources[].ID), every current item appearing exactly once.
+	// The write never changes membership: an item the playlist holds is
+	// in it after the call, and no new item appears (member-only items
+	// included). Implementations that must move items reinsert before
+	// they remove — a transient duplicate is recoverable, a transient
+	// loss is not. Return ErrUnauthorized when no valid token is
+	// available.
+	SetPlaylistOrder(ctx context.Context, playlistID string, orderedIDs []string) error
+}
+
 // SaveLikedTracksResult reports a liked/saved placement.
 type SaveLikedTracksResult struct {
 	Copied int `json:"copied"`

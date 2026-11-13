@@ -2,7 +2,9 @@ package kinds
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -21,10 +23,10 @@ func newPlaylistsKind(h Host, e *Engine, d Deps) Kind {
 	k.mark, k.copies = Stamps(h, "playlists", forEachPlaylistSource)
 	def := *BuiltinKindByID("playlists")
 	k.providerKind = providerKind{
-		def:      def,
-		provides: providerProvides[PlaylistProvider],
+		def:          def,
+		provides:     providerProvides[PlaylistProvider],
 		writeCapable: providerProvides[PlaylistItemWriteProvider],
-		converge: playlistsConvergePlan(h),
+		converge:     playlistsConvergePlan(h),
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -205,6 +207,7 @@ func playlistsConvergePlan(h Host) *ConvergePlan {
 				return err
 			},
 		},
+		OrderOps: playlistOrderOps(h),
 	}
 }
 
@@ -241,4 +244,258 @@ func playlistTracksFor(ctx context.Context, h Host, service, playlistID, what st
 		cursor = page.Next
 	}
 	return out, nil
+}
+
+// playlistOrderOps is the playlist shape's order propagation (issue
+// #378): probe the member's sequence against the recorded watermark,
+// rewrite the copy into the canonical order when the member has not
+// moved, and settle an order conflict either way. The write is
+// set-preserving and extras-staying: the canonical items fill the slots
+// they already occupy on the copy, and items the copy holds beyond the
+// canonical home keep their places — reordering never removes or moves
+// anything else.
+func playlistOrderOps(h Host) *OrderOps {
+	return &OrderOps{
+		Propagate: func(ctx context.Context, hub, member, hubID, memberID, recorded string) (OrderProbe, error) {
+			hubTracks, err := playlistTracksFor(ctx, h, hub, hubID, "order source")
+			if err != nil {
+				return OrderProbe{}, err
+			}
+			memberTracks, err := playlistTracksFor(ctx, h, member, memberID, "order target")
+			if err != nil {
+				return OrderProbe{}, err
+			}
+			// The watermark is the canonical items' order as it stands on
+			// the copy: a pure reorder of them diverges it, and a
+			// member-only item moving among them does not (its place is
+			// the member's own, and the items channel owns membership).
+			live := matchedRefIDs(hubTracks, memberTracks, member)
+			probe := OrderProbe{
+				Watermark:      OrderWatermark(live),
+				MemberOrder:    orderLabels(matchedTracks(hubTracks, memberTracks)),
+				CanonicalOrder: orderLabels(hubTracks),
+			}
+			if orderMoved(recorded, probe.Watermark) {
+				// A member-side reorder: left alone for the user's
+				// accept/reject, and the watermark stays on the recorded
+				// baseline so it keeps re-detecting until then.
+				probe.Moved = true
+				probe.Watermark = recorded
+				return probe, nil
+			}
+			dst, err := OpFor[PlaylistOrderProvider](h, member, "order target")
+			if err != nil {
+				// Recognized, not implemented: order reconciliation is
+				// simply off for this member. Nothing to write or stamp.
+				probe.Watermark = recorded
+				return probe, nil
+			}
+			target := orderRefIDs(hubTracks, memberTracks, member)
+			if !equalSeq(target, trackRefIDs(memberTracks, member)) {
+				if err := dst.SetPlaylistOrder(ctx, memberID, target); err != nil {
+					return OrderProbe{}, err
+				}
+			}
+			// Stamp the order this write leaves behind (the canonical
+			// sequence), not the one it read — the next probe compares
+			// the member against what we set.
+			probe.Watermark = OrderWatermark(canonicalRefIDs(hubTracks, memberTracks, member))
+			return probe, nil
+		},
+		Resolve: func(ctx context.Context, hub, member, hubID, memberID string, accept bool) (string, bool, error) {
+			if hubID == "" || memberID == "" {
+				return "", false, nil
+			}
+			hubTracks, err := playlistTracksFor(ctx, h, hub, hubID, "order source")
+			if err != nil {
+				return "", true, err
+			}
+			memberTracks, err := playlistTracksFor(ctx, h, member, memberID, "order target")
+			if err != nil {
+				return "", true, err
+			}
+			if accept {
+				// The member's order becomes canonical: write it onto the
+				// home (the fan-out follows on the next converge). The
+				// member itself is unchanged — its watermark is refreshed
+				// to the order it holds so the next converge does not
+				// re-flag.
+				dst, err := OpFor[PlaylistOrderProvider](h, hub, "order target")
+				if err != nil {
+					return "", true, err
+				}
+				target := orderRefIDs(memberTracks, hubTracks, hub)
+				if !equalSeq(target, trackRefIDs(hubTracks, hub)) {
+					if err := dst.SetPlaylistOrder(ctx, hubID, target); err != nil {
+						return "", true, err
+					}
+				}
+				return OrderWatermark(matchedRefIDs(hubTracks, memberTracks, member)), true, nil
+			}
+			dst, err := OpFor[PlaylistOrderProvider](h, member, "order target")
+			if err != nil {
+				return "", true, err
+			}
+			target := orderRefIDs(hubTracks, memberTracks, member)
+			if !equalSeq(target, trackRefIDs(memberTracks, member)) {
+				if err := dst.SetPlaylistOrder(ctx, memberID, target); err != nil {
+					return "", true, err
+				}
+			}
+			return OrderWatermark(canonicalRefIDs(hubTracks, memberTracks, member)), true, nil
+		},
+	}
+}
+
+// orderMoved reports a member-side reorder: the recorded watermark and
+// the live one carry the same canonical-item set in a different sequence.
+// No baseline (recorded empty) is not a move, and membership drift is the
+// items channel's — only a pure reorder flags here.
+func orderMoved(recorded, live string) bool {
+	if recorded == "" || recorded == live {
+		return false
+	}
+	rSeq, rSet, rOK := strings.Cut(recorded, ".")
+	lSeq, lSet, lOK := strings.Cut(live, ".")
+	return rOK && lOK && rSet != "" && rSet == lSet && rSeq != lSeq
+}
+
+// matchPrimary maps each pool item to the primary index it matches (the
+// identity ladder's greedy match, in pool order), or -1 for a pool-only
+// item.
+func matchPrimary(primary, pool []Track) []int {
+	out := make([]int, len(pool))
+	for i := range out {
+		out[i] = -1
+	}
+	for pi, p := range primary {
+		for i, c := range pool {
+			if out[i] == -1 && TracksMatch(p, c) {
+				out[i] = pi
+				break
+			}
+		}
+	}
+	return out
+}
+
+// matchedRefIDs returns the pool items primary also holds, in pool order
+// — the primary's order as it stands in the pool.
+func matchedRefIDs(primary, pool []Track, poolService string) []string {
+	m := matchPrimary(primary, pool)
+	out := make([]string, 0, len(pool))
+	for i, c := range pool {
+		if m[i] >= 0 {
+			out = append(out, trackRefID(c, poolService))
+		}
+	}
+	return out
+}
+
+// canonicalRefIDs returns the pool items primary also holds, in primary's
+// order — the sequence a slot-fill write leaves behind. When the copy
+// already stands in the canonical order it equals matchedRefIDs.
+func canonicalRefIDs(primary, pool []Track, poolService string) []string {
+	m := matchPrimary(primary, pool)
+	out := make([]string, 0, len(pool))
+	for pi := range primary {
+		for i := range pool {
+			if m[i] == pi {
+				out = append(out, trackRefID(pool[i], poolService))
+				break
+			}
+		}
+	}
+	return out
+}
+
+// matchedTracks returns the pool items primary also holds, in pool order.
+func matchedTracks(primary, pool []Track) []Track {
+	m := matchPrimary(primary, pool)
+	out := make([]Track, 0, len(pool))
+	for i, c := range pool {
+		if m[i] >= 0 {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// trackRefIDs returns each track's service-local id in list order.
+func trackRefIDs(tracks []Track, service string) []string {
+	out := make([]string, 0, len(tracks))
+	for _, t := range tracks {
+		out = append(out, trackRefID(t, service))
+	}
+	return out
+}
+
+// trackRefID reads one track's service-local id for one service.
+func trackRefID(t Track, service string) string {
+	for _, src := range t.Sources {
+		if src.Service == service {
+			return src.ID
+		}
+	}
+	if len(t.Sources) > 0 {
+		return t.Sources[0].ID
+	}
+	return ""
+}
+
+// orderRefIDs sequences pool to primary's order without disturbing the
+// rest: the items primary holds take the slots they already occupy in
+// pool, filled in primary's order, and the pool items primary does not
+// hold keep their places. The result is exactly pool's items, once each —
+// a reorder never changes membership and never moves anything else.
+func orderRefIDs(primary, pool []Track, poolService string) []string {
+	matched := matchPrimary(primary, pool)
+	// The matched pool items in primary's order fill the matched slots.
+	filling := make([]int, 0, len(pool))
+	for pi := range primary {
+		for i := range pool {
+			if matched[i] == pi {
+				filling = append(filling, i)
+				break
+			}
+		}
+	}
+	out := make([]string, len(pool))
+	f := 0
+	for i := range pool {
+		if matched[i] < 0 {
+			out[i] = trackRefID(pool[i], poolService)
+			continue
+		}
+		out[i] = trackRefID(pool[filling[f]], poolService)
+		f++
+	}
+	return out
+}
+
+// equalSeq reports two id sequences are identical.
+func equalSeq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// orderLabels renders a track sequence for the conflict row: names in
+// order, capped so a long playlist stays readable.
+func orderLabels(tracks []Track) string {
+	const cap = 8
+	names := make([]string, 0, len(tracks))
+	for _, t := range tracks {
+		names = append(names, t.Name)
+	}
+	if len(names) > cap {
+		return strings.Join(names[:cap], " | ") + fmt.Sprintf(" | … +%d more", len(names)-cap)
+	}
+	return strings.Join(names, " | ")
 }

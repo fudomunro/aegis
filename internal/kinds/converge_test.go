@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/shared"
@@ -373,4 +374,65 @@ func TestContactsPlan_RecordResolveAcceptFallsBackToName(t *testing.T) {
 	if len(stamps) != 1 || stamps[0].ETag != "live-etag" || stamps[0].EntityName != "Ada" {
 		t.Fatalf("stamps = %+v, want the member's live etag under the subject", stamps)
 	}
+}
+
+// --- order propagation helpers (issue #378) ---
+
+func TestOrderWatermark_DetectsPureReorder(t *testing.T) {
+	base := OrderWatermark([]string{"a", "b", "c"})
+	same := OrderWatermark([]string{"a", "b", "c"})
+	reordered := OrderWatermark([]string{"b", "a", "c"})
+	// Same items, same order: not a move.
+	if orderMoved(base, same) {
+		t.Fatal("an identical sequence must not read as a move")
+	}
+	// Same items, different order: a member-side reorder.
+	if !orderMoved(base, reordered) {
+		t.Fatal("a pure reorder must read as a move")
+	}
+	// Membership drift is the items channel's, never an order conflict.
+	added := OrderWatermark([]string{"a", "b", "c", "d"})
+	if orderMoved(base, added) {
+		t.Fatal("a membership change must not read as an order move")
+	}
+	removed := OrderWatermark([]string{"a", "b"})
+	if orderMoved(base, removed) {
+		t.Fatal("a shortfall must not read as an order move")
+	}
+	// No baseline is not a move.
+	if orderMoved("", reordered) {
+		t.Fatal("an empty baseline must not read as a move")
+	}
+}
+
+func TestOrderRefIDs_FillsSlotsAndKeepsExtras(t *testing.T) {
+	hub := []Track{stubOrderTrack("c", "C"), stubOrderTrack("a", "A"), stubOrderTrack("b", "B")}
+	// The member holds the canonical items in its own slots with a
+	// member-only item between them.
+	member := []Track{
+		stubOrderTrack("a", "A"), stubOrderTrack("x", "Solo"),
+		stubOrderTrack("c", "C"), stubOrderTrack("b", "B"),
+	}
+	// The canonical order C,A,B lands in the slots the canonical items
+	// already occupy; Solo keeps its place (issue #378: a reorder never
+	// moves anything else).
+	got := orderRefIDs(hub, member, "icloud")
+	want := []string{"c", "x", "a", "b"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("orderRefIDs = %v, want %v", got, want)
+	}
+	// What stands on the member vs what a write leaves behind.
+	stands := matchedRefIDs(hub, member, "icloud")
+	if strings.Join(stands, ",") != "a,c,b" {
+		t.Fatalf("matchedRefIDs = %v, want the member's order a,c,b", stands)
+	}
+	written := canonicalRefIDs(hub, member, "icloud")
+	if strings.Join(written, ",") != "c,a,b" {
+		t.Fatalf("canonicalRefIDs = %v, want the canonical order c,a,b", written)
+	}
+}
+
+// stubOrderTrack builds a track with a service-local ref id.
+func stubOrderTrack(id, name string) Track {
+	return Track{Name: name, Sources: []TrackSource{{Service: "icloud", ID: id}}}
 }

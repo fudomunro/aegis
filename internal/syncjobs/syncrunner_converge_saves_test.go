@@ -115,7 +115,7 @@ func TestResolveAlbumsItemsAcceptAdoptsAndRejectKeepsLocal(t *testing.T) {
 	member.seedAlbums("A", "B", "X")
 	run, _, _ := albumsGroup(t, hub, member)
 	run.Mirror.RecordMirrorCopy(library.MirrorKindAlbums, "google-music", "",
-		"icloud", "", "saved albums", 3, "")
+		"icloud", "", "saved albums", 3, "", "")
 	rec := openConflict(t, run, SyncConflict{
 		Kind: "albums", Service: "icloud",
 		EntityKey: library.MirrorEntityKey(library.MirrorKindAlbums, "google-music", ""),
@@ -247,7 +247,7 @@ func TestResolveArtistsItemsAcceptAdoptsAndRejectKeepsLocal(t *testing.T) {
 	member.seedArtists("A", "B", "X")
 	run, _, _ := artistsGroup(t, hub, member)
 	run.Mirror.RecordMirrorCopy(library.MirrorKindArtists, "google-music", "",
-		"icloud", "", "followed artists", 3, "")
+		"icloud", "", "followed artists", 3, "", "")
 	rec := openConflict(t, run, SyncConflict{
 		Kind: "artists", Service: "icloud",
 		EntityKey: library.MirrorEntityKey(library.MirrorKindArtists, "google-music", ""),
