@@ -247,6 +247,18 @@ func placeEventRef(ev kinds.CalendarEvent, serviceID string) (id, etag string) {
 	return id, etag
 }
 
+// placeEventCalendar returns the service-local calendar id an event carries
+// for this service ("": use the service default calendar). A cross-service
+// copy must never be placed under the source service's calendar id.
+func placeEventCalendar(ev kinds.CalendarEvent, serviceID string) string {
+	for _, src := range ev.Sources {
+		if src.Service == serviceID {
+			return src.CalendarID
+		}
+	}
+	return ""
+}
+
 // placeEventUID returns the cross-source event identity: any source's uid
 // or iCal uid, else the catalog EntityID, else the first source's local id.
 func placeEventUID(ev kinds.CalendarEvent) string {

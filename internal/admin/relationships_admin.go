@@ -29,8 +29,9 @@ func (h *Handlers) HandleAdminServiceSync(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var req struct {
-		Kind      string `json:"kind"`
-		Canonical bool   `json:"canonical"`
+		Kind       string `json:"kind"`
+		Canonical  bool   `json:"canonical"`
+		Projection string `json:"projection"`
 	}
 	if len(body) > 0 {
 		if err := json.Unmarshal(body, &req); err != nil {
@@ -42,7 +43,7 @@ func (h *Handlers) HandleAdminServiceSync(w http.ResponseWriter, r *http.Request
 		shared.WriteJSONError(w, http.StatusBadRequest, "kind is required")
 		return
 	}
-	rel := shared.SyncRelationship{Kind: req.Kind, Canonical: req.Canonical}
+	rel := shared.SyncRelationship{Kind: req.Kind, Canonical: req.Canonical, Projection: req.Projection}
 	if err := h.Host.SetSyncRelationship(id, rel); err != nil {
 		h.Host.Logger(r, "admin_service_sync").
 			Warn("failed to update sync relationship", "service", id, "kind", req.Kind, "error", err)

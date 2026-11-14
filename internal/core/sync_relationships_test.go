@@ -39,6 +39,17 @@ func (*contactsWriteStub) PlaceContacts(context.Context, []kinds.Contact) (kinds
 	return kinds.PlaceEntitiesResult{}, nil
 }
 
+// eventsWriteStub provides calendar events and receives event writes.
+type eventsWriteStub struct{ syncStub }
+
+func (*eventsWriteStub) ListCalendarEvents(context.Context) ([]kinds.CalendarEvent, bool, error) {
+	return nil, false, nil
+}
+
+func (*eventsWriteStub) PlaceEvents(context.Context, []kinds.CalendarEvent) (kinds.PlaceEntitiesResult, error) {
+	return kinds.PlaceEntitiesResult{}, nil
+}
+
 // photosStub provides photos — a kind outside the sync participant set.
 type photosStub struct{ syncStub }
 
@@ -298,5 +309,68 @@ func TestAdminHTML_ShowsSyncRelationships(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing %q", want)
 		}
+	}
+}
+
+func TestSetSyncRelationship_ProjectionPersistsAndViews(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "service_connections.json")
+	cfg := &Config{Services: []Service{
+		{ID: "microsoft-calendar", Name: "Microsoft Calendar", Action: "inject", Endpoint: "https://graph.example.com"},
+		{ID: "google-calendar", Name: "Google Calendar", Action: "inject", Endpoint: "https://cal.example.com"},
+	}}
+	srv := syncTestServer(t, cfg, map[string]connectors.ServiceConnector{
+		"microsoft-calendar": &eventsWriteStub{},
+		"google-calendar":    &eventsWriteStub{},
+	})
+	cfg.svcConnPath = path
+	srv.EstablishSyncRelationships()
+
+	// Google is the hub; Microsoft is a member that receives busy blocks only.
+	if err := cfg.SetSyncRelationship("google-calendar", shared.SyncRelationship{Kind: "events", Canonical: true}); err != nil {
+		t.Fatalf("set hub: %v", err)
+	}
+	if err := cfg.SetSyncRelationship("microsoft-calendar", shared.SyncRelationship{
+		Kind: "events", Projection: shared.SyncProjectionFreeBusy,
+	}); err != nil {
+		t.Fatalf("set projection: %v", err)
+	}
+
+	svc := cfg.GetService("microsoft-calendar")
+	if svc == nil || svc.SyncProjections["events"] != shared.SyncProjectionFreeBusy {
+		t.Fatalf("in-memory projections = %+v", svc)
+	}
+	// The kinds-layer view carries the projection (issue #145).
+	if got := serviceViewOf(*svc).SyncProjection("events"); got != shared.SyncProjectionFreeBusy {
+		t.Fatalf("ServiceView projection = %q", got)
+	}
+	// Unknown projection values fall back to a full copy.
+	if err := cfg.SetSyncRelationship("microsoft-calendar", shared.SyncRelationship{Kind: "events", Projection: "nonsense"}); err != nil {
+		t.Fatalf("set nonsense: %v", err)
+	}
+	if got := cfg.GetService("microsoft-calendar").SyncProjections["events"]; got != "" {
+		t.Fatalf("nonsense projection should clear, got %q", got)
+	}
+	// Re-apply and reload the overlay onto a fresh config.
+	if err := cfg.SetSyncRelationship("microsoft-calendar", shared.SyncRelationship{
+		Kind: "events", Projection: shared.SyncProjectionFreeBusy,
+	}); err != nil {
+		t.Fatalf("re-set projection: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read overlay: %v", err)
+	}
+	if !strings.Contains(string(raw), `"projection"`) || !strings.Contains(string(raw), "freebusy") {
+		t.Fatalf("overlay must persist the projection: %s", raw)
+	}
+	cfg2 := &Config{Services: []Service{
+		{ID: "microsoft-calendar", Name: "Microsoft Calendar", Action: "inject", Endpoint: "https://graph.example.com"},
+	}}
+	cfg2.svcConnPath = path
+	if err := cfg2.InitServiceConnectionsStore(path, nil); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := cfg2.GetService("microsoft-calendar").SyncProjections["events"]; got != shared.SyncProjectionFreeBusy {
+		t.Fatalf("projection must survive reload, got %q", got)
 	}
 }

@@ -64,15 +64,18 @@ func (c *GoogleContactsConnector) PlaceContacts(ctx context.Context, contacts []
 }
 
 // PlaceEvents implements kinds.CalendarEventWriteProvider over Google
-// Calendar.
+// Calendar. Events are placed on the Google calendar the event already
+// carries for this service, else the primary calendar — a foreign service's
+// calendar id is never trusted here.
 func (c *GoogleCalendarConnector) PlaceEvents(ctx context.Context, events []kinds.CalendarEvent) (kinds.PlaceEntitiesResult, error) {
 	var result kinds.PlaceEntitiesResult
 	for _, ev := range events {
 		name := ev.Title
 		id, etag := placeEventRef(ev, GoogleCalendarServiceID)
+		calID := placeEventCalendar(ev, GoogleCalendarServiceID)
 
 		if id != "" {
-			newETag, err := c.UpdateGoogleEvent(ctx, ev.CalendarID, id, etag, ev)
+			newETag, err := c.UpdateGoogleEvent(ctx, calID, id, etag, ev)
 			if err == ErrConflict {
 				result.Conflicts = append(result.Conflicts, kinds.PlaceConflict{
 					Name: name, Service: GoogleCalendarServiceID, ID: id,
@@ -90,7 +93,7 @@ func (c *GoogleCalendarConnector) PlaceEvents(ctx context.Context, events []kind
 			continue
 		}
 
-		createdID, _, createdETag, err := c.CreateGoogleEvent(ctx, ev.CalendarID, ev)
+		createdID, _, createdETag, err := c.CreateGoogleEvent(ctx, calID, ev)
 		if err == ErrConflict {
 			result.Conflicts = append(result.Conflicts, kinds.PlaceConflict{
 				Name: name, Service: GoogleCalendarServiceID,

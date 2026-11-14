@@ -84,6 +84,10 @@ type Connection struct {
 	TokenURL     string `json:"token_url"`
 	// Scopes is the union requested at login for this connection.
 	Scopes []string `json:"scopes,omitempty"`
+	// PKCE enables OAuth 2.0 PKCE (RFC 7636, S256) for this connection
+	// (issue #145): a code verifier/challenge pair rides the authorize
+	// request and the verifier is required at token exchange.
+	PKCE bool `json:"pkce,omitempty"`
 }
 
 // Service represents a named external service (e.g. Spotify, YouTube Music)
@@ -117,6 +121,10 @@ type Service struct {
 	// (issue #365): kind -> hub flag. Stored on the service-connections
 	// overlay entry; not part of aegis.json.
 	SyncRelationships map[string]bool `json:"-"`
+	// SyncProjections is the in-memory view of the copy projections this
+	// source declares (issue #145): kind -> projection. Stored on the
+	// service-connections overlay entry; not part of aegis.json.
+	SyncProjections map[string]string `json:"-"`
 }
 
 // OAuthConfig holds the OAuth2 credentials and endpoints for a service.
@@ -272,6 +280,12 @@ func (s Service) clone() Service {
 		cp.SyncRelationships = make(map[string]bool, len(s.SyncRelationships))
 		for k, v := range s.SyncRelationships {
 			cp.SyncRelationships[k] = v
+		}
+	}
+	if s.SyncProjections != nil {
+		cp.SyncProjections = make(map[string]string, len(s.SyncProjections))
+		for k, v := range s.SyncProjections {
+			cp.SyncProjections[k] = v
 		}
 	}
 	return cp

@@ -50,12 +50,13 @@ func (s *Server) Services() []kinds.ServiceView {
 
 func serviceViewOf(svc Service) kinds.ServiceView {
 	return kinds.ServiceView{
-		ID:           svc.ID,
-		Name:         svc.Name,
-		Action:       svc.Action,
-		Description:  svc.Description,
-		Dataset:      svc.Dataset,
-		CanonicalFor: svc.CanonicalFor,
+		ID:              svc.ID,
+		Name:            svc.Name,
+		Action:          svc.Action,
+		Description:     svc.Description,
+		Dataset:         svc.Dataset,
+		CanonicalFor:    svc.CanonicalFor,
+		SyncProjections: svc.SyncProjections,
 	}
 }
 

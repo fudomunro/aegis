@@ -80,10 +80,23 @@ func contactsConvergePlan(h Host, kind string) *ConvergePlan {
 	return &ConvergePlan{
 		Shape:   ConvergeEntities,
 		RowName: kind,
-		ReadSource: func(ctx context.Context, hub, _, _ string, _ int) (SourcePage, error) {
+		// The change feed is the incremental read (issue #145): the
+		// engine seeds the cursor from the collection row's watermark.
+		DeltaSource: true,
+		ReadSource: func(ctx context.Context, hub, _, cursor string, _ int) (SourcePage, error) {
 			src, err := OpFor[ContactProvider](h, hub, "converge source")
 			if err != nil {
 				return SourcePage{}, err
+			}
+			if dp, ok := src.(ContactDeltaProvider); ok {
+				contacts, next, _, err := dp.ListUserContactsDelta(ctx, cursor)
+				if err != nil {
+					return SourcePage{}, err
+				}
+				// A change feed is a partial view: the extras check stays
+				// with the freshness pass, and the unknown full count is
+				// recorded as 0 so count comparisons skip it.
+				return SourcePage{Items: batchOf(contacts), SourceMark: next, Truncated: true}, nil
 			}
 			contacts, truncated, err := src.ListUserContacts(ctx)
 			if err != nil {
@@ -208,6 +221,24 @@ func contactsConvergePlan(h Host, kind string) *ConvergePlan {
 				return nil, true, err
 			}
 			return itemStampsFrom(res.Placed, member), true, nil
+		},
+		Classify: func(ctx context.Context, member string, items Batch) (DryRunReport, error) {
+			live, err := contactListFor(ctx, h, member, "dry-run source")
+			if err != nil {
+				return DryRunReport{}, err
+			}
+			contacts := batchItems[Contact](items)
+			want := make([][2]string, len(contacts))
+			for i, ct := range contacts {
+				want[i] = [2]string{contactRefID(ct, member), contactRefETag(ct, member)}
+			}
+			held := make([][2]string, 0, len(live))
+			for _, ct := range live {
+				if id := contactRefID(ct, member); id != "" {
+					held = append(held, [2]string{id, contactRefETag(ct, member)})
+				}
+			}
+			return ClassifyEntityRefs(want, held), nil
 		},
 	}
 }

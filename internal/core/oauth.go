@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -44,9 +46,21 @@ func (s *Server) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// PKCE (RFC 7636): the verifier is bound to this state and required at
+	// token exchange (issue #145).
+	codeVerifier := ""
+	if conn.PKCE {
+		codeVerifier, err = generateCodeVerifier()
+		if err != nil {
+			slog.Error("failed to generate code verifier", "error", err)
+			shared.WriteJSONError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+	}
+
 	// Store state temporarily for validation on callback. Key stays the
 	// service id so existing per-surface callback URIs remain valid.
-	s.oauthStates.Set(serviceID+":"+state, true, 10*time.Minute)
+	s.oauthStates.Set(serviceID+":"+state, codeVerifier, 10*time.Minute)
 
 	callbackURL := fmt.Sprintf("%s/v1/auth/%s/callback", strings.TrimRight(s.baseURLFor(r), "/"), serviceID)
 	scopes := s.config.loginScopes(connectionID)
@@ -57,6 +71,10 @@ func (s *Server) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		"redirect_uri":  {callbackURL},
 		"scope":         {strings.Join(scopes, " ")},
 		"state":         {state},
+	}
+	if codeVerifier != "" {
+		params.Set("code_challenge", codeChallengeS256(codeVerifier))
+		params.Set("code_challenge_method", "S256")
 	}
 	// Google: offline access + keep previously granted scopes so adding a
 	// surface later does not drop the others. Only force consent when we
@@ -97,7 +115,8 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stateKey := serviceID + ":" + state
-	if !s.oauthStates.Delete(stateKey) {
+	codeVerifier, ok := s.oauthStates.Delete(stateKey)
+	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest, "invalid or expired state parameter")
 		return
 	}
@@ -116,7 +135,7 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	callbackURL := fmt.Sprintf("%s/v1/auth/%s/callback", strings.TrimRight(s.baseURLFor(r), "/"), serviceID)
 
-	tok, err := s.exchangeCode(conn.toOAuth(), code, callbackURL)
+	tok, err := s.exchangeCode(conn.toOAuth(), code, callbackURL, codeVerifier)
 	if err != nil {
 		slog.Error("token exchange failed", "service", serviceID, "connection", connectionID, "error", err)
 		shared.WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("token exchange failed: %v", err))
@@ -199,14 +218,18 @@ func (s *Server) HandleAuthRevoke(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "service": serviceID, "connection": connectionID})
 }
 
-// exchangeCode exchanges an authorization code for tokens.
-func (s *Server) exchangeCode(oauth *OAuthConfig, code, redirectURI string) (*tokens.OAuthToken, error) {
+// exchangeCode exchanges an authorization code for tokens. codeVerifier is
+// sent when the login used PKCE (issue #145); empty otherwise.
+func (s *Server) exchangeCode(oauth *OAuthConfig, code, redirectURI, codeVerifier string) (*tokens.OAuthToken, error) {
 	data := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"redirect_uri":  {redirectURI},
 		"client_id":     {oauth.ClientID},
 		"client_secret": {oauth.ClientSecret},
+	}
+	if codeVerifier != "" {
+		data.Set("code_verifier", codeVerifier)
 	}
 
 	return s.tokenRequest(oauth.TokenURL, data)
@@ -265,6 +288,11 @@ func (s *Server) refreshTokenOnce(connectionID string) (*tokens.OAuthToken, erro
 
 // tokenRequest performs the HTTP POST to a token endpoint and parses the response.
 func (s *Server) tokenRequest(tokenURL string, data url.Values) (*tokens.OAuthToken, error) {
+	// Public clients (PKCE without a secret) must not send an empty
+	// client_secret — some providers reject it.
+	if data.Get("client_secret") == "" {
+		data.Del("client_secret")
+	}
 	req, err := http.NewRequestWithContext(
 		context.Background(),
 		http.MethodPost,
@@ -322,4 +350,19 @@ func generateState() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// generateCodeVerifier returns a PKCE code verifier (RFC 7636 §4.1).
+func generateCodeVerifier() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// codeChallengeS256 derives the PKCE S256 code challenge for a verifier.
+func codeChallengeS256(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
 }

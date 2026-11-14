@@ -390,3 +390,143 @@ func TestNewConvergeRunners_Register(t *testing.T) {
 		t.Fatalf("unwired run registered %d runners, want 0", len(got))
 	}
 }
+
+func TestConvergeRunner_DryRunClassifiesWithoutWriting(t *testing.T) {
+	ada := kinds.Contact{Name: "Ada", Emails: []string{"ada@example.com"}}
+	bob := kinds.Contact{Name: "Bob", Emails: []string{"bob@example.com"}}
+	carol := kinds.Contact{Name: "Carol", Emails: []string{"carol@example.com"}}
+	withRef := func(c kinds.Contact, id, etag string) kinds.Contact {
+		c.Sources = []kinds.ContactSource{{
+			Service: "icloud", ServiceName: "icloud", ID: id,
+			Extra: map[string]any{"etag": etag},
+		}}
+		return c
+	}
+	hub := &entityStubConn{contacts: []kinds.Contact{ada, bob, carol}}
+	// The member holds Ada's copy unchanged and Bob's copy edited (etag drift).
+	member := &entityStubConn{contacts: []kinds.Contact{
+		withRef(ada, "id-ada", "e1"),
+		withRef(bob, "id-bob", "e2"),
+	}}
+	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": member}
+	run, store, w := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"}, conns)
+
+	// What the last real run placed: Ada unchanged (e1), Bob recorded at e1
+	// but live at e2 — a would-be If-Match refusal.
+	run.Mirror.RecordMirrorItemCopy("contacts", kinds.ContactItemKey(ada), "icloud", "id-ada", "Ada", "e1")
+	run.Mirror.RecordMirrorItemCopy("contacts", kinds.ContactItemKey(bob), "icloud", "id-bob", "Bob", "e1")
+
+	mustEnqueue(t, store, SyncEnqueue{
+		Kind: "contacts", JobType: SyncJobTypeConverge,
+		Payload: map[string]any{"dry_run": true},
+	})
+	for i := 0; i < 3 && w.RunOnce(context.Background(), "w"); i++ {
+	}
+	job := store.List(SyncFilter{})[0]
+	if job.State != SyncJobSucceeded {
+		t.Fatalf("job state = %s, want succeeded (progress %s)", job.State, job.Progress)
+	}
+	if member.placeCalls != 0 {
+		t.Fatalf("dry run must not write: calls=%d placed=%v", member.placeCalls, member.lastPlaced)
+	}
+	if hub.placeCalls != 0 {
+		t.Fatalf("dry run must not adopt: hub calls=%d", hub.placeCalls)
+	}
+	// The member's holdings are untouched.
+	if got := member.heldContacts(); len(got) != 2 {
+		t.Fatalf("member holds %v, want unchanged 2", got)
+	}
+	prog := jobProgress(t, job)
+	if prog["dry_run"] != true {
+		t.Fatalf("progress = %v, want dry_run=true", prog)
+	}
+	if progressInt(prog["matched"]) != 1 || progressInt(prog["created"]) != 1 || progressInt(prog["would_conflict"]) != 1 {
+		t.Fatalf("progress = %v, want matched=1 created=1 would_conflict=1", prog)
+	}
+	if progressInt(prog["planned"]) != 3 {
+		t.Fatalf("planned = %v, want 3", prog["planned"])
+	}
+}
+
+func TestConvergeRunner_DryRunRejectedWithoutClassify(t *testing.T) {
+	// Playlist shapes have no Classify hook: a dry-run job is terminal.
+	hub := &playlistStubConn{svc: "spotify"}
+	member := &playlistStubConn{svc: "icloud"}
+	conns := map[string]connectors.ServiceConnector{"spotify": hub, "icloud": member}
+	_, store, w := convergeTestRunners(t, "playlists", "spotify", []string{"spotify", "icloud"}, conns)
+
+	mustEnqueue(t, store, SyncEnqueue{
+		Kind: "playlists", JobType: SyncJobTypeConverge,
+		Payload: map[string]any{"dry_run": true},
+	})
+	for i := 0; i < 3 && w.RunOnce(context.Background(), "w"); i++ {
+	}
+	job := store.List(SyncFilter{})[0]
+	if job.State != SyncJobFailed {
+		t.Fatalf("job state = %s, want failed for a shape without Classify", job.State)
+	}
+}
+
+// deltaContactsStub is a contacts hub whose read is a change feed (issue
+// #145): ListUserContactsDelta replays a scripted feed keyed by token and
+// records which tokens were requested.
+type deltaContactsStub struct {
+	*entityStubConn
+	feed  map[string]deltaPage
+	calls []string
+}
+
+type deltaPage struct {
+	contacts []kinds.Contact
+	next     string
+}
+
+func (d *deltaContactsStub) ListUserContactsDelta(_ context.Context, token string) ([]kinds.Contact, string, bool, error) {
+	d.calls = append(d.calls, token)
+	page := d.feed[token]
+	return page.contacts, page.next, false, nil
+}
+
+func TestConvergeRunner_DeltaTokenRoundTripsThroughCopyLedger(t *testing.T) {
+	ada := kinds.Contact{Name: "Ada", Emails: []string{"ada@example.com"}}
+	bob := kinds.Contact{Name: "Bob", Emails: []string{"bob@example.com"}}
+	carol := kinds.Contact{Name: "Carol", Emails: []string{"carol@example.com"}}
+	hub := &deltaContactsStub{
+		entityStubConn: &entityStubConn{},
+		feed: map[string]deltaPage{
+			"":   {contacts: []kinds.Contact{ada, bob}, next: "t1"},
+			"t1": {contacts: []kinds.Contact{carol}, next: "t2"},
+		},
+	}
+	member := &entityStubConn{}
+	conns := map[string]connectors.ServiceConnector{"google": hub, "icloud": member}
+	run, store, w := convergeTestRunners(t, "contacts", "google", []string{"google", "icloud"}, conns)
+
+	// First run: the feed starts fresh (no watermark yet) and records t1.
+	convergeJob(t, store, "contacts")
+	for i := 0; i < 3 && w.RunOnce(context.Background(), "w"); i++ {
+	}
+	if got := member.heldContacts(); len(got) != 2 {
+		t.Fatalf("first run member holds %v, want Ada and Bob", got)
+	}
+	if len(hub.calls) != 1 || hub.calls[0] != "" {
+		t.Fatalf("first run delta calls = %v, want one fresh read", hub.calls)
+	}
+	if wm := run.collectionWatermark("contacts", "google", "icloud"); wm != "t1" {
+		t.Fatalf("watermark after first run = %q, want t1", wm)
+	}
+
+	// Second run: resumes from the recorded token and advances to t2.
+	convergeJob(t, store, "contacts")
+	for i := 0; i < 3 && w.RunOnce(context.Background(), "w"); i++ {
+	}
+	if got := member.heldContacts(); len(got) != 3 {
+		t.Fatalf("second run member holds %v, want 3", got)
+	}
+	if len(hub.calls) != 2 || hub.calls[1] != "t1" {
+		t.Fatalf("delta calls = %v, want ['' 't1']", hub.calls)
+	}
+	if wm := run.collectionWatermark("contacts", "google", "icloud"); wm != "t2" {
+		t.Fatalf("watermark after second run = %q, want t2", wm)
+	}
+}
