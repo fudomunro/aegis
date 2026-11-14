@@ -126,6 +126,12 @@ variable and reload (or restart) before connecting. Command substitution
 - Google logins send `access_type=offline` and `include_granted_scopes=true`,
  and only force `prompt=consent` when no refresh token exists yet — so adding
  Photos later does not drop YouTube access.
+- `"pkce": true` on a connection enables OAuth 2.0 PKCE (RFC 7636, S256) —
+ a code verifier rides the login state and is required at token exchange.
+ The `microsoft` connection uses it (Microsoft identity platform); an empty
+ `client_secret` is then omitted from token requests, so a public client
+ works. `offline_access` is just a scope in the connection’s union (the
+ Microsoft equivalent of Google’s `access_type=offline`).
 - A connection token missing a surface’s `oauth_scopes` makes that surface
  report library status `unauthorized` (or proxy 401) without failing the
  whole connection.
@@ -420,9 +426,29 @@ Job types today:
 | `ingest` | Live cursor paging into the mail archive (Gmail) |
 | `import_snapshot` | Snapshot import of a read-only export (Google Takeout) |
 | `freshness_check` | Observational copy-freshness pass (see below) |
-| `converge` | Fans a kind's data from its canonical home out to the group's other write-capable members, one member (or one item page) per step |
+| `converge` | Fans a kind's data from its canonical home out to the group's other write-capable members, one member (or one item page) per step. The kinds today: playlists, tracks, albums, artists, contacts, and events |
 | `mirror` | Copies a playlist or liked-tracks list from one service to another, one source page per step |
 | `repair` | Re-places a copy that freshness marked stale or missing |
+
+Converge covers the entity kinds as well as music: **events** and
+**contacts** copy between their sync-group members — for example a
+Microsoft 365 work calendar alongside a Google Calendar home (see
+[`docs/connect/microsoft-calendar.md`](connect/microsoft-calendar.md)). Two
+placement options shape those copies:
+
+- A member's sync relationship may declare the **free/busy projection**
+ (`POST /v1/admin/services/{id}/sync` with `"projection": "freebusy"`):
+ event copies placed on that member are busy blocks only — times, no title,
+ description, attendees, or location. Cross-service identity (iCal UID) is
+ preserved so re-runs match instead of duplicating.
+- A converge job with `payload: {"dry_run": true}` classifies without
+ writing: the job progress reports `matched`, `created`, and
+ `would_conflict` and no copy rows, placements, or conflict records land.
+
+Incremental reads use the provider's change feed where one exists (Graph
+`/delta`): the resume token is recorded as the collection copy row's
+**watermark**, so each source+member pair resumes where it left off instead
+of re-reading the whole collection.
 
 Enqueue is idempotent on `(kind, job_type, service, entity_key)`, so a
 repeated request does not stack duplicate work. `POST /v1/admin/mail/sync`

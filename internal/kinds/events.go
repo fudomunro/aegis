@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // eventsKind owns the calendar-events aggregate and its freebusy view
@@ -157,13 +159,39 @@ func forEachCalendarEventSource(item *CalendarEvent, f func(SourceMut)) {
 // etag-entity shape, same as contacts — whole-collection placement with
 // If-Match refs and record-conflict resolution across hub and member.
 func eventsConvergePlan(h Host, kind string) *ConvergePlan {
+	// placeOn places events on one target, applying that target's copy
+	// projection first (issue #145): a member that declares the freebusy
+	// projection receives busy blocks only.
+	placeOn := func(ctx context.Context, service, what string, events []CalendarEvent) (PlaceEntitiesResult, error) {
+		dst, err := OpFor[CalendarEventWriteProvider](h, service, what)
+		if err != nil {
+			return PlaceEntitiesResult{}, err
+		}
+		if v, ok := h.Service(service); ok && v.SyncProjection(kind) == shared.SyncProjectionFreeBusy {
+			events = ProjectCalendarEventsFreeBusy(events)
+		}
+		return dst.PlaceEvents(ctx, events)
+	}
 	return &ConvergePlan{
 		Shape:   ConvergeEntities,
 		RowName: kind,
-		ReadSource: func(ctx context.Context, hub, _, _ string, _ int) (SourcePage, error) {
+		// The change feed is the incremental read (issue #145): the
+		// engine seeds the cursor from the collection row's watermark.
+		DeltaSource: true,
+		ReadSource: func(ctx context.Context, hub, _, cursor string, _ int) (SourcePage, error) {
 			src, err := OpFor[CalendarEventProvider](h, hub, "converge source")
 			if err != nil {
 				return SourcePage{}, err
+			}
+			if dp, ok := src.(CalendarEventDeltaProvider); ok {
+				events, next, _, err := dp.ListCalendarEventsDelta(ctx, cursor)
+				if err != nil {
+					return SourcePage{}, err
+				}
+				// A change feed is a partial view: the extras check stays
+				// with the freshness pass, and the unknown full count is
+				// recorded as 0 so count comparisons skip it.
+				return SourcePage{Items: batchOf(events), SourceMark: next, Truncated: true}, nil
 			}
 			events, truncated, err := src.ListCalendarEvents(ctx)
 			if err != nil {
@@ -185,11 +213,7 @@ func eventsConvergePlan(h Host, kind string) *ConvergePlan {
 			return batchOf(out)
 		},
 		Place: func(ctx context.Context, service, _, _ string, items Batch) (PlaceResult, error) {
-			dst, err := OpFor[CalendarEventWriteProvider](h, service, "converge target")
-			if err != nil {
-				return PlaceResult{}, err
-			}
-			res, err := dst.PlaceEvents(ctx, batchItems[CalendarEvent](items))
+			res, err := placeOn(ctx, service, "converge target", batchItems[CalendarEvent](items))
 			if err != nil {
 				return PlaceResult{}, err
 			}
@@ -220,11 +244,7 @@ func eventsConvergePlan(h Host, kind string) *ConvergePlan {
 				}
 			}
 			adopt := func(ctx context.Context) error {
-				dst, err := OpFor[CalendarEventWriteProvider](h, hub, "conflict target")
-				if err != nil {
-					return err
-				}
-				_, err = dst.PlaceEvents(ctx, extras)
+				_, err := placeOn(ctx, hub, "conflict target", extras)
 				return err
 			}
 			return len(extras), adopt, nil
@@ -247,10 +267,6 @@ func eventsConvergePlan(h Host, kind string) *ConvergePlan {
 				hubEV = findEventByName(hubList, subject)
 			}
 			if accept {
-				dst, err := OpFor[CalendarEventWriteProvider](h, hub, "conflict target")
-				if err != nil {
-					return nil, true, err
-				}
 				merged := memberEV
 				merged.Sources = upsertEventRef(memberEV.Sources, hub,
 					eventRefID(hubEV, hub), eventRefETag(hubEV, hub))
@@ -260,7 +276,7 @@ func eventsConvergePlan(h Host, kind string) *ConvergePlan {
 				if uid := EventICalUID(hubEV); uid != "" && EventICalUID(merged) == "" {
 					merged.EntityID = uid
 				}
-				if _, err := dst.PlaceEvents(ctx, []CalendarEvent{merged}); err != nil {
+				if _, err := placeOn(ctx, hub, "conflict target", []CalendarEvent{merged}); err != nil {
 					return nil, true, err
 				}
 				return []ItemStamp{{
@@ -271,17 +287,31 @@ func eventsConvergePlan(h Host, kind string) *ConvergePlan {
 					ETag:       eventRefETag(memberEV, member),
 				}}, true, nil
 			}
-			dst, err := OpFor[CalendarEventWriteProvider](h, member, "conflict target")
-			if err != nil {
-				return nil, true, err
-			}
 			merged := hubEV
 			merged.Sources = upsertEventRef(hubEV.Sources, member, memberID, eventRefETag(memberEV, member))
-			res, err := dst.PlaceEvents(ctx, []CalendarEvent{merged})
+			res, err := placeOn(ctx, member, "conflict target", []CalendarEvent{merged})
 			if err != nil {
 				return nil, true, err
 			}
 			return itemStampsFrom(res.Placed, member), true, nil
+		},
+		Classify: func(ctx context.Context, member string, items Batch) (DryRunReport, error) {
+			live, err := eventListFor(ctx, h, member, "dry-run source")
+			if err != nil {
+				return DryRunReport{}, err
+			}
+			events := batchItems[CalendarEvent](items)
+			want := make([][2]string, len(events))
+			for i, ev := range events {
+				want[i] = [2]string{eventRefID(ev, member), eventRefETag(ev, member)}
+			}
+			held := make([][2]string, 0, len(live))
+			for _, ev := range live {
+				if id := eventRefID(ev, member); id != "" {
+					held = append(held, [2]string{id, eventRefETag(ev, member)})
+				}
+			}
+			return ClassifyEntityRefs(want, held), nil
 		},
 	}
 }

@@ -189,6 +189,35 @@ func RedactCalendarEventsFreeBusy(events []CalendarEvent) []CalendarEvent {
 	return out
 }
 
+// ProjectCalendarEventFreeBusy is the events copy projection (issue #145):
+// a copy placed on a freebusy-projected member carries only busy time —
+// no title, description, attendees, organizer, or location. Cross-service
+// identity (EntityID, source refs and etags) is preserved so re-runs match
+// and update instead of duplicating.
+func ProjectCalendarEventFreeBusy(e CalendarEvent) CalendarEvent {
+	return CalendarEvent{
+		StartAt:  e.StartAt,
+		EndAt:    e.EndAt,
+		AllDay:   e.AllDay,
+		Status:   e.Status,
+		EntityID: e.EntityID,
+		Match:    e.Match,
+		Sources:  e.Sources,
+	}
+}
+
+// ProjectCalendarEventsFreeBusy projects a placement batch (issue #145).
+func ProjectCalendarEventsFreeBusy(events []CalendarEvent) []CalendarEvent {
+	if len(events) == 0 {
+		return events
+	}
+	out := make([]CalendarEvent, len(events))
+	for i, e := range events {
+		out[i] = ProjectCalendarEventFreeBusy(e)
+	}
+	return out
+}
+
 // NormalizeContactEmail lowercases and trims an address for identity matching.
 func NormalizeContactEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))

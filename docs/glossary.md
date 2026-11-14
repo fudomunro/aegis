@@ -43,6 +43,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Identity matching** | Folding contacts/people on vCard UID / email → phone → handle → name | Not for playlists/tracks |
 | **Entity link** | User-confirmed cross-service identity (`entity_links.json`) | |
 | **Copy ledger** | Durable record of mirrored/backup copies | |
+| **Delta token** | The change-feed resume marker (e.g. Graph `/delta`) recorded as the collection copy row's **watermark**, so each source+member pair's next converge resumes instead of re-reading the whole collection | Not a page cursor (chained within one job) or an etag watermark (per-item) |
 | **Mirror** | The queued explicit copy of a playlist/liked tracks to another service (sync job type `mirror`) | Not automatic write sync; consistency comes from **convergence** on the **sync relationship**. Retired: the one-shot `POST /v1/library/mirror` API |
 | **Sync relationship** | Per-(connection, Kind) pairing established when data is connected; sync jobs keep that Kind's members consistent with its **canonical home** | Not a **sync job** (queue unit) or **sync maintenance** (connector-reliability loop); see the sync-word table below |
 | **Sync group** | All sync relationships for one library Kind — the connected sources that provide it | One member is the **canonical home**; a local file import is a read-only member |
@@ -53,6 +54,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **User-defined kind (UDK)** | Schema pack under `user-kinds/` | The extension mechanism, in plain English — it publishes a **library kind**, which stays the registry axis. **Schema pack** is the on-disk artifact (file/dir). Retired: “user-defined type”, “UDT”, “type pack” |
 | **Access level** | See **Data grants** | Strength of a data grant |
 | **Free/busy** | The `freebusy` route: busy intervals only (no titles/attendees) | Its own grant key (`freebusy`), not a level on `events`. Sibling routes: `transactions/totals`, `places/city`, `documents/metadata` |
+| **Free/busy projection** | The events copy projection on a **sync relationship** (`projection: "freebusy"`): copies placed on that member are busy blocks only — times, no title, description, attendees, or location (identity survives so re-runs match) | Not the `freebusy` **route** (the read view); not a data-grant level |
 
 ### Which “sync” is which
 

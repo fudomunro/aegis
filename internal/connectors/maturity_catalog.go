@@ -37,6 +37,8 @@ func ConnectionMaturityCatalog() []ConnectionMaturity {
 		googlePhotosMaturity(),
 		googleContactsMaturity(),
 		googleCalendarMaturity(),
+		microsoftCalendarMaturity(),
+		microsoftContactsMaturity(),
 		googleDriveMaturity(),
 		immichMaturity(),
 		blueskyMaturity(),
@@ -288,6 +290,39 @@ func googleCalendarMaturity() ConnectionMaturity {
 				Fields: FieldCoverageFor("events", "title", "description", "start_at", "end_at", "all_day",
 					"location", "status", "calendar_id", "calendar_name", "organizer", "attendees", "entity_id")},
 			{Name: "freebusy", Description: "Free/busy availability blocks", Supported: false},
+		},
+	}
+}
+
+func microsoftCalendarMaturity() ConnectionMaturity {
+	return ConnectionMaturity{
+		Service:   MicrosoftCalendarServiceID,
+		Transport: TransportAPI,
+		Start: shared.OwnershipAction{
+			Kind:  shared.OwnershipActionConnect,
+			Label: "Connect Microsoft Calendar",
+		},
+		Kinds: []KindMaturity{
+			{Name: "events", Description: "Calendar entries", Supported: true,
+				Fields: FieldCoverageFor("events", "title", "description", "start_at", "end_at", "all_day",
+					"location", "status", "calendar_id", "organizer", "attendees", "entity_id")},
+			{Name: "freebusy", Description: "Free/busy availability blocks", Supported: false},
+			{Name: "messages", Description: "Outlook mail", Supported: false},
+		},
+	}
+}
+
+func microsoftContactsMaturity() ConnectionMaturity {
+	return ConnectionMaturity{
+		Service:   MicrosoftContactsServiceID,
+		Transport: TransportAPI,
+		Start: shared.OwnershipAction{
+			Kind:  shared.OwnershipActionConnect,
+			Label: "Connect Microsoft Contacts",
+		},
+		Kinds: []KindMaturity{
+			{Name: "contacts", Description: "Microsoft Graph contacts", Supported: true,
+				Fields: FieldCoverageFor("contacts", "name", "emails", "phones", "organization")},
 		},
 	}
 }

@@ -7,6 +7,44 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Microsoft 365 / Outlook calendar and contacts (issue #145).** Two
+  Graph connectors — `microsoft-calendar` (`/me/calendarView`, free/busy
+  view included) and `microsoft-contacts` (`/me/contacts`) — serving
+  neutral events and contacts that merge with Google sources on iCalUID /
+  email / phone. One top-level `microsoft` connection with OAuth 2.0 PKCE
+  (RFC 7636, `pkce: true`) and `offline_access`; surfaces gate on
+  `Calendars.Read` / `Contacts.Read` (add the `ReadWrite` variants to sync
+  **to** Microsoft). Both connectors also place events and contacts
+  (create-or-update with `@odata.etag` If-Match conflicts), so either
+  service can be a sync-group member in either direction; a cross-service
+  copy is never placed under the source service's calendar id (the target
+  falls back to its own default calendar). Work-tenant admin-consent
+  failures stay fail-open (`unauthorized` on the surface). Guides at
+  `docs/connect/microsoft-calendar.md` / `microsoft-contacts.md`, Entra
+  app registration in the README setup section.
+- **Free/busy projection (issue #145).** A sync relationship for `events`
+  may declare `projection: "freebusy"` (`POST /v1/admin/services/{id}/sync`):
+  copies placed on that member are busy blocks only — times, no title,
+  description, attendees, or location — while cross-service identity
+  survives so re-runs match instead of duplicating. The "keep my work
+  calendar's busy blocks on my personal calendar" case.
+- **Converge dry run (issue #145).** A `converge` job with
+  `payload: {"dry_run": true}` classifies placement without writing: the
+  job progress reports `matched` / `created` / `would_conflict` and no
+  placements, copy rows, or conflict records land. The entity shapes
+  (contacts, events) declare the classify hook; other shapes reject a dry
+  run as terminal.
+- **Graph delta reads (issue #145).** The entity converge plans read the
+  provider's change feed when one exists (`ContactDeltaProvider` /
+  `CalendarEventDeltaProvider`; Graph `/me/contacts/delta` and
+  `/me/calendarView/delta` for Microsoft). The resume token is recorded as
+  the collection copy row's watermark, so each source+member pair resumes
+  where it left off; expired tokens (410) restart the feed and reported
+  deletions are dropped (convergence places and never deletes).
+- **PKCE connections (issue #145).** `connections{}` entries accept
+  `"pkce": true` for OAuth 2.0 PKCE (S256): a code verifier rides the
+  login state and is required at token exchange. An empty `client_secret`
+  is omitted from token requests, so public clients work.
 - **GitHub contacts (issue #289).** A hosted connector that lists
   organization members and followed users from the GitHub REST API as
   neutral `Contact` values on `/v1/library/contacts`. OAuth app auth

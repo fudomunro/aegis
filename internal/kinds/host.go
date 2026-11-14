@@ -38,6 +38,10 @@ type ServiceView struct {
 	Description  string // block/explain copy shown in deny messages
 	Dataset      string
 	CanonicalFor []string
+	// SyncProjections is the copy projection this source declares per kind
+	// (issue #145): "freebusy" narrows event copies placed on it to busy
+	// blocks. Empty map / missing entry = full copies.
+	SyncProjections map[string]string
 }
 
 // IsCanonicalFor reports whether this service is the authoritative
@@ -49,6 +53,12 @@ func (v ServiceView) IsCanonicalFor(kind string) bool {
 		}
 	}
 	return false
+}
+
+// SyncProjection returns the copy projection this source declares for kind
+// ("" = full copy).
+func (v ServiceView) SyncProjection(kind string) string {
+	return v.SyncProjections[kind]
 }
 
 // AccessEvent is one redacted agent access record (issue #312). Core

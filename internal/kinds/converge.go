@@ -122,6 +122,10 @@ type SourcePage struct {
 	Items Batch
 	// Next is the opaque cursor for the following page; "" ends the list.
 	Next string
+	// SourceMark is the source-side watermark to stamp on the collection
+	// copy row at chain end (issue #145): the incremental change feed's
+	// next token. Empty when the read carried no source-side state.
+	SourceMark string
 	// Title is the source entry's live title (per-entity shapes).
 	Title string
 	// HubTotal is the upstream item count for the extras check, when
@@ -259,6 +263,13 @@ type ConvergePlan struct {
 	// ListSources and then pages items.
 	ReadSource func(ctx context.Context, hub, entityID, cursor string, limit int) (SourcePage, error)
 
+	// DeltaSource marks an incremental change feed (issue #145): the
+	// engine seeds ReadSource's cursor from the collection copy row's
+	// watermark and records the page's SourceMark back on it at chain
+	// end, so each member pair resumes where it left off instead of
+	// re-reading the whole collection.
+	DeltaSource bool
+
 	// ListSources (the playlist shape) lists the canonical home's
 	// top-level collections to fan out, each with its service-local id.
 	ListSources func(ctx context.Context, hub string) (srcs []SourceEntry, truncated bool, err error)
@@ -302,6 +313,54 @@ type ConvergePlan struct {
 	// one). found=false means the member record is gone (nothing to
 	// decide). The returned stamps are the per-item watermarks to record.
 	RecordResolve func(ctx context.Context, hub, member, memberID, subject string, accept bool) (stamps []ItemStamp, found bool, err error)
+
+	// Classify simulates placement for a dry run (issue #145): reports
+	// how many items would match (update path), create (insert path), and
+	// conflict (the member record changed underfoot — a live If-Match
+	// refusal — or vanished). Called after AttachRefs with the member's
+	// stored refs applied. Nil for shapes without entity placement, whose
+	// jobs reject a dry run.
+	Classify func(ctx context.Context, member string, items Batch) (DryRunReport, error)
+}
+
+// DryRunReport is what a dry-run placement would do (issue #145).
+type DryRunReport struct {
+	// Matched counts items that would update an unchanged member copy.
+	Matched int
+	// Created counts items that would be inserted.
+	Created int
+	// Conflicting counts items whose member copy changed or vanished —
+	// the real run would surface them as PlaceConflicts or skips.
+	Conflicting int
+}
+
+// ClassifyEntityRefs classifies dry-run placement over per-item member
+// refs (issue #145): want is what the run would place against (id+etag
+// from the attached watermarks), live is what the member holds now.
+// An item with no ref creates; a ref whose live etag matches updates
+// (matched); a missing or diverged live record conflicts.
+func ClassifyEntityRefs(want, live [][2]string) DryRunReport {
+	liveETag := make(map[string]string, len(live))
+	for _, ref := range live {
+		if ref[0] != "" {
+			liveETag[ref[0]] = ref[1]
+		}
+	}
+	var rep DryRunReport
+	for _, ref := range want {
+		switch {
+		case ref[0] == "":
+			rep.Created++
+		default:
+			got, ok := liveETag[ref[0]]
+			if !ok || (ref[1] != "" && got != "" && ref[1] != got) {
+				rep.Conflicting++
+				continue
+			}
+			rep.Matched++
+		}
+	}
+	return rep
 }
 
 // ItemEntityKey is the copy-ledger entity key for one per-item watermark

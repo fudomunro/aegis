@@ -73,6 +73,15 @@ type convergeJobPayload struct {
 	Conflicts  int  `json:"conflicts,omitempty"`
 	Truncated  bool `json:"truncated,omitempty"`
 	TargetDone int  `json:"target_done,omitempty"`
+
+	// DryRun classifies placement without writing (issue #145): no
+	// upstream writes, copy rows, or conflict records land — the report
+	// below accumulates what would have happened.
+	DryRun bool `json:"dry_run,omitempty"`
+	// Dry-run report accumulated across steps for the admin panel.
+	Matched       int `json:"matched,omitempty"`
+	Created       int `json:"created,omitempty"`
+	WouldConflict int `json:"would_conflict,omitempty"`
 }
 
 // resetPlaylistChain clears the in-flight source so the next step picks
@@ -135,6 +144,12 @@ func (r *convergeRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error)
 	}
 	// The runner's kind is authoritative — dispatch already matched it.
 	p.Kind = r.kind
+
+	// Dry run (issue #145) needs the plan's classify hook; shapes without
+	// one cannot report what placement would do.
+	if p.DryRun && r.plan.Classify == nil {
+		return SyncStep{}, fmt.Errorf("%w: dry run not supported for this kind", ErrSyncTerminal)
+	}
 
 	if p.Targets == nil {
 		note, err := r.resolveTargets(&p)
@@ -233,7 +248,14 @@ func (r *convergeRunner) runCollectionStep(ctx context.Context, p convergeJobPay
 		}
 	}
 
-	page, err := plan.ReadSource(ctx, p.SourceService, "", p.ItemCursor, library.MirrorTrackCap)
+	cursor := p.ItemCursor
+	if cursor == "" && plan.DeltaSource {
+		// Resume the change feed where this member pair left off
+		// (issue #145): the collection row's watermark is the source's
+		// next-token, recorded at the previous chain end.
+		cursor = s.collectionWatermark(p.Kind, p.SourceService, target)
+	}
+	page, err := plan.ReadSource(ctx, p.SourceService, "", cursor, library.MirrorTrackCap)
 	if err != nil {
 		// Provider trouble is retryable; the target list and index are
 		// already durable in the job payload.
@@ -256,6 +278,28 @@ func (r *convergeRunner) runCollectionStep(ctx context.Context, p convergeJobPay
 	kept, held := page.Items, 0
 	if plan.FilterHeld != nil {
 		kept, held = plan.FilterHeld(state, page.Items)
+	}
+
+	// Dry run (issue #145): classify what placement would do and write
+	// nothing — no upstream calls beyond reads, no copy rows, no conflicts.
+	if p.DryRun {
+		report, err := plan.Classify(ctx, target, kept)
+		if err != nil {
+			return r.step(p, target, false, ""), planErr(err)
+		}
+		p.Planned += page.Items.Len()
+		p.Skipped += held
+		p.Matched += report.Matched
+		p.Created += report.Created
+		p.WouldConflict += report.Conflicting
+		if page.Truncated {
+			p.Truncated = true
+		}
+		if page.Next != "" {
+			p.ItemCursor = page.Next
+			return r.step(p, target, false, ""), nil
+		}
+		return r.advance(p, target), nil
 	}
 
 	// Placement is create-or-update, so a retry of this step is safe —
@@ -301,7 +345,9 @@ func (r *convergeRunner) runCollectionStep(ctx context.Context, p convergeJobPay
 	case plan.Shape == kinds.ConvergeEntities:
 		memberCount = page.HubTotal
 	}
-	s.Mirror.RecordMirrorCopy(p.Kind, p.SourceService, "", target, "", plan.RowName, memberCount, "", "")
+	// The watermark carries the kind's own marker: the playlist shape's
+	// order mark, the change feed's next token (issue #145).
+	s.Mirror.RecordMirrorCopy(p.Kind, p.SourceService, "", target, "", plan.RowName, memberCount, "", page.SourceMark)
 
 	// Member-only items are non-hub creates: recorded here (the watermark
 	// count diverges from the canonical total) for accept — adopt onto
@@ -324,13 +370,34 @@ func (r *convergeRunner) runCollectionStep(ctx context.Context, p convergeJobPay
 		}
 	}
 
+	return r.advance(p, target), nil
+}
+
+// advance closes one member's step and moves the chain to the next target.
+func (r *convergeRunner) advance(p convergeJobPayload, target string) SyncStep {
 	p.resetPlaylistChain() // clears the page cursor for the next member
 	p.TargetDone = p.Index + 1
 	p.Index++
 	if p.Index >= len(p.Targets) {
-		return r.step(p, target, true, ""), nil
+		return r.step(p, target, true, "")
 	}
-	return r.step(p, target, false, ""), nil
+	return r.step(p, target, false, "")
+}
+
+// collectionWatermark reads the collection copy row's source watermark
+// (issue #145): the change-feed next-token to resume from for this
+// source+member pair. Empty when the pair has never synced.
+func (s *Runners) collectionWatermark(kind, sourceService, target string) string {
+	if s == nil || s.Copies == nil || !s.Copies.Enabled() {
+		return ""
+	}
+	entity := library.MirrorEntityKey(kind, sourceService, "")
+	for _, row := range s.Copies.List(copies.Filter{Kind: kind, Service: target}) {
+		if row.EntityKey == entity {
+			return row.Watermark
+		}
+	}
+	return ""
 }
 
 // memberItemRefs reads the member's per-item watermark rows (the ref+etag
@@ -631,6 +698,12 @@ func (r *convergeRunner) step(p convergeJobPayload, target string, done bool, no
 	if note != "" {
 		s.Progress["note"] = note
 		slog.Info("converge skipped", "kind", p.Kind, "note", note)
+	}
+	if p.DryRun {
+		s.Progress["dry_run"] = true
+		s.Progress["matched"] = p.Matched
+		s.Progress["created"] = p.Created
+		s.Progress["would_conflict"] = p.WouldConflict
 	}
 	if b, err := json.Marshal(p); err == nil {
 		s.Payload = b

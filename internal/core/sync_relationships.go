@@ -28,9 +28,13 @@ import (
 // of groups.
 
 // syncRelEntry is one stored relationship row (issue #365): membership in a
-// kind's sync group plus that group's hub flag.
+// kind's sync group, that group's hub flag, and the copy projection this
+// member declares (issue #145).
 type syncRelEntry struct {
 	Canonical bool `json:"canonical,omitempty"`
+	// Projection narrows what copies placed on this member carry
+	// (shared.SyncProjectionFreeBusy for events; "" = full copy).
+	Projection string `json:"projection,omitempty"`
 }
 
 // EnsureSyncRelationships upserts sync rows for a source (issue #365): one
@@ -117,6 +121,16 @@ func (c *Config) SetSyncRelationship(id string, rel shared.SyncRelationship) err
 	if _, ok := entry.Sync[kind]; !ok {
 		entry.Sync[kind] = syncRelEntry{}
 	}
+	// Copy projection (issue #145): a member may narrow what event copies
+	// placed on it carry. Unknown values fall back to a full copy.
+	row := entry.Sync[kind]
+	switch strings.ToLower(strings.TrimSpace(rel.Projection)) {
+	case shared.SyncProjectionFreeBusy:
+		row.Projection = shared.SyncProjectionFreeBusy
+	default:
+		row.Projection = ""
+	}
+	entry.Sync[kind] = row
 
 	var claims []string
 	for _, k := range svc.CanonicalFor {
@@ -214,6 +228,7 @@ func (c *Config) syncFlagsFromClaimsLocked() {
 		c.svcConnOverlay[id] = entry
 		if svc != nil {
 			svc.SyncRelationships = syncFlagMap(entry.Sync)
+			svc.SyncProjections = syncProjectionMap(entry.Sync)
 		}
 	}
 	// Sources without overlay rows still need their in-memory view current.
@@ -221,6 +236,7 @@ func (c *Config) syncFlagsFromClaimsLocked() {
 		id := c.Services[i].ID
 		entry := c.svcConnOverlay[id]
 		c.Services[i].SyncRelationships = syncFlagMap(entry.Sync)
+		c.Services[i].SyncProjections = syncProjectionMap(entry.Sync)
 	}
 }
 
@@ -232,6 +248,21 @@ func syncFlagMap(rows map[string]syncRelEntry) map[string]bool {
 	out := make(map[string]bool, len(rows))
 	for kind, row := range rows {
 		out[kind] = row.Canonical
+	}
+	return out
+}
+
+// syncProjectionMap projects stored rows onto the in-memory kind → copy
+// projection view (issue #145). Empty projections are omitted.
+func syncProjectionMap(rows map[string]syncRelEntry) map[string]string {
+	out := make(map[string]string, len(rows))
+	for kind, row := range rows {
+		if row.Projection != "" {
+			out[kind] = row.Projection
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

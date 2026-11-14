@@ -489,6 +489,22 @@ type CalendarEventWriteProvider interface {
 	PlaceEvents(ctx context.Context, events []CalendarEvent) (PlaceEntitiesResult, error)
 }
 
+// ContactDeltaProvider is an optional incremental read seam (issue #145).
+// Implementations serve the provider's change feed (e.g. Graph /delta):
+// contacts changed since deltaToken, where "" requests the full
+// collection. nextToken is the watermark to record for the next run.
+// Deletions the feed reports are dropped — convergence places and never
+// deletes — and truncated is true when the page cap ended the walk early.
+type ContactDeltaProvider interface {
+	ListUserContactsDelta(ctx context.Context, deltaToken string) (contacts []Contact, nextToken string, truncated bool, err error)
+}
+
+// CalendarEventDeltaProvider is the events counterpart of
+// ContactDeltaProvider (issue #145), over the provider's change feed.
+type CalendarEventDeltaProvider interface {
+	ListCalendarEventsDelta(ctx context.Context, deltaToken string) (events []CalendarEvent, nextToken string, truncated bool, err error)
+}
+
 // ProvidedTypes lists the library kinds a provider implementation supplies
 // (the permission keys Aegis merges across services, issue #183).
 func ProvidedTypes(conn any) []string {

@@ -181,7 +181,7 @@ func (s *Server) issueCSRFToken() (string, error) {
 	if s.csrfTokens == nil {
 		s.csrfTokens = shared.NewStateStore()
 	}
-	s.csrfTokens.Set(token, true, csrfTokenTTL)
+	s.csrfTokens.Set(token, "", csrfTokenTTL)
 	return token, nil
 }
 
@@ -194,7 +194,8 @@ func (s *Server) consumeCSRFToken(token string) bool {
 	if s.csrfTokens == nil {
 		return false
 	}
-	return s.csrfTokens.Delete(token)
+	_, ok := s.csrfTokens.Delete(token)
+	return ok
 }
 
 // requireFormCSRF checks the consent form token for form-encoded grant POSTs.

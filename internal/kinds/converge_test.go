@@ -526,3 +526,23 @@ func TestContactsPlan_AttachRefsFallsBackToLegacyNameRows(t *testing.T) {
 		t.Fatalf("member ref = %+v, want the legacy name row found", ref)
 	}
 }
+
+func TestClassifyEntityRefs_Matrix(t *testing.T) {
+	rep := ClassifyEntityRefs([][2]string{
+		{"id-ada", "e1"},  // unchanged → matched
+		{"id-bob", "e1"},  // live etag drifted → conflicting
+		{"id-zoe", "e1"},  // vanished → conflicting
+		{"", ""},          // no ref → created
+	}, [][2]string{
+		{"id-ada", "e1"},
+		{"id-bob", "e2"},
+	})
+	if rep.Matched != 1 || rep.Created != 1 || rep.Conflicting != 2 {
+		t.Fatalf("report = %+v, want matched=1 created=1 conflicting=2", rep)
+	}
+	// Missing etags on either side fall back to matched (nothing to judge).
+	rep = ClassifyEntityRefs([][2]string{{"id-ada", ""}}, [][2]string{{"id-ada", ""}})
+	if rep.Matched != 1 {
+		t.Fatalf("report = %+v", rep)
+	}
+}

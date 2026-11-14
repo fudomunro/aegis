@@ -55,6 +55,21 @@ curl -s https://aegis.your-tailnet.ts.net/v1/library/playlists
 
 You should see neutral playlist objects with `sources[]` provenance. Vocabulary (service vs connector, data grant, canonical home, content transport) is defined in [`docs/glossary.md`](docs/glossary.md).
 
+### Setup: registering a Microsoft 365 / Outlook app
+
+Calendar and contacts from Microsoft 365 / Outlook.com come through one
+Entra app registration ([entra.microsoft.com](https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade) →
+App registrations → New registration). Register each surface's redirect URI
+(`https://your-aegis/v1/auth/microsoft-calendar/callback` and/or
+`.../microsoft-contacts/callback`), add the Microsoft Graph delegated
+permissions `Calendars.Read` and/or `Contacts.Read` plus `offline_access`,
+and copy the client id (and secret, if any) into the top-level `microsoft`
+connection in `aegis.json` with `"pkce": true`. Work tenants may require
+admin consent — without it the surfaces report `unauthorized` and nothing
+else breaks. Full steps, sync directions, and the free/busy projection are in
+[`docs/connect/microsoft-calendar.md`](docs/connect/microsoft-calendar.md)
+and [`docs/connect/microsoft-contacts.md`](docs/connect/microsoft-contacts.md).
+
 ## Documentation
 
 | Doc | What it covers |

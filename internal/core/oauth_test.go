@@ -70,7 +70,7 @@ func TestHandleAuthLogin_RedirectsWithState(t *testing.T) {
 	if state == "" {
 		t.Fatal("expected non-empty state")
 	}
-	if !srv.oauthStates.Delete("spotify:" + state) {
+	if _, ok := srv.oauthStates.Delete("spotify:" + state); !ok {
 		t.Fatal("expected state to be stored")
 	}
 }
@@ -206,7 +206,7 @@ func TestHandleAuthCallback_Success(t *testing.T) {
 	defer tokenSrv.Close()
 
 	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://aegis.example.com")
-	srv.oauthStates.Set("spotify:good-state", true, time.Minute)
+	srv.oauthStates.Set("spotify:good-state", "", time.Minute)
 	// A pre-auth snapshot must not outlive a successful connect (issue #104).
 	srv.cache.Set("library:tracks", `{"tracks":[{"name":"stale"}]}`, time.Minute)
 
@@ -234,7 +234,7 @@ func TestHandleAuthCallback_Success(t *testing.T) {
 	if tok == nil || tok.AccessToken != "at" || tok.RefreshToken != "rt" {
 		t.Fatalf("stored token = %+v", tok)
 	}
-	if srv.oauthStates.Delete("spotify:good-state") {
+	if _, ok := srv.oauthStates.Delete("spotify:good-state"); ok {
 		t.Fatal("expected state to be consumed")
 	}
 }
@@ -246,7 +246,7 @@ func TestHandleAuthCallback_TokenExchangeFails(t *testing.T) {
 	defer tokenSrv.Close()
 
 	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://aegis.example.com")
-	srv.oauthStates.Set("spotify:st", true, time.Minute)
+	srv.oauthStates.Set("spotify:st", "", time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/callback?code=x&state=st", nil)
 	w := httptest.NewRecorder()
@@ -506,7 +506,7 @@ func TestHandleAuthCallback_SharedConnectionStoresUnderConnectionID(t *testing.T
 	gconn.TokenURL = tokenSrv.URL
 	cfg.Connections["google"] = gconn
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.oauthStates.Set("google-photos:ok", true, time.Minute)
+	srv.oauthStates.Set("google-photos:ok", "", time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/google-photos/callback?code=auth-code&state=ok", nil)
 	w := httptest.NewRecorder()
@@ -545,7 +545,7 @@ func TestHandleAuthCallback_PreservesRefreshTokenAndScopes(t *testing.T) {
 		Expiry:       time.Now().Add(time.Hour),
 		Scopes:       []string{"https://www.googleapis.com/auth/youtube.readonly"},
 	})
-	srv.oauthStates.Set("youtube-music:st", true, time.Minute)
+	srv.oauthStates.Set("youtube-music:st", "", time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/youtube-music/callback?code=auth-code&state=st", nil)
 	w := httptest.NewRecorder()
@@ -580,5 +580,143 @@ func TestHandleAuthRevoke_SharedConnection(t *testing.T) {
 	}
 	if srv.tokens.Get("google") != nil {
 		t.Fatal("expected google connection token to be revoked")
+	}
+}
+
+func pkceConfig(tokenURL, authURL string) *Config {
+	return &Config{
+		Connections: map[string]Connection{
+			"microsoft": {
+				Name:     "Microsoft",
+				ClientID: "cid",
+				AuthURL:  authURL,
+				TokenURL: tokenURL,
+				Scopes:   []string{"offline_access", "Calendars.Read"},
+				PKCE:     true,
+			},
+		},
+		Services: []Service{{
+			ID:          "microsoft-calendar",
+			Name:        "Microsoft Calendar",
+			Connection:  "microsoft",
+			OAuthScopes: []string{"Calendars.Read"},
+		}},
+	}
+}
+
+func TestHandleAuthLogin_PKCEChallenge(t *testing.T) {
+	srv := testServerWithBase(pkceConfig("https://login.example.com/token", "https://login.example.com/authorize"), "https://aegis.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/auth/microsoft-calendar/login", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAuthLogin(w, req)
+
+	if w.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("status = %d, want 307", w.Code)
+	}
+	u, err := url.Parse(w.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	if q.Get("code_challenge_method") != "S256" {
+		t.Fatalf("code_challenge_method = %q", q.Get("code_challenge_method"))
+	}
+	challenge := q.Get("code_challenge")
+	if challenge == "" {
+		t.Fatal("expected code_challenge on a PKCE connection")
+	}
+	state := q.Get("state")
+	verifier, ok := srv.oauthStates.Delete("microsoft-calendar:" + state)
+	if !ok {
+		t.Fatal("expected state to be stored")
+	}
+	if verifier == "" {
+		t.Fatal("expected a code verifier bound to the state")
+	}
+	if codeChallengeS256(verifier) != challenge {
+		t.Fatalf("challenge %q does not match verifier %q", challenge, verifier)
+	}
+}
+
+func TestHandleAuthLogin_NoPKCEOmitsChallenge(t *testing.T) {
+	srv := testServerWithBase(oauthConfig("https://tokens.example.com/token", "https://accounts.example.com/authorize"), "https://aegis.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/auth/spotify/login", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAuthLogin(w, req)
+
+	u, err := url.Parse(w.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	if q.Get("code_challenge") != "" || q.Get("code_challenge_method") != "" {
+		t.Fatalf("expected no PKCE params, got challenge=%q method=%q", q.Get("code_challenge"), q.Get("code_challenge_method"))
+	}
+}
+
+func TestHandleAuthCallback_PKCECodeVerifier(t *testing.T) {
+	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+	gotVerifier := make(chan string, 1)
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Error(err)
+		}
+		gotVerifier <- r.Form.Get("code_verifier")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"at","refresh_token":"rt","token_type":"Bearer","expires_in":3600,"scope":"offline_access Calendars.Read"}`)
+	}))
+	defer tokenSrv.Close()
+
+	srv := testServerWithBase(pkceConfig(tokenSrv.URL, "https://login.example.com/authorize"), "https://aegis.example.com")
+	srv.oauthStates.Set("microsoft-calendar:st", verifier, time.Minute)
+
+	req := httptest.NewRequest("GET", "/v1/auth/microsoft-calendar/callback?code=auth-code&state=st", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAuthCallback(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if got := <-gotVerifier; got != verifier {
+		t.Fatalf("code_verifier = %q, want %q", got, verifier)
+	}
+	if tok := srv.tokens.Get("microsoft"); tok == nil || tok.RefreshToken != "rt" {
+		t.Fatalf("stored token = %+v", tok)
+	}
+}
+
+func TestTokenRequest_OmitsEmptyClientSecret(t *testing.T) {
+	sawSecret := make(chan bool, 1)
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Error(err)
+		}
+		_, present := r.Form["client_secret"]
+		sawSecret <- present
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"at","token_type":"Bearer","expires_in":3600}`)
+	}))
+	defer tokenSrv.Close()
+
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	if _, err := srv.exchangeCode(&OAuthConfig{
+		ClientID: "public-client",
+		TokenURL: tokenSrv.URL,
+	}, "code", "https://aegis.example.com/cb", "verifier"); err != nil {
+		t.Fatal(err)
+	}
+	if <-sawSecret {
+		t.Fatal("client_secret must be omitted when empty (public client)")
+	}
+}
+
+func TestCodeChallengeS256_RFC7636Vector(t *testing.T) {
+	// RFC 7636 Appendix B test vector.
+	want := "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+	got := codeChallengeS256("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+	if got != want {
+		t.Fatalf("challenge = %q, want %q", got, want)
 	}
 }
