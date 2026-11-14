@@ -45,6 +45,7 @@ func ConnectionMaturityCatalog() []ConnectionMaturity {
 		calDAVMaturity(),
 		cardDAVMaturity(),
 		paperlessMaturity(),
+		githubMaturity(),
 	}
 	// Local import stores declare maturity beside the store (issue #393).
 	for _, spec := range LocalImportStoreSpecs() {
@@ -252,6 +253,24 @@ func googleContactsMaturity() ConnectionMaturity {
 		Kinds: []KindMaturity{
 			{Name: "contacts", Description: "People API contacts", Supported: true,
 				Fields: FieldCoverageFor("contacts", "name", "emails", "phones", "organization")},
+		},
+	}
+}
+
+func githubMaturity() ConnectionMaturity {
+	return ConnectionMaturity{
+		Service:   GitHubServiceID,
+		Transport: TransportAPI,
+		Start: shared.OwnershipAction{
+			Kind:  shared.OwnershipActionConnect,
+			Label: "Connect GitHub",
+		},
+		Kinds: []KindMaturity{
+			{Name: "contacts", Description: "Organization members and followed users", Supported: true,
+				Fields: FieldCoverageFor("contacts", "name", "emails", "handles", "organization")},
+			{Name: "repositories", Description: "Source repositories and code", Supported: false},
+			{Name: "issues", Description: "Issues and pull requests", Supported: false},
+			{Name: "activity", Description: "Contribution and event feed", Supported: false},
 		},
 	}
 }
