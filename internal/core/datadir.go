@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -25,10 +26,6 @@ const (
 	defaultCopyLedgerName   = "copy_ledger.db"
 	defaultMailArchiveName  = "mail-archive.db"
 	defaultSearchIndexName  = "search-index.db"
-	defaultQuickenName      = "quicken.db"
-	defaultTimelineName     = "timeline.db"
-	defaultSignalName       = "signal.db"
-	defaultLinkedInName     = "linkedin.db"
 	defaultAuditLogName     = "audit_log.db"
 	defaultLogFileName      = "aegis.log"
 	dataDirLogsSubdir       = "logs"
@@ -69,18 +66,10 @@ type DataPaths struct {
 	// search.Index is the SQLite library search-index path (issue #178).
 	// Empty disables q= on /v1/library/{kind}.
 	SearchIndex string
-	// Quicken is the SQLite Quicken import store path (issue #141).
-	// Empty disables the local Quicken source.
-	Quicken string
-	// Timeline is the SQLite Google Timeline import store path (issue #142).
-	// Empty disables the local Timeline source.
-	Timeline string
-	// Signal is the SQLite Signal import store path (issue #168).
-	// Empty disables the local Signal source.
-	Signal string
-	// LinkedIn is the SQLite LinkedIn import store path (issue #218).
-	// Empty disables the local LinkedIn source.
-	LinkedIn string
+	// LocalStores maps local import store stems ("quicken", "signal", …)
+	// to their SQLite store paths (issue #393). A missing or empty entry
+	// disables that store; file names come from each store's spec.
+	LocalStores map[string]string
 	// AuditLog is the SQLite access-audit path (issue #105). Empty disables it.
 	AuditLog string
 	// LogFile is the optional process log path. Empty logs to stderr only.
@@ -108,18 +97,22 @@ type StatePathOverrides struct {
 	MailArchiveSet     bool
 	SearchIndex        string
 	SearchIndexSet     bool
-	Quicken            string
-	QuickenSet         bool
-	Timeline           string
-	TimelineSet        bool
-	Signal             string
-	SignalSet          bool
-	LinkedIn           string
-	LinkedInSet        bool
+	// LocalStores holds per-store CLI overrides keyed by store stem
+	// (issue #393). Set distinguishes an omitted -<stem>-store (default
+	// under the data dir) from an explicitly empty one (disable).
+	LocalStores map[string]LocalStoreOverride
 	AuditLog           string
 	AuditLogSet        bool
 	LogFile            string
 	LogFileSet         bool
+}
+
+// LocalStoreOverride is one local import store's CLI path override
+// (issue #393). Set distinguishes an omitted -<stem>-store flag (default
+// under the data dir) from an explicitly empty one (disable the store).
+type LocalStoreOverride struct {
+	Path string
+	Set  bool
 }
 
 // defaultDataDir returns the per-OS application data location for Aegis.
@@ -231,41 +224,20 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	default:
 		paths.SearchIndex = shared.ExpandUserPath(ov.SearchIndex)
 	}
-	// Quicken import store: omitted → default under data dir; explicitly empty → disabled.
-	switch {
-	case !ov.QuickenSet:
-		paths.Quicken = filepath.Join(dir, defaultQuickenName)
-	case strings.TrimSpace(ov.Quicken) == "":
-		paths.Quicken = ""
-	default:
-		paths.Quicken = shared.ExpandUserPath(ov.Quicken)
-	}
-	// Timeline import store: omitted → default under data dir; explicitly empty → disabled.
-	switch {
-	case !ov.TimelineSet:
-		paths.Timeline = filepath.Join(dir, defaultTimelineName)
-	case strings.TrimSpace(ov.Timeline) == "":
-		paths.Timeline = ""
-	default:
-		paths.Timeline = shared.ExpandUserPath(ov.Timeline)
-	}
-	// Signal import store: omitted → default under data dir; explicitly empty → disabled.
-	switch {
-	case !ov.SignalSet:
-		paths.Signal = filepath.Join(dir, defaultSignalName)
-	case strings.TrimSpace(ov.Signal) == "":
-		paths.Signal = ""
-	default:
-		paths.Signal = shared.ExpandUserPath(ov.Signal)
-	}
-	// LinkedIn import store: omitted → default under data dir; explicitly empty → disabled.
-	switch {
-	case !ov.LinkedInSet:
-		paths.LinkedIn = filepath.Join(dir, defaultLinkedInName)
-	case strings.TrimSpace(ov.LinkedIn) == "":
-		paths.LinkedIn = ""
-	default:
-		paths.LinkedIn = shared.ExpandUserPath(ov.LinkedIn)
+	// Local import stores (issue #393): omitted → default file under the
+	// data dir; explicitly empty → that store is disabled. Names and flags
+	// come from connectors.LocalImportStoreSpecs().
+	paths.LocalStores = map[string]string{}
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		ov := ov.LocalStores[spec.Stem]
+		switch {
+		case !ov.Set:
+			paths.LocalStores[spec.Stem] = filepath.Join(dir, spec.DefaultFile)
+		case strings.TrimSpace(ov.Path) == "":
+			paths.LocalStores[spec.Stem] = ""
+		default:
+			paths.LocalStores[spec.Stem] = shared.ExpandUserPath(ov.Path)
+		}
 	}
 	// Audit log: omitted → default under data dir; explicitly empty → disabled.
 	switch {

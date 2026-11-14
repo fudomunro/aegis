@@ -1,10 +1,16 @@
 package core
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/fudomunro/aegis/internal/connectors"
+)
 
 // TestRunCLIMode_Dispatch verifies the one-shot CLI flag routing (issue
 // #274). When no CLI flag is set the server should start normally; when a
-// flag is set the mode runs and Run exits.
+// flag is set the mode runs and Run exits. Local import store flags are
+// covered generically over the connectors registry (issue #393) — a new
+// store is tested here without edits.
 func TestRunCLIMode_Dispatch(t *testing.T) {
 	paths := DataPaths{Dir: t.TempDir()}
 
@@ -13,18 +19,11 @@ func TestRunCLIMode_Dispatch(t *testing.T) {
 		t.Fatal("no CLI flags should not trigger a CLI mode")
 	}
 
-	// Whitespace-only import paths are ignored.
-	if _, handled := runCLIMode(cliModeOptions{importQuicken: "  "}, paths); handled {
-		t.Fatal("blank import-quicken should not trigger a CLI mode")
-	}
-	if _, handled := runCLIMode(cliModeOptions{importTimeline: " "}, paths); handled {
-		t.Fatal("blank import-timeline should not trigger a CLI mode")
-	}
-	if _, handled := runCLIMode(cliModeOptions{importSignal: "\t"}, paths); handled {
-		t.Fatal("blank import-signal should not trigger a CLI mode")
-	}
-	if _, handled := runCLIMode(cliModeOptions{importLinkedIn: " "}, paths); handled {
-		t.Fatal("blank import-linkedin should not trigger a CLI mode")
+	// Whitespace-only import paths are ignored (every declared store).
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		if _, handled := runCLIMode(cliModeOptions{importStores: map[string]string{spec.Stem: "  "}}, paths); handled {
+			t.Fatalf("blank %s should not trigger a CLI mode", spec.ImportFlagName())
+		}
 	}
 	if _, handled := runCLIMode(cliModeOptions{importTakeout: ""}, paths); handled {
 		t.Fatal("blank import-takeout should not trigger a CLI mode")
@@ -51,24 +50,11 @@ func TestRunCLIMode_Dispatch(t *testing.T) {
 		t.Fatal("token-new-pass should trigger a CLI mode")
 	}
 
-	// import-quicken triggers a Quicken import.
-	if _, handled := runCLIMode(cliModeOptions{importQuicken: "/tmp/missing.qif"}, paths); !handled {
-		t.Fatal("import-quicken should trigger a CLI mode")
-	}
-
-	// import-timeline triggers a Timeline import.
-	if _, handled := runCLIMode(cliModeOptions{importTimeline: "/tmp/missing.json"}, paths); !handled {
-		t.Fatal("import-timeline should trigger a CLI mode")
-	}
-
-	// import-signal triggers a Signal import.
-	if _, handled := runCLIMode(cliModeOptions{importSignal: "/tmp/missing.jsonl"}, paths); !handled {
-		t.Fatal("import-signal should trigger a CLI mode")
-	}
-
-	// import-linkedin triggers a LinkedIn import.
-	if _, handled := runCLIMode(cliModeOptions{importLinkedIn: "/tmp/missing.csv"}, paths); !handled {
-		t.Fatal("import-linkedin should trigger a CLI mode")
+	// Every declared store's import flag triggers its import mode.
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		if _, handled := runCLIMode(cliModeOptions{importStores: map[string]string{spec.Stem: "/tmp/missing-export"}}, paths); !handled {
+			t.Fatalf("%s should trigger a CLI mode", spec.ImportFlagName())
+		}
 	}
 
 	// import-takeout triggers a Takeout import.

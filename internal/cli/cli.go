@@ -176,15 +176,17 @@ func ImportTakeout(archivePath, copyLedgerPath, takeoutPath string, batch int) i
 	return 0
 }
 
-// runImportCLI runs a one-shot import against any local import store, then
-// exits (issue #266). Flag parsing stays here; the store owns the run.
-func importStore(name, storePath, importPath string, open func(string) (connectors.ImportStore, error), run func(connectors.ImportStore, string) (connectors.ImportOutcome, error)) int {
+// ImportLocalStore runs a one-shot import against any local import store,
+// then exits (issue #266, issue #393). Flag parsing stays in core; the
+// store spec owns opening and the run.
+func ImportLocalStore(spec connectors.LocalImportStoreSpec, storePath, importPath string) int {
+	name := spec.Stem
 	storePath = strings.TrimSpace(storePath)
 	if storePath == "" {
 		slog.Error(name + " store path is required for -import-" + name)
 		return 1
 	}
-	store, err := open(storePath)
+	store, err := spec.Open(storePath)
 	if err != nil {
 		slog.Error("failed to open "+name+" store", "path", storePath, "error", err)
 		return 1
@@ -194,7 +196,7 @@ func importStore(name, storePath, importPath string, open func(string) (connecto
 		return 1
 	}
 	defer store.Close()
-	res, err := run(store, importPath)
+	res, err := store.Admin().Import(importPath)
 	if err != nil {
 		slog.Error(name+" import failed", "path", importPath, "error", err)
 		return 1
@@ -206,54 +208,6 @@ func importStore(name, storePath, importPath string, open func(string) (connecto
 		return 1
 	}
 	return 0
-}
-
-// runImportQuickenCLI imports a QIF/QFX file or directory into the local
-// Quicken store, then exits (issue #141).
-func ImportQuicken(storePath, importPath string) int {
-	return importStore("quicken", storePath, importPath,
-		func(p string) (connectors.ImportStore, error) {
-			return connectors.OpenQuickenStore(p)
-		},
-		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
-			return connectors.ImportQuickenPath(st.(*connectors.QuickenStore), p)
-		})
-}
-
-// runImportTimelineCLI imports a Google Timeline JSON file/directory/zip into
-// the local store, then exits (issue #142).
-func ImportTimeline(storePath, importPath string) int {
-	return importStore("timeline", storePath, importPath,
-		func(p string) (connectors.ImportStore, error) {
-			return connectors.OpenTimelineStore(p)
-		},
-		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
-			return connectors.ImportTimelinePath(st.(*connectors.TimelineStore), p)
-		})
-}
-
-// runImportSignalCLI imports a Signal export file or directory into the local
-// store, then exits (issue #168).
-func ImportSignal(storePath, importPath string) int {
-	return importStore("signal", storePath, importPath,
-		func(p string) (connectors.ImportStore, error) {
-			return connectors.OpenSignalStore(p)
-		},
-		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
-			return connectors.ImportSignalPath(st.(*connectors.SignalStore), p)
-		})
-}
-
-// ImportLinkedIn imports a LinkedIn data export (.zip or CSV) into the local
-// store, then exits (issue #218).
-func ImportLinkedIn(storePath, importPath string) int {
-	return importStore("linkedin", storePath, importPath,
-		func(p string) (connectors.ImportStore, error) {
-			return connectors.OpenLinkedInStore(p)
-		},
-		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
-			return connectors.ImportLinkedInPath(st.(*connectors.LinkedInStore), p)
-		})
 }
 
 // runTokenRekeyCLI re-encrypts the token store under a new passphrase with

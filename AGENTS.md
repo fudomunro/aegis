@@ -124,7 +124,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Agent data plane | `internal/library` (+ `library/links`, `library/search`) | Fixed `/v1/library/*` write/maintenance routes, `/v1/services` content transport, kind registry composition, agent-facing instruction copy. The hub constructs `library.Handlers`, mounts its route map behind auth, and implements its `kinds.Host` seam |
 | Management surface | `internal/admin` (+ `admin/apps`, `admin/scopes`) | `/v1/admin/*`, the admin UI shell, setup flows, admin-owned writes (data grants, apps, data scopes, UDK overlay, connections, ownership), and the admin read models. The hub constructs `admin.Handlers`, mounts its routes behind the admin perimeter, and implements its `admin.Host` seam; the surfaces never import each other |
 | Merge / entity IDs | `internal/kinds` (merge + MBID lookup), `internal/library/links` (entity-link store) | ISRC/UPC/MBID preferred over name |
-| Connectors | `internal/connectors` (one file per named service; local import stores share the surface) | Register in the hub's ordered `srv.connectors` list; stores use a local-transport constructor (design: `docs/local-import-stores.md`) |
+| Connectors | `internal/connectors` (one file per named service; local import stores share the surface) | Register in the hub's ordered `srv.connectors` list; stores register through `LocalImportStoreSpecs()` (design: `docs/local-import-stores.md`) |
 | Location history (places) | `internal/connectors` (timeline, owntracks), the places kind | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `internal/admin/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265). Brand/demo assets stay in `internal/core/web/` |
 | Onboarding runner | `internal/core` hub (host), `internal/shared` (shapes), impls beside each connector | Generic `/v1/admin/setup/{id}` host over `connectors.Onboarder` (design: `docs/connector-onboarding.md`) |
@@ -168,6 +168,15 @@ drift and are not kept here).
   `internal/core/pathclass.go`. Do not reintroduce a `switch` or a second
   classifier. Agent-facing `/v1/services` paths must pass
   `types.IsAgentContentPath` (issue #119).
+
+**Local import stores** (file-based export sources — Signal, Quicken,
+Timeline, LinkedIn) register through the connectors spec list
+(`LocalImportStoreSpecs()` in `internal/connectors/localstores.go`; design:
+`docs/local-import-stores.md`). Adding one is a store file with its
+`xStoreSpec()` constructor and `Admin()` copy, one registry line, two
+`services.go` name lines, and docs — the hub, admin surface, CLI flags, and
+admin UI panels all consume the registry generically and must never name a
+store. `TestLocalImportStoreSpecs` pins the declaration contract.
 
 **Advanced setup flows** go through the optional `Onboarder` interface
 (`internal/connectors/host.go` — read the source; design:

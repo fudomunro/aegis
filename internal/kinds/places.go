@@ -13,7 +13,7 @@ type placesKind struct {
 	h           Host
 	e           *Engine
 	mark        func([]PlaceVisit, string)
-	localSource func() bool
+	localSource func(kind string) bool
 }
 
 // Grant keys are routes: the library-relative path (issue #348).
@@ -24,7 +24,7 @@ const (
 )
 
 func newPlacesKind(h Host, e *Engine, d Deps) Kind {
-	k := &placesKind{h: h, e: e, localSource: d.PlacesLocalSource}
+	k := &placesKind{h: h, e: e, localSource: d.LocalSource}
 	k.mark, _ = Stamps(h, "places", forEachPlaceVisitSource)
 	def := *BuiltinKindByID("places")
 	k.providerKind = providerKind{
@@ -51,13 +51,13 @@ const (
 	placeCity
 )
 
-// HasProviders adds the local Timeline import store to the connector scan
-// (issue #142).
+// HasProviders adds the local import store to the connector scan (issue
+// #142).
 func (k *placesKind) HasProviders(h Host) bool {
 	if k.providerKind.HasProviders(h) {
 		return true
 	}
-	return k.localSource != nil && k.localSource()
+	return k.localSource != nil && k.localSource(k.def.PermType)
 }
 
 // serve returns visits and trips with full detail including coordinates:

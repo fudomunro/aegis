@@ -184,33 +184,30 @@ func (h *Handlers) ownershipServiceUse() map[string]ownershipUse {
 		}
 		out[id] = st
 	}
-	if h.Signal != nil && h.Signal.Enabled() {
-		contacts, messages, err := h.Signal.Counts()
-		if err == nil {
-			markArchive(connectors.SignalServiceID, contacts+messages,
-				fmt.Sprintf("%d contacts, %d messages imported", contacts, messages))
+	// Local import stores (issue #393): declared counts + detail phrasing.
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		store := h.LocalStores[spec.Stem]
+		if store == nil || !store.Enabled() {
+			continue
 		}
-	}
-	if h.Quicken != nil && h.Quicken.Enabled() {
-		n, err := h.Quicken.Count()
-		if err == nil {
-			markArchive(connectors.QuickenServiceID, n,
-				fmt.Sprintf("%d transactions imported", n))
+		admin := ImportStoreAdmin{Spec: spec, Store: store}
+		counts := admin.Admin().Counts
+		if counts == nil {
+			continue
 		}
-	}
-	if h.Timeline != nil && h.Timeline.Enabled() {
-		n, err := h.Timeline.Count()
-		if err == nil {
-			markArchive(connectors.TimelineServiceID, n,
-				fmt.Sprintf("%d place visits imported", n))
+		live := counts()
+		if live == nil {
+			continue
 		}
-	}
-	if h.LinkedIn != nil && h.LinkedIn.Enabled() {
-		n, err := h.LinkedIn.Counts()
-		if err == nil {
-			markArchive(connectors.LinkedInServiceID, n,
-				fmt.Sprintf("%d connections imported", n))
+		total := 0
+		for _, n := range live {
+			total += n
 		}
+		detail := fmt.Sprintf("%d row(s) imported", total)
+		if fn := admin.Admin().ArchiveDetail; fn != nil {
+			detail = fn(live)
+		}
+		markArchive(spec.Service.ID, total, detail)
 	}
 	return out
 }

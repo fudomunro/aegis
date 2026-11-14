@@ -60,7 +60,7 @@ func TestOwnershipStatuses_EmptyArchiveStoreStaysARoute(t *testing.T) {
 		t.Fatalf("open signal store: %v", err)
 	}
 	t.Cleanup(func() { store.Close() })
-	srv.signal = store
+	srv.localStores["signal"] = store
 	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(store)
 
 	byKind := ownershipByKind(t, srv.admin().OwnershipStatuses())
@@ -96,7 +96,7 @@ func TestOwnershipStatuses_LinkedInArchiveStore(t *testing.T) {
 		t.Fatalf("open linkedin store: %v", err)
 	}
 	t.Cleanup(func() { store.Close() })
-	srv.linkedin = store
+	srv.localStores["linkedin"] = store
 	srv.connectors[connectors.LinkedInServiceID] = connectors.NewLinkedInConnector(store)
 
 	byKind := ownershipByKind(t, srv.admin().OwnershipStatuses())

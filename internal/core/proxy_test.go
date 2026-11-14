@@ -317,6 +317,7 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		tokens:      &tokens.TokenStore{Tokens: make(map[string]*tokens.OAuthToken), Secrets: make(map[string]string)},
 		oauthStates: shared.NewStateStore(),
 		connectors:  make(map[string]connectors.ServiceConnector),
+		localStores: make(map[string]connectors.ImportStore),
 		metrics:     metrics.NewAccessMetrics(0),
 		hookHealth:  hookhealth.NewHookHealth(hookhealth.DefaultObservationCapacity),
 		prom:        metrics.NewPromMetrics("", ""),

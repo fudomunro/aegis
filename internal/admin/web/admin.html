@@ -586,9 +586,7 @@
         <a href="#section-library-datasets">Library datasets</a>
         <a href="#section-mail-archive">Mail archive</a>
         <a href="#section-takeout">Google Takeout</a>
-        <a href="#section-quicken">Quicken import</a>
-        <a href="#section-signal">Signal import</a>
-        <a href="#section-linkedin">LinkedIn import</a>
+        <span id="toc-import-stores"></span>
         <a href="#section-user-kinds">User-defined kinds</a>
         <a href="#section-sync">Data sync</a>
         <a href="#section-copies">Copy ledger</a>
@@ -714,62 +712,10 @@
       </div>
       <div id="takeout-result" class="meta"></div>
 
-      <h2 class="section-heading" id="section-quicken">Quicken import (read-only)</h2>
-      <div class="help-box">
-        <h3>Historical bank exports</h3>
-        <p>Import QIF / QFX / OFX exports into the local transaction store so agents can answer money questions that span live YNAB data and older Quicken history. Line-item metadata only — statements and PDFs are never stored. Re-import skips rows already stored (by FITID).</p>
-      </div>
-      <div class="toolbar">
-        <div class="grow">
-          <input type="text" id="quicken-path" placeholder="/path/to/export.qif or a folder of .qif/.qfx/.ofx" aria-label="Quicken export path" style="width:100%">
-        </div>
-        <button class="btn btn-primary" id="quicken-import" type="button">Import</button>
-        <button class="btn" id="quicken-refresh" type="button">Refresh</button>
-      </div>
-      <div id="quicken-result" class="meta"></div>
-      <div id="quicken-hints" class="meta" style="margin-top:0.35rem"></div>
-
-      <h2 class="section-heading" id="section-signal">Signal import (read-only)</h2>
-      <div class="help-box">
-        <h3>Signal contacts and chats</h3>
-        <p>Signal has no public message API. Export on your device, decrypt if needed, then import the result here so agents can answer questions about Signal conversations. Text metadata only — attachments and media are never stored. Re-import skips rows already present.</p>
-        <p><strong>How to produce an export</strong></p>
-        <ul>
-          <li><strong>Android:</strong> Signal → Settings → Chats → Chat backups → Create backup (remember the passphrase). Decrypt with <code>signalbackup-tools</code> to a plaintext <code>database.sqlite</code>, then import that file.</li>
-          <li><strong>Desktop:</strong> copy the Signal data directory’s <code>sql/db.sqlite</code> after decrypting it, or use a community exporter that writes JSONL.</li>
-          <li><strong>JSONL:</strong> one JSON object per line with <code>"type":"contact"</code> or <code>"type":"message"</code> (also accepts a <code>{"contacts":[],"messages":[]}</code> bundle).</li>
-        </ul>
-      </div>
-      <div class="toolbar">
-        <div class="grow">
-          <input type="text" id="signal-path" placeholder="/path/to/signal-export (JSONL/JSON or plaintext .db)" aria-label="Signal export path" style="width:100%">
-        </div>
-        <button class="btn btn-primary" id="signal-import" type="button">Import</button>
-        <button class="btn" id="signal-refresh" type="button">Refresh</button>
-      </div>
-      <div id="signal-result" class="meta"></div>
-      <div id="signal-hints" class="meta" style="margin-top:0.35rem"></div>
-
-      <h2 class="section-heading" id="section-linkedin">LinkedIn import (read-only)</h2>
-      <div class="help-box">
-        <h3>LinkedIn connections</h3>
-        <p>LinkedIn has no public connections API. Export a copy of your data, then import it here so agents can answer questions about people you know professionally. Contact metadata only — profile photos and other media are never stored. Re-import skips rows already present.</p>
-        <p><strong>How to produce an export</strong></p>
-        <ul>
-          <li><strong>LinkedIn:</strong> Settings &amp; Privacy → Data Privacy → Get a copy of your data → select Connections (or the full archive), then wait for the download email.</li>
-          <li><strong>Archive:</strong> import the <code>.zip</code> LinkedIn sends — Aegis finds <code>Connections.csv</code> and <code>Contacts.csv</code> inside.</li>
-          <li><strong>CSV:</strong> or import those CSVs directly, or a folder containing them.</li>
-        </ul>
-      </div>
-      <div class="toolbar">
-        <div class="grow">
-          <input type="text" id="linkedin-path" placeholder="/path/to/linkedin-export.zip or Connections.csv" aria-label="LinkedIn export path" style="width:100%">
-        </div>
-        <button class="btn btn-primary" id="linkedin-import" type="button">Import</button>
-        <button class="btn" id="linkedin-refresh" type="button">Refresh</button>
-      </div>
-      <div id="linkedin-result" class="meta"></div>
-      <div id="linkedin-hints" class="meta" style="margin-top:0.35rem"></div>
+      <!-- Local import store panels render from the connectors registry
+           (issue #393): declared panel copy + live status, no per-store
+           markup. -->
+      <div id="import-store-panels"></div>
 
       <h2 class="section-heading" id="section-user-kinds">User-defined kinds (local files)</h2>
       <div class="help-box">
@@ -3813,7 +3759,7 @@
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, <code>/v1/library/transactions</code>, and <code>/v1/services/{id}/…</code>. Add <code>?q=…</code> to a library endpoint to full-text search it.</div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/search/status</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/setup/ynab</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/search/status</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/setup/ynab</code>, <code>/v1/admin/{store}/*</code> (local import stores), <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
       "</article>";
   }
 
@@ -4495,166 +4441,145 @@ function selectTab(name, opts) {
     }
   }
 
-  // --- Quicken import (issue #141) ---
-  async function loadQuickenStatus() {
-    const result = $("quicken-result");
-    const hints = $("quicken-hints");
-    if (!result) return;
-    try {
-      const st = await api("/v1/admin/quicken/status");
-      result.innerHTML = st.enabled
-        ? '<div class="meta">Store: <code>' + escapeHtml(st.path || "") + "</code> · " + (st.count || 0) + " line item(s)</div>"
-        : '<div class="error-box">Quicken store disabled — restart with <code>-quicken-store</code>.</div>';
-      if (hints) hints.innerHTML = (st.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
-    } catch (err) {
-      if (err.status === 401) showAuthGate(true);
-      else result.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed to load Quicken status") + "</div>";
+  // --- Local import store panels (issue #393) ---
+  // Every import panel renders from the connectors registry: declared
+  // panel copy + live status via GET /v1/admin/import-stores. Declared
+  // copy is escaped; `backticks` become code spans. No per-store markup.
+  function codeSpans(s) {
+    return escapeHtml(s || "").replace(/`([^`]+)`/g, "<code>$1</code>");
+  }
+
+  const IMPORT_COUNTER_LABELS = { count: "row(s)", contacts: "contact(s)", messages: "message(s)" };
+
+  function importStatusLine(st) {
+    if (!st.enabled) {
+      return '<div class="error-box">Store disabled — restart with <code>' +
+        escapeHtml(st.flag_name || "") + "</code>.</div>";
+    }
+    const counts = [];
+    for (const key of ["count", "contacts", "messages"]) {
+      if (st[key]) counts.push(st[key] + " " + (IMPORT_COUNTER_LABELS[key] || key));
+    }
+    return '<div class="meta">Store: <code>' + escapeHtml(st.path || "") + "</code>" +
+      (counts.length ? " · " + counts.join(" · ") : "") + "</div>";
+  }
+
+  function importSummaryLine(res) {
+    if (res && res.summary) return '<div class="meta">Import finished: ' + escapeHtml(res.summary) + "</div>";
+    // Bare result shapes (no envelope) carry flat counters.
+    const r = (res && res.result) || res || {};
+    if (r.stored !== undefined || r.scanned !== undefined) {
+      return '<div class="meta">Import finished: stored ' + (r.stored || 0) +
+        " · skipped " + (r.skipped || 0) + " · errors " + (r.errors || 0) + "</div>";
+    }
+    return '<div class="meta">Import finished.</div>';
+  }
+
+  function renderImportStorePanels(stores) {
+    const host = $("#import-store-panels");
+    const toc = $("#toc-import-stores");
+    if (!host) return;
+    host.innerHTML = "";
+    if (toc) toc.innerHTML = "";
+    for (const store of stores) {
+      const stem = store.stem;
+      const panel = store.panel || {};
+      const section = document.createElement("section");
+      section.innerHTML =
+        '<h2 class="section-heading" id="section-' + escapeHtml(stem) + '">' + escapeHtml(panel.heading || stem) + "</h2>" +
+        '<div class="help-box">' +
+          "<h3>" + escapeHtml(panel.title || "") + "</h3>" +
+          (panel.intro ? "<p>" + codeSpans(panel.intro) + "</p>" : "") +
+          (panel.steps && panel.steps.length
+            ? '<p><strong>How to produce an export</strong></p><ul>' +
+              panel.steps.map((s) => "<li>" + codeSpans(s) + "</li>").join("") + "</ul>"
+            : "") +
+        "</div>" +
+        '<div class="toolbar">' +
+          '<div class="grow">' +
+            '<input type="text" id="' + escapeHtml(stem) + '-path" placeholder="' + escapeHtml(panel.placeholder || "") +
+            '" aria-label="' + escapeHtml(panel.title || stem) + ' export path" style="width:100%">' +
+          "</div>" +
+          '<button class="btn btn-primary" id="' + escapeHtml(stem) + '-import" type="button">Import</button>' +
+          '<button class="btn" id="' + escapeHtml(stem) + '-refresh" type="button">Refresh</button>' +
+        "</div>" +
+        '<div id="' + escapeHtml(stem) + '-result" class="meta"></div>' +
+        '<div id="' + escapeHtml(stem) + '-hints" class="meta" style="margin-top:0.35rem"></div>';
+      host.appendChild(section);
+      if (toc) {
+        const a = document.createElement("a");
+        a.href = "#section-" + stem;
+        a.textContent = panel.heading || stem;
+        toc.appendChild(a);
+      }
+      wireImportStorePanel(store);
     }
   }
 
-  async function runQuickenImport() {
-    const path = ($("quicken-path").value || "").trim();
-    if (!path) {
-      $("quicken-result").innerHTML = '<div class="error-box">Enter a QIF/QFX file or directory first.</div>';
-      return;
-    }
-    const btn = $("quicken-import");
-    if (btn) btn.disabled = true;
-    $("quicken-result").textContent = "Importing…";
+  function wireImportStorePanel(store) {
+    const stem = store.stem;
+    const result = $(stem + "-result");
+    const hints = $(stem + "-hints");
+    const btn = $(stem + "-import");
+    const refresh = $(stem + "-refresh");
+
+    const renderStatus = (st) => {
+      if (!result) return;
+      result.innerHTML = importStatusLine({ ...(st || {}), flag_name: store.flag_name });
+      if (hints) hints.innerHTML = ((st && st.hints) || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
+    };
+    renderStatus(store.status);
+
+    const runImport = async () => {
+      const path = ($(stem + "-path").value || "").trim();
+      if (!path) {
+        if (result) result.innerHTML = '<div class="error-box">Enter an export file or directory first.</div>';
+        return;
+      }
+      if (btn) btn.disabled = true;
+      if (result) result.textContent = "Importing…";
+      try {
+        const res = await api("/v1/admin/" + stem + "/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path }),
+        });
+        if (result) result.innerHTML = importSummaryLine(res);
+        renderStatus(res && res.status);
+      } catch (err) {
+        if (err.status === 401) showAuthGate(true);
+        else if (result) result.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "import failed") + "</div>";
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    };
+    if (btn) btn.addEventListener("click", runImport);
+    if (refresh) refresh.addEventListener("click", async () => {
+      try {
+        renderStatus(await api("/v1/admin/" + stem + "/status"));
+      } catch (err) {
+        if (err.status === 401) showAuthGate(true);
+        else if (result) result.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed to load status") + "</div>";
+      }
+    });
+  }
+
+  async function loadImportStores() {
     try {
-      const res = await api("/v1/admin/quicken/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
-      });
-      const r = (res && res.result) || {};
-      $("quicken-result").innerHTML =
-        '<div class="meta">Import finished: scanned ' + (r.scanned || 0) +
-        " · stored " + (r.stored || 0) +
-        " · skipped (already imported) " + (r.skipped || 0) +
-        " · errors " + (r.errors || 0) + "</div>";
-      await loadQuickenStatus();
+      const data = await api("/v1/admin/import-stores");
+      renderImportStorePanels((data && data.stores) || []);
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
-      else $("quicken-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "import failed") + "</div>";
-    } finally {
-      if (btn) btn.disabled = false;
     }
   }
 
-  $("quicken-import").addEventListener("click", () => runQuickenImport());
-  $("quicken-refresh").addEventListener("click", () => loadQuickenStatus());
   document.addEventListener("click", (e) => {
     const btn = e.target && e.target.closest ? e.target.closest("[data-sync-toggle]") : null;
     if (btn) toggleSyncHub(btn);
   });
 
   document.querySelectorAll("[data-setup-service]").forEach((host) => loadSetupPanel(host));
-  loadQuickenStatus();
-
-  // --- Signal import (issue #168) ---
-  async function loadSignalStatus() {
-    const result = $("signal-result");
-    const hints = $("signal-hints");
-    if (!result) return;
-    try {
-      const st = await api("/v1/admin/signal/status");
-      result.innerHTML = st.enabled
-        ? '<div class="meta">Store: <code>' + escapeHtml(st.path || "") + "</code> · " +
-          (st.contacts || 0) + " contact(s) · " + (st.messages || 0) + " message(s)</div>"
-        : '<div class="error-box">Signal store disabled — restart with <code>-signal-store</code>.</div>';
-      if (hints) hints.innerHTML = (st.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
-    } catch (err) {
-      if (err.status === 401) showAuthGate(true);
-      else result.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed to load Signal status") + "</div>";
-    }
-  }
-
-  async function runSignalImport() {
-    const path = ($("signal-path").value || "").trim();
-    if (!path) {
-      $("signal-result").innerHTML = '<div class="error-box">Enter a Signal export file or directory first.</div>';
-      return;
-    }
-    const btn = $("signal-import");
-    if (btn) btn.disabled = true;
-    $("signal-result").textContent = "Importing…";
-    try {
-      const res = await api("/v1/admin/signal/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
-      });
-      const r = (res && res.result) || {};
-      $("signal-result").innerHTML =
-        '<div class="meta">Import finished: contacts stored ' + (r.contacts_stored || 0) +
-        " / skipped " + (r.contacts_skipped || 0) +
-        " · messages stored " + (r.messages_stored || 0) +
-        " / skipped " + (r.messages_skipped || 0) +
-        " · errors " + (r.errors || 0) + "</div>";
-      await loadSignalStatus();
-    } catch (err) {
-      if (err.status === 401) showAuthGate(true);
-      else $("signal-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "import failed") + "</div>";
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  $("signal-import").addEventListener("click", () => runSignalImport());
-  $("signal-refresh").addEventListener("click", () => loadSignalStatus());
-  loadSignalStatus();
-
-  // --- LinkedIn import (issue #218) ---
-  async function loadLinkedInStatus() {
-    const result = $("linkedin-result");
-    const hints = $("linkedin-hints");
-    if (!result) return;
-    try {
-      const st = await api("/v1/admin/linkedin/status");
-      result.innerHTML = st.enabled
-        ? '<div class="meta">Store: <code>' + escapeHtml(st.path || "") + "</code> · " +
-          (st.contacts || 0) + " connection(s)</div>"
-        : '<div class="error-box">LinkedIn store disabled — restart with <code>-linkedin-store</code>.</div>';
-      if (hints) hints.innerHTML = (st.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
-    } catch (err) {
-      if (err.status === 401) showAuthGate(true);
-      else result.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed to load LinkedIn status") + "</div>";
-    }
-  }
-
-  async function runLinkedInImport() {
-    const path = ($("linkedin-path").value || "").trim();
-    if (!path) {
-      $("linkedin-result").innerHTML = '<div class="error-box">Enter a LinkedIn export file or directory first.</div>';
-      return;
-    }
-    const btn = $("linkedin-import");
-    if (btn) btn.disabled = true;
-    $("linkedin-result").textContent = "Importing…";
-    try {
-      const res = await api("/v1/admin/linkedin/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
-      });
-      const r = (res && res.result) || {};
-      $("linkedin-result").innerHTML =
-        '<div class="meta">Import finished: connections stored ' + (r.stored || 0) +
-        " / skipped " + (r.skipped || 0) +
-        " · errors " + (r.errors || 0) + "</div>";
-      await loadLinkedInStatus();
-    } catch (err) {
-      if (err.status === 401) showAuthGate(true);
-      else $("linkedin-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "import failed") + "</div>";
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  $("linkedin-import").addEventListener("click", () => runLinkedInImport());
-  $("linkedin-refresh").addEventListener("click", () => loadLinkedInStatus());
-  loadLinkedInStatus();
+  loadImportStores();
 
   // --- User-defined kind local files (issue #15) ---
   let udkBrowseTarget = null; // {kindId, sourceId} or {kindId, extraId}

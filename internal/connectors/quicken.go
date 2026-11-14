@@ -41,6 +41,28 @@ func QuickenService() LocalStoreService {
 	}
 }
 
+// quickenStoreSpec is the wiring declaration for the Quicken import store
+// (issue #393 registry).
+func quickenStoreSpec() LocalImportStoreSpec {
+	return LocalImportStoreSpec{
+		Service:        QuickenService(),
+		Stem:           "quicken",
+		DefaultFile:    "quicken.db",
+		StoreFlagHelp:  "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)",
+		ImportFlagHelp: "Quicken QIF/QFX file or directory to import into the local store, then exit",
+		Open: func(path string) (ImportStore, error) {
+			return OpenQuickenStore(path)
+		},
+		NewConnector: func(st ImportStore) ServiceConnector {
+			if st == nil {
+				return NewQuickenConnector(nil)
+			}
+			return NewQuickenConnector(st.(*QuickenStore))
+		},
+		Maturity: quickenMaturity,
+	}
+}
+
 // Admin declares the Quicken import admin surface (issue #254).
 func (s *QuickenStore) Admin() ImportAdmin {
 	return ImportAdmin{
@@ -48,6 +70,16 @@ func (s *QuickenStore) Admin() ImportAdmin {
 		PathHint:    "a QIF/QFX file or directory",
 		SamplePath:  "~/Downloads/Quicken (QIF / QFX / OFX file or directory)",
 		LibraryPath: "/v1/library/transactions",
+		Panel: ImportPanel{
+			Heading: "Quicken import (read-only)",
+			Title:   "Historical bank exports",
+			Intro:   "Import QIF / QFX / OFX exports into the local transaction store so agents can answer money questions that span live YNAB data and older Quicken history. Line-item metadata only — statements and PDFs are never stored. Re-import skips rows already stored (by FITID).",
+			Steps: []string{
+				"Quicken: File → Export → QIF or QFX, or export OFX from your bank.",
+				"Import the file below, or a folder of exports. Re-import is safe.",
+			},
+			Placeholder: "/path/to/export.qif or a folder of .qif/.qfx/.ofx",
+		},
 		Counts: func() map[string]int {
 			if s == nil || !s.Enabled() {
 				return nil
@@ -58,6 +90,10 @@ func (s *QuickenStore) Admin() ImportAdmin {
 			}
 			return map[string]int{"count": n}
 		},
+		ArchiveDetail: func(counts map[string]int) string {
+			return fmt.Sprintf("%d transactions imported", counts["count"])
+		},
+		AccessorDetail: "QIF/QFX/OFX import into the local transaction store.",
 		Hints: func(state ImportHintState) []string {
 			switch {
 			case !state.Enabled:
@@ -84,6 +120,25 @@ type QuickenStore struct {
 	localStore
 }
 
+// Path, Close, and Enabled are re-declared on each concrete store:
+// embedded-field promotion panics on a typed-nil receiver, and disabled
+// stores must stay describable through ImportStore (issue #393).
+func (s *QuickenStore) Path() string {
+	if s == nil {
+		return ""
+	}
+	return s.path
+}
+
+func (s *QuickenStore) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
+func (s *QuickenStore) Enabled() bool { return s != nil && s.db != nil }
+
 // QuickenImportResult reports one import run.
 type QuickenImportResult struct {
 	Path    string `json:"path"`
@@ -103,6 +158,11 @@ func (r QuickenImportResult) LogAttrs() []any {
 
 // Failed reports a run that recorded errors but stored nothing.
 func (r QuickenImportResult) Failed() bool { return r.Errors > 0 && r.Stored == 0 }
+
+// Summary is the one-line run result the admin panel renders.
+func (r QuickenImportResult) Summary() string {
+	return importCountsSummary(r.Stored, r.Skipped, r.Errors)
+}
 
 var _ ImportStore = (*QuickenStore)(nil)
 var _ ImportOutcome = QuickenImportResult{}

@@ -42,6 +42,28 @@ func SignalService() LocalStoreService {
 	}
 }
 
+// signalStoreSpec is the wiring declaration for the Signal import store
+// (issue #393 registry).
+func signalStoreSpec() LocalImportStoreSpec {
+	return LocalImportStoreSpec{
+		Service:        SignalService(),
+		Stem:           "signal",
+		DefaultFile:    "signal.db",
+		StoreFlagHelp:  "path to local Signal import store (default: <data-dir>/signal.db; empty disables)",
+		ImportFlagHelp: "Signal export file or directory (JSONL/JSON or plaintext SQLite) to import into the local store, then exit",
+		Open: func(path string) (ImportStore, error) {
+			return OpenSignalStore(path)
+		},
+		NewConnector: func(st ImportStore) ServiceConnector {
+			if st == nil {
+				return NewSignalConnector(nil)
+			}
+			return NewSignalConnector(st.(*SignalStore))
+		},
+		Maturity: signalMaturity,
+	}
+}
+
 // Admin declares the Signal import admin surface (issue #254).
 func (s *SignalStore) Admin() ImportAdmin {
 	return ImportAdmin{
@@ -49,6 +71,17 @@ func (s *SignalStore) Admin() ImportAdmin {
 		PathHint:    "a Signal export file or directory",
 		SamplePath:  "~/Downloads/signal-export (JSONL, or plaintext .db from signalbackup-tools)",
 		LibraryPath: "/v1/library/messages",
+		Panel: ImportPanel{
+			Heading: "Signal import (read-only)",
+			Title:   "Signal contacts and chats",
+			Intro:   "Signal has no public message API. Export on your device, decrypt if needed, then import the result here so agents can answer questions about Signal conversations. Text metadata only — attachments and media are never stored. Re-import skips rows already present.",
+			Steps: []string{
+				"Android: Signal → Settings → Chats → Chat backups → Create backup (remember the passphrase). Decrypt with `signalbackup-tools` to a plaintext `database.sqlite`, then import that file.",
+				"Desktop: copy the Signal data directory's `sql/db.sqlite` after decrypting it, or use a community exporter that dumps JSONL.",
+				`JSONL: one JSON object per line with "type":"contact" or "type":"message" (also accepts a {"contacts":[],"messages":[]} bundle).`,
+			},
+			Placeholder: "/path/to/signal-export (JSONL/JSON or plaintext .db)",
+		},
 		Counts: func() map[string]int {
 			if s == nil || !s.Enabled() {
 				return nil
@@ -59,6 +92,10 @@ func (s *SignalStore) Admin() ImportAdmin {
 			}
 			return map[string]int{"contacts": c, "messages": m}
 		},
+		ArchiveDetail: func(counts map[string]int) string {
+			return fmt.Sprintf("%d contacts, %d messages imported", counts["contacts"], counts["messages"])
+		},
+		AccessorDetail: "File-based Signal export ingest into the local contacts/messages store. Attachments are never stored.",
 		Hints: func(state ImportHintState) []string {
 			contacts, messages := state.Counts["contacts"], state.Counts["messages"]
 			switch {
@@ -117,6 +154,12 @@ func (r SignalImportResult) Failed() bool {
 	return r.Errors > 0 && r.ContactsStored == 0 && r.MessagesStored == 0
 }
 
+// Summary is the one-line run result the admin panel renders.
+func (r SignalImportResult) Summary() string {
+	return fmt.Sprintf("%d contact(s) and %d message(s) stored, %d skipped, %d errors",
+		r.ContactsStored, r.MessagesStored, r.ContactsSkipped+r.MessagesSkipped, r.Errors)
+}
+
 var _ ImportStore = (*SignalStore)(nil)
 var _ ImportOutcome = SignalImportResult{}
 
@@ -163,6 +206,23 @@ CREATE INDEX IF NOT EXISTS signal_messages_thread ON signal_messages(thread_id);
 `
 
 func (s *SignalStore) Enabled() bool { return s != nil && s.db != nil }
+
+// Path and Close are re-declared on each concrete store: embedded-field
+// promotion panics on a typed-nil receiver, and disabled stores must stay
+// describable through ImportStore (issue #393).
+func (s *SignalStore) Path() string {
+	if s == nil {
+		return ""
+	}
+	return s.path
+}
+
+func (s *SignalStore) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
 
 // upsertSignalContactTx stores or replaces one imported contact keyed by
 // source_id.

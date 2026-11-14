@@ -101,11 +101,10 @@ type Handlers struct {
 	Prom *metrics.PromMetrics
 	// Connectors is the configured connector registry.
 	Connectors map[string]connectors.ServiceConnector
-	// Quicken / Timeline / Signal / LinkedIn are optional local import stores.
-	Quicken  *connectors.QuickenStore
-	Timeline *connectors.TimelineStore
-	Signal   *connectors.SignalStore
-	LinkedIn *connectors.LinkedInStore
+	// LocalStores are the optional local import stores keyed by stem
+	// (issue #393). Entries may be typed-nil behind the interface when
+	// disabled — Admin() copy stays describable.
+	LocalStores map[string]connectors.ImportStore
 	// Cache and MBCache back the admin cache panel (shared response cache
 	// and the MusicBrainz lookup cache).
 	Cache   *shared.Cache
