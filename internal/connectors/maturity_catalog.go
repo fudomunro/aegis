@@ -29,7 +29,7 @@ import "github.com/fudomunro/aegis/internal/shared"
 // import store. Sample fixtures and the drift-injection harness are
 // excluded: they are test surfaces, not connections to mature.
 func ConnectionMaturityCatalog() []ConnectionMaturity {
-	return []ConnectionMaturity{
+	out := []ConnectionMaturity{
 		spotifyMaturity(),
 		youtubeMusicMaturity(),
 		amazonMusicMaturity(),
@@ -45,10 +45,12 @@ func ConnectionMaturityCatalog() []ConnectionMaturity {
 		calDAVMaturity(),
 		cardDAVMaturity(),
 		paperlessMaturity(),
-		signalMaturity(),
-		quickenMaturity(),
-		timelineMaturity(),
 	}
+	// Local import stores declare maturity beside the store (issue #393).
+	for _, spec := range LocalImportStoreSpecs() {
+		out = append(out, spec.Maturity())
+	}
+	return out
 }
 
 func signalMaturity() ConnectionMaturity {
@@ -101,6 +103,25 @@ func timelineMaturity() ConnectionMaturity {
 			{Name: "places", Description: "Imported Timeline visits and trips", Supported: true,
 				Fields: FieldCoverageFor("places", "start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id")},
 			{Name: "location_points", Description: "Raw Timeline location points", Supported: false},
+		},
+	}
+}
+
+func linkedinMaturity() ConnectionMaturity {
+	return ConnectionMaturity{
+		Service:   LinkedInServiceID,
+		Transport: TransportArchive,
+		Start: shared.OwnershipAction{
+			Kind:  shared.OwnershipActionImport,
+			Label: "Import LinkedIn connections",
+		},
+		Kinds: []KindMaturity{
+			{Name: "contacts", Description: "Imported LinkedIn connections", Supported: true,
+				Fields: FieldCoverageFor("contacts", "name", "emails", "phones", "handles", "organization")},
+			{Name: "messaging", Description: "InMail and direct messages", Supported: false},
+			{Name: "posts", Description: "Posts and feed activity", Supported: false},
+			{Name: "jobs", Description: "Job applications and saved jobs", Supported: false},
+			{Name: "recommendations", Description: "Given and received recommendations", Supported: false},
 		},
 	}
 }

@@ -62,10 +62,11 @@ type Deps struct {
 	ResolveTracks  func(context.Context, []Track)
 	ResolveAlbums  func(context.Context, []Album)
 	ResolveArtists func(context.Context, []Artist)
-	// PlacesLocalSource reports whether the Timeline import store can feed
-	// the places kind without a live connector (issue #142) — the declared
-	// local-source shape, not a pipeline branch (issue #312).
-	PlacesLocalSource func() bool
+	// LocalSource reports whether a local import store can feed the given
+	// library kind without a live connector (issue #142) — the declared
+	// local-source shape, not a pipeline branch (issue #312). Kinds pass
+	// their own permission key; the hub never names a kind (issue #393).
+	LocalSource func(kind string) bool
 	// MailArchive is the messages kind's declared local collection source
 	// (issue #139). Nil disables it.
 	MailArchive MailArchive

@@ -5,6 +5,23 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Changed
+
+- **Local import store spec registry (issue #393).** Signal, Quicken,
+  Timeline, and LinkedIn now register through one connectors-side
+  declaration (`LocalImportStoreSpecs()`) instead of per-store wiring
+  across the hub: CLI flags (`-<stem>-store` / `-import-<stem>`), data-dir
+  paths, one-shot CLI import, connector registration, admin
+  status/import routes, ownership evidence, permissions-overview rows,
+  and the admin UI panels all iterate the registry. The hand-written
+  admin.html import sections are replaced by a renderer fed from
+  `GET /v1/admin/import-stores` (declared panel copy + live status) —
+  the issue #265 "declare, don't render" rule for the import family —
+  which also adds the previously missing Timeline import panel. Adding a
+  local import store is now a store file beside its spec constructor, one
+  registry line, and docs; `TestLocalImportStoreSpecs` pins the
+  declaration contract. No import behavior changes.
+
 ### Removed
 
 - **One-shot mirror API (`POST /v1/library/mirror`, issue #389).** The
@@ -23,6 +40,21 @@ issue numbers; this file is where that context lives.
   freshness and repair.
 
 ### Added
+
+- **LinkedIn connections import (issue #218).** LinkedIn exposes no
+  third-party connections API, so 1st-degree connections arrive as a local
+  import store beside Signal/Quicken/Timeline: `-import-linkedin` reads the
+  LinkedIn data export — the archive `.zip`, `Connections.csv` /
+  `Contacts.csv`, or a directory of CSVs — into `<data-dir>/linkedin.db`,
+  and the `linkedin` source feeds `/v1/library/contacts` where identity
+  matching can fold connections into the same people as Google Contacts or
+  CardDAV. Name → `Contact.Name`, email → `emails`, profile public id →
+  `handles`, company → `organization`; the profile URL, position, and
+  connection date stay on `sources[].extra`. Contact metadata only —
+  profile photos and other media are never stored. Re-import skips rows
+  already stored (keyed by profile public id). Admin surface: Advanced →
+  LinkedIn import (`/v1/admin/linkedin/*`); maturity catalog declares the
+  messaging / posts / jobs / recommendations gap as unsupported.
 
 - **Identity-keyed copy watermarks (issue #384).** Per-item watermark rows
   key on the item's durable identity where it has one — vCard UID, email,

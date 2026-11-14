@@ -65,12 +65,16 @@ func Run() {
 	serviceConnsPath := flag.String("service-connections-file", "", "path to admin service-connections overlay (default: <data-dir>/service_connections.json; secrets live in the encrypted token store)")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables the local mail source)")
 	searchIndexPath := flag.String("search-index", "", "path to local library search index (default: <data-dir>/search-index.db; empty disables q= search)")
-	quickenPath := flag.String("quicken-store", "", "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)")
-	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit")
-	timelinePath := flag.String("timeline-store", "", "path to local Google Timeline import store (default: <data-dir>/timeline.db; empty disables)")
-	importTimeline := flag.String("import-timeline", "", "Google Timeline JSON file, directory, or Takeout zip to import into the local store, then exit")
-	signalPath := flag.String("signal-store", "", "path to local Signal import store (default: <data-dir>/signal.db; empty disables)")
-	importSignal := flag.String("import-signal", "", "Signal export file or directory (JSONL/JSON or plaintext SQLite) to import into the local store, then exit")
+	// Local import store flags come from the connectors registry (issue #393):
+	// one -<stem>-store and -import-<stem> pair per declared store.
+	localStoreSpecs := connectors.LocalImportStoreSpecs()
+	localStoreFlags := map[string]*string{}
+	localImportFlags := map[string]*string{}
+	for _, spec := range localStoreSpecs {
+		spec := spec
+		localStoreFlags[spec.Stem] = flag.String(spec.StoreFlagName(), "", spec.StoreFlagHelp)
+		localImportFlags[spec.Stem] = flag.String(spec.ImportFlagName(), "", spec.ImportFlagHelp)
+	}
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
 	fakeUpstream := flag.Bool("fake-upstream", false, "dev/test only: serve an injectable fake provider at /demo/fake-upstream and seed placeholder tokens for services pointed at it (never enable on a real instance)")
 	auditRetentionDays := flag.Int("audit-retention-days", audit.DefaultRetentionDays, "how many days of audit events to retain before pruning")
@@ -91,6 +95,17 @@ func Run() {
 	flag.Parse()
 
 	setFlags := visitedFlags()
+	localStorePaths := map[string]LocalStoreOverride{}
+	for _, spec := range localStoreSpecs {
+		localStorePaths[spec.Stem] = LocalStoreOverride{
+			Path: *localStoreFlags[spec.Stem],
+			Set:  setFlags[spec.StoreFlagName()],
+		}
+	}
+	localImportPaths := map[string]string{}
+	for _, spec := range localStoreSpecs {
+		localImportPaths[spec.Stem] = *localImportFlags[spec.Stem]
+	}
 	paths, err := ResolveStatePaths(StatePathOverrides{
 		Dir:                *dataDirFlag,
 		Config:             *configPath,
@@ -106,12 +121,7 @@ func Run() {
 		MailArchiveSet:     setFlags["mail-archive"],
 		SearchIndex:        *searchIndexPath,
 		SearchIndexSet:     setFlags["search-index"],
-		Quicken:            *quickenPath,
-		QuickenSet:         setFlags["quicken-store"],
-		Timeline:           *timelinePath,
-		TimelineSet:        setFlags["timeline-store"],
-		Signal:             *signalPath,
-		SignalSet:          setFlags["signal-store"],
+		LocalStores:        localStorePaths,
 		AuditLog:           *auditLogPath,
 		AuditLogSet:        setFlags["audit-log"],
 		LogFile:            *logFile,
@@ -152,12 +162,13 @@ func Run() {
 		"sync_jobs", paths.SyncJobs,
 		"mail_archive", paths.MailArchive,
 		"search_index", paths.SearchIndex,
-		"quicken_store", paths.Quicken,
-		"timeline_store", paths.Timeline,
-		"signal_store", paths.Signal,
 		"audit_log", paths.AuditLog,
 		"log_file", paths.LogFile,
 	)
+	for _, spec := range localStoreSpecs {
+		slog.Info("local import store path resolved",
+			"stem", spec.Stem, "path", paths.LocalStores[spec.Stem])
+	}
 
 	// One-shot sample seeding, Takeout ingest, and token rekey do not need
 	// OAuth, base URL, or a listening server.
@@ -169,9 +180,7 @@ func Run() {
 		seedDemoDatasets:   *seedDemoDatasets,
 		importTakeout:      *importTakeout,
 		importTakeoutBatch: *importTakeoutBatch,
-		importQuicken:      *importQuicken,
-		importTimeline:     *importTimeline,
-		importSignal:       *importSignal,
+		importStores:       localImportPaths,
 		tokenNewPass:       *tokenNewPass,
 		tokenPass:          *tokenPass,
 	}, paths); done {
@@ -401,48 +410,28 @@ func Run() {
 		slog.Info("search index disabled")
 	}
 
-	quickenStore, err := connectors.OpenQuickenStore(paths.Quicken)
-	if err != nil {
-		slog.Error("failed to open quicken store", "path", paths.Quicken, "error", err)
-		os.Exit(1)
-	}
-	if quickenStore != nil {
-		defer quickenStore.Close()
-		slog.Info("quicken store ready", "path", quickenStore.Path())
-		// File-based import source: not an operator-facing service card.
-		// Inject an in-memory entry so /v1/library/transactions can fan in.
-		ensureLocalStoreService(cfg, connectors.QuickenService())
-	} else {
-		slog.Info("quicken store disabled")
-	}
-
-	timelineStore, err := connectors.OpenTimelineStore(paths.Timeline)
-	if err != nil {
-		slog.Error("failed to open timeline store", "path", paths.Timeline, "error", err)
-		os.Exit(1)
-	}
-	if timelineStore != nil {
-		defer timelineStore.Close()
-		slog.Info("timeline store ready", "path", timelineStore.Path())
-		// File-based import source. Places is opt-in (default none) — enable
-		// city/read/precise on this service or another places provider.
-		ensureLocalStoreService(cfg, connectors.TimelineService())
-	} else {
-		slog.Info("timeline store disabled")
-	}
-
-	signalStore, err := connectors.OpenSignalStore(paths.Signal)
-	if err != nil {
-		slog.Error("failed to open signal store", "path", paths.Signal, "error", err)
-		os.Exit(1)
-	}
-	if signalStore != nil {
-		defer signalStore.Close()
-		slog.Info("signal store ready", "path", signalStore.Path())
-		// File-based import source. Contacts + messages from a local export.
-		ensureLocalStoreService(cfg, connectors.SignalService())
-	} else {
-		slog.Info("signal store disabled")
+	// Local import stores (issue #393): opened from the connectors
+	// registry. File-based import sources — not operator-facing service
+	// cards; an in-memory entry is injected so /v1/library fan-in sees
+	// them as sources while the store is enabled.
+	localStores := map[string]connectors.ImportStore{}
+	for _, spec := range localStoreSpecs {
+		store, err := spec.Open(paths.LocalStores[spec.Stem])
+		if err != nil {
+			slog.Error("failed to open local import store", "stem", spec.Stem,
+				"path", paths.LocalStores[spec.Stem], "error", err)
+			os.Exit(1)
+		}
+		if store != nil && store.Enabled() {
+			defer store.Close()
+			slog.Info("local import store ready", "stem", spec.Stem, "path", store.Path())
+			ensureLocalStoreService(cfg, spec.Service)
+		} else {
+			slog.Info("local import store disabled", "stem", spec.Stem)
+		}
+		// Keep the (possibly typed-nil) entry: Admin() copy must remain
+		// describable for disabled stores.
+		localStores[spec.Stem] = store
 	}
 
 	auditLog, err := audit.Open(paths.AuditLog, *auditRetentionDays)
@@ -488,9 +477,7 @@ func Run() {
 		syncConflicts: conflictsStore,
 		mail:          mailArchive,
 		search:        searchIndex,
-		quicken:       quickenStore,
-		timeline:      timelineStore,
-		signal:        signalStore,
+		localStores:   localStores,
 		hookHealth:    hookhealth.NewHookHealth(hookhealth.DefaultObservationCapacity),
 		audit:         auditLog,
 		prom:          metrics.NewPromMetrics(Version, Commit),
@@ -534,7 +521,6 @@ func Run() {
 	srv.connectors[connectors.GoogleGmailServiceID] = gGmailConn
 	// Financial transactions (issue #141): YNAB live API + local Quicken import.
 	srv.connectors[connectors.YNABServiceID] = connectors.NewYNABConnector(srv)
-	srv.connectors[connectors.QuickenServiceID] = connectors.NewQuickenConnector(quickenStore)
 	// Location history (issue #142): OwnTracks live + local Google Timeline import.
 	srv.connectors[connectors.OwnTracksServiceID] = connectors.NewOwnTracksConnector(srv)
 	srv.connectors[connectors.BlueskyServiceID] = connectors.NewBlueskyConnector(srv)
@@ -543,9 +529,11 @@ func Run() {
 	// CalDAV/CardDAV (issue #146): Nextcloud, iCloud, Fastmail contacts + calendar.
 	srv.connectors[connectors.CardDAVServiceID] = connectors.NewCardDAVConnector(srv)
 	srv.connectors[connectors.CalDAVServiceID] = connectors.NewCalDAVConnector(srv)
-	srv.connectors[connectors.TimelineServiceID] = connectors.NewTimelineConnector(timelineStore)
-	// Signal contacts + messages (issue #168): local file-based import only.
-	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(signalStore)
+	// Local import stores (issue #393): file-based import sources registered
+	// from the connectors registry.
+	for _, spec := range localStoreSpecs {
+		srv.connectors[spec.Service.ID] = spec.NewConnector(localStores[spec.Stem])
+	}
 	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
 	// A service with endpoint sample://calendar gets this connector instead of
 	// a live provider so free/busy demos work without OAuth.
@@ -813,11 +801,11 @@ type cliModeOptions struct {
 	seedDemoDatasets   bool
 	importTakeout      string
 	importTakeoutBatch int
-	importQuicken      string
-	importTimeline     string
-	importSignal       string
-	tokenNewPass       string
-	tokenPass          string
+	// importStores maps local import store stems to their -import-<stem>
+	// paths (issue #393).
+	importStores map[string]string
+	tokenNewPass string
+	tokenPass    string
 }
 
 // runCLIMode checks whether a one-shot CLI flag was given and, if so, runs
@@ -867,14 +855,11 @@ func runCLIMode(opts cliModeOptions, paths DataPaths) (code int, handled bool) {
 	if strings.TrimSpace(opts.importTakeout) != "" {
 		return cli.ImportTakeout(paths.MailArchive, paths.CopyLedger, opts.importTakeout, opts.importTakeoutBatch), true
 	}
-	if strings.TrimSpace(opts.importQuicken) != "" {
-		return cli.ImportQuicken(paths.Quicken, opts.importQuicken), true
-	}
-	if strings.TrimSpace(opts.importTimeline) != "" {
-		return cli.ImportTimeline(paths.Timeline, opts.importTimeline), true
-	}
-	if strings.TrimSpace(opts.importSignal) != "" {
-		return cli.ImportSignal(paths.Signal, opts.importSignal), true
+	// One-shot local import store runs (issue #393), registry-driven.
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		if strings.TrimSpace(opts.importStores[spec.Stem]) != "" {
+			return cli.ImportLocalStore(spec, paths.LocalStores[spec.Stem], opts.importStores[spec.Stem]), true
+		}
 	}
 	if strings.TrimSpace(opts.tokenNewPass) != "" {
 		pass := opts.tokenPass

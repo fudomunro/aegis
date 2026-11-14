@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -11,12 +12,11 @@ import (
 )
 
 // Sync accessor IDs in the holistic permissions view (issue #160).
+// Local import stores use "sync:<stem>" derived from their spec
+// (issue #393).
 const (
-	SyncMailID     = "sync:mail-archive"
-	syncCopyID     = "sync:copy-ledger"
-	SyncTimelineID = "sync:timeline"
-	SyncQuickenID  = "sync:quicken"
-	SyncSignalID   = "sync:signal"
+	SyncMailID = "sync:mail-archive"
+	syncCopyID = "sync:copy-ledger"
 )
 
 // agentAccessorID is the primary LLM-agent row (type-owned policy).
@@ -123,37 +123,27 @@ func (h *Handlers) PermissionsOverview() policy.PermissionsOverview {
 			Explicit: explicit,
 		})
 	}
-	if h.Timeline != nil {
+	// Local import stores (issue #393): one sync accessor per enabled
+	// store. Kinds derive from the connector's ProvidedTypes; the detail
+	// copy is the store's declared admin surface.
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		store := h.LocalStores[spec.Stem]
+		if store == nil || !store.Enabled() {
+			continue
+		}
+		levels := map[string]string{}
+		explicit := map[string]bool{}
+		for _, kind := range kinds.ProvidedTypes(spec.NewConnector(store)) {
+			levels[kind] = shared.AccessRead
+			explicit[kind] = true
+		}
 		accessors = append(accessors, policy.Accessor{
-			ID:       SyncTimelineID,
+			ID:       "sync:" + spec.Stem,
 			Kind:     policy.AccessorSync,
-			Label:    "Timeline import",
-			Detail:   "Google Timeline export ingest into the local places store.",
-			Levels:   map[string]string{"places": shared.AccessRead},
-			Explicit: map[string]bool{"places": true},
-		})
-	}
-	if h.Quicken != nil {
-		accessors = append(accessors, policy.Accessor{
-			ID:       SyncQuickenID,
-			Kind:     policy.AccessorSync,
-			Label:    "Quicken import",
-			Detail:   "QIF/QFX/OFX import into the local transaction store.",
-			Levels:   map[string]string{"transactions": shared.AccessRead},
-			Explicit: map[string]bool{"transactions": true},
-		})
-	}
-	if h.Signal != nil {
-		accessors = append(accessors, policy.Accessor{
-			ID:     SyncSignalID,
-			Kind:   policy.AccessorSync,
-			Label:  "Signal import",
-			Detail: "File-based Signal export ingest into the local contacts/messages store. Attachments are never stored.",
-			Levels: map[string]string{
-				"contacts": shared.AccessRead,
-				"messages": shared.AccessRead,
-			},
-			Explicit: map[string]bool{"contacts": true, "messages": true},
+			Label:    spec.Service.Name + " import",
+			Detail:   ImportStoreAdmin{Spec: spec, Store: store}.Admin().AccessorDetail,
+			Levels:   levels,
+			Explicit: explicit,
 		})
 	}
 

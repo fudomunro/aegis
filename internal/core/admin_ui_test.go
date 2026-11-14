@@ -120,19 +120,15 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"runTakeoutSync",
 		"Google Takeout",
 		"read-only sync",
-		// Signal import (issue #168)
-		`id="section-signal"`,
-		`href="#section-signal"`,
-		`id="signal-path"`,
-		`id="signal-import"`,
-		`id="signal-result"`,
-		`id="signal-hints"`,
-		"/v1/admin/signal/status",
-		"/v1/admin/signal/import",
-		"runSignalImport",
-		"loadSignalStatus",
-		"Signal import",
-		"signalbackup-tools",
+		// Local import store panels (issue #393) render from the
+		// connectors registry — declared copy, no per-store markup.
+		`id="import-store-panels"`,
+		`id="toc-import-stores"`,
+		"/v1/admin/import-stores",
+		"loadImportStores",
+		"renderImportStorePanels",
+		"wireImportStorePanel",
+		"importSummaryLine",
 		// Data directory surface (issue #74)
 		"data_dir",
 		"Data dir:",

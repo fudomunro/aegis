@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -59,7 +60,7 @@ func TestOwnershipStatuses_EmptyArchiveStoreStaysARoute(t *testing.T) {
 		t.Fatalf("open signal store: %v", err)
 	}
 	t.Cleanup(func() { store.Close() })
-	srv.signal = store
+	srv.localStores["signal"] = store
 	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(store)
 
 	byKind := ownershipByKind(t, srv.admin().OwnershipStatuses())
@@ -79,6 +80,43 @@ func TestOwnershipStatuses_EmptyArchiveStoreStaysARoute(t *testing.T) {
 	assertOwnershipSource(t, byKind["messages"].UnderManagement, connectors.SignalServiceID)
 	if hasRoute(byKind["messages"].UnusedRoutes, connectors.SignalServiceID) {
 		t.Fatal("imported signal store must not stay an unused route")
+	}
+}
+
+func TestOwnershipStatuses_LinkedInArchiveStore(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: connectors.LinkedInServiceID, Name: connectors.LinkedInServiceName, Action: "inject"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.ownership = mustOwnershipStore(t, "")
+	store, err := connectors.OpenLinkedInStore(filepath.Join(t.TempDir(), "linkedin.db"))
+	if err != nil {
+		t.Fatalf("open linkedin store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	srv.localStores["linkedin"] = store
+	srv.connectors[connectors.LinkedInServiceID] = connectors.NewLinkedInConnector(store)
+
+	byKind := ownershipByKind(t, srv.admin().OwnershipStatuses())
+	assertOwnershipRoute(t, byKind["contacts"].UnusedRoutes, connectors.LinkedInServiceID)
+
+	// A connection import flips it to under management.
+	csvPath := filepath.Join(t.TempDir(), "Connections.csv")
+	if err := os.WriteFile(csvPath, []byte(
+		"First Name,Last Name,URL,Email Address,Company,Position,Connected On\n"+
+			"Jane,Doe,https://www.linkedin.com/in/janedoe,jane@example.com,Acme,Engineer,01 Jan 2020\n",
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := connectors.ImportLinkedInPath(store, csvPath); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	byKind = ownershipByKind(t, srv.admin().OwnershipStatuses())
+	assertOwnershipSource(t, byKind["contacts"].UnderManagement, connectors.LinkedInServiceID)
+	if hasRoute(byKind["contacts"].UnusedRoutes, connectors.LinkedInServiceID) {
+		t.Fatal("imported linkedin store must not stay an unused route")
 	}
 }
 

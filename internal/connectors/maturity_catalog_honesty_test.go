@@ -40,7 +40,7 @@ type catalogTestConnector struct {
 
 func maturityTestConnectors() []catalogTestConnector {
 	host := maturityHost{}
-	return []catalogTestConnector{
+	out := []catalogTestConnector{
 		{id: "spotify", conn: NewSpotifyConnector(host)},
 		{id: "youtube-music", conn: NewYouTubeMusicConnector(host)},
 		{id: "amazon-music", conn: NewAmazonMusicConnector(host)},
@@ -56,10 +56,15 @@ func maturityTestConnectors() []catalogTestConnector {
 		{id: CalDAVServiceID, conn: NewCalDAVConnector(host)},
 		{id: CardDAVServiceID, conn: NewCardDAVConnector(host)},
 		{id: PaperlessServiceID, conn: NewPaperlessConnector(host)},
-		{id: SignalServiceID, conn: NewSignalConnector(nil)},
-		{id: QuickenServiceID, conn: NewQuickenConnector(nil)},
-		{id: TimelineServiceID, conn: NewTimelineConnector(nil)},
 	}
+	// Local import stores come from the registry (issue #393).
+	for _, spec := range LocalImportStoreSpecs() {
+		out = append(out, catalogTestConnector{
+			id:   spec.Service.ID,
+			conn: spec.NewConnector(nil),
+		})
+	}
+	return out
 }
 
 // providerKindNames maps implemented provider interfaces to the library
@@ -285,12 +290,15 @@ func TestOwnershipStartDeclarationsAreReal(t *testing.T) {
 			t.Errorf("connector %q: Start.Label is empty", m.Service)
 		}
 		_, isOnboarder := conn.(Onboarder)
+		// Local import stores are recognized by the registry, not by
+		// connector type (issue #393): their admin import panel is the
+		// seam an "import" action names (issue #266).
 		isImportStore := false
-		switch conn.(type) {
-		case *SignalConnector, *QuickenConnector, *TimelineConnector:
-			// Local import stores: their admin import panel is the seam
-			// an "import" action names (issue #266).
-			isImportStore = true
+		for _, spec := range LocalImportStoreSpecs() {
+			if spec.Service.ID == m.Service {
+				isImportStore = true
+				break
+			}
 		}
 		switch {
 		case isOnboarder && isImportStore:

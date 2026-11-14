@@ -191,7 +191,7 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.adminAPIKey = "admin-key"
 	srv.connectors[connectors.YNABServiceID] = connectors.NewYNABConnector(srv)
-	srv.connectors[connectors.QuickenServiceID] = connectors.NewQuickenConnector(srv.quicken)
+	srv.connectors[connectors.QuickenServiceID] = connectors.NewQuickenConnector(nil)
 	// Quicken is file-based: even if present in config, keep it off the list.
 	cfg.Services = append(cfg.Services, Service{ID: connectors.QuickenServiceID, Name: "Quicken", Action: "inject"})
 

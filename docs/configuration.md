@@ -583,6 +583,7 @@ on first run with mode `0700` (it holds secrets).
  quicken.db # Quicken QIF/QFX import store (; empty -quicken-store disables)
  timeline.db # Google Timeline import store (; empty -timeline-store disables)
  signal.db # Signal contacts/messages import store (; empty -signal-store disables)
+ linkedin.db # LinkedIn connections import store (; empty -linkedin-store disables)
  audit_log.db # durable access audit trail (; empty -audit-log disables)
  logs/aegis.log # process log (also mirrored to stderr)
 ```
@@ -604,6 +605,7 @@ An explicit flag always wins:
 | `-quicken-store` | `quicken.db` | Empty string (explicitly set) disables the Quicken import source |
 | `-timeline-store` | `timeline.db` | Empty string (explicitly set) disables the Google Timeline import source |
 | `-signal-store` | `signal.db` | Empty string (explicitly set) disables the Signal import source |
+| `-linkedin-store` | `linkedin.db` | Empty string (explicitly set) disables the LinkedIn import source |
 | `-audit-log` | `audit_log.db` | Empty string (explicitly set) disables the access audit trail |
 | `-log-file` | `logs/aegis.log` | Empty string (explicitly set) logs to stderr only |
 
@@ -656,6 +658,8 @@ directory or keep passing the explicit path flags.
 | `-import-timeline` | | Import a Timeline JSON file/dir or Takeout zip, then exit |
 | `-signal-store` | `<data-dir>/signal.db` | Signal import store; empty disables |
 | `-import-signal` | | Import a Signal export (JSONL/JSON or plaintext SQLite), then exit |
+| `-linkedin-store` | `<data-dir>/linkedin.db` | LinkedIn import store; empty disables |
+| `-import-linkedin` | | Import a LinkedIn data export (.zip) or Connections.csv file/directory, then exit |
 | `-audit-log` | `<data-dir>/audit_log.db` | Access audit log path; empty disables |
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
 | `-fake-upstream` | | **Dev/test only** — serve an injectable fake provider at `/demo/fake-upstream` and seed placeholder tokens for services pointed at it. Never enable on a real instance |

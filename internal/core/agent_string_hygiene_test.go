@@ -31,26 +31,30 @@ var agentStringForbidden = []string{
 	"UDT",
 }
 
-// Operator CLI flags from run.go. Agents ask the operator; they do not run flags.
-var agentStringCLIFlags = []string{
-	"-addr",
-	"-admin-api-key",
-	"-admin-logins",
-	"-api-key",
-	"-base-url",
-	"-copy-ledger",
-	"-data-dir",
-	"-import-quicken",
-	"-import-signal",
-	"-import-takeout",
-	"-import-timeline",
-	"-log-file",
-	"-log-format",
-	"-log-level",
-	"-mail-archive",
-	"-quicken-store",
-	"-seed-sample",
-	"-token-pass",
+// Operator CLI flags from run.go. Agents ask the operator; they do not
+// run flags. Local import store flags derive from the connectors
+// registry (issue #393) — a new store is covered without edits here.
+func agentStringCLIFlags() []string {
+	flags := []string{
+		"-addr",
+		"-admin-api-key",
+		"-admin-logins",
+		"-api-key",
+		"-base-url",
+		"-copy-ledger",
+		"-data-dir",
+		"-import-takeout",
+		"-log-file",
+		"-log-format",
+		"-log-level",
+		"-mail-archive",
+		"-seed-sample",
+		"-token-pass",
+	}
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		flags = append(flags, spec.StoreFlagName(), spec.ImportFlagName())
+	}
+	return flags
 }
 
 type agentStringSample struct {
@@ -139,9 +143,14 @@ func connectorAgentSamples(t *testing.T, host connectors.Host) []agentStringSamp
 		{"carddav", connectors.NewCardDAVConnector(host)},
 		{"caldav", connectors.NewCalDAVConnector(host)},
 		{"sample-calendar", connectors.NewSampleCalendarConnector()},
-		{"quicken", connectors.NewQuickenConnector(nil)},
-		{"google-timeline", connectors.NewTimelineConnector(nil)},
-		{"signal", connectors.NewSignalConnector(nil)},
+	}
+	// Local import stores construct from the registry (issue #393).
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		store, err := spec.Open("")
+		if err != nil {
+			t.Fatalf("%s: Open(\"\"): %v", spec.Stem, err)
+		}
+		entries = append(entries, entry{id: spec.Service.ID, conn: spec.NewConnector(store)})
 	}
 
 	base := "https://aegis.example.com"
@@ -185,7 +194,7 @@ func agentStringViolations(text string) []string {
 			hits = append(hits, bad)
 		}
 	}
-	for _, flag := range agentStringCLIFlags {
+	for _, flag := range agentStringCLIFlags() {
 		// Word-boundary-ish: flag name as its own token (start, space, or paren).
 		if strings.Contains(lower, flag) {
 			hits = append(hits, flag)

@@ -98,6 +98,10 @@ type ImportStore interface {
 	Path() string
 	Enabled() bool
 	Close() error
+	// Admin declares the store's admin/CLI copy and behaviors (issue #254).
+	// Implementations must be safe on a nil receiver so disabled stores can
+	// still describe themselves.
+	Admin() ImportAdmin
 }
 
 // ImportOutcome is the CLI/admin view of one finished import run. Each
@@ -108,13 +112,33 @@ type ImportOutcome interface {
 	LogAttrs() []any
 	// Failed reports a run that recorded errors but stored nothing.
 	Failed() bool
+	// Summary is the one-line human result ("2 stored, 0 skipped, 0
+	// errors") the admin panel renders without knowing the counter shape.
+	Summary() string
+}
+
+// ImportPanel is the admin.html copy for one local import store (issue
+// #265 pattern: declare, don't render). Plain text; the renderer escapes
+// it and turns `backticks` into code spans. Never HTML or JS — a connector
+// ships declarations only.
+type ImportPanel struct {
+	// Heading is the section heading, e.g. "Signal import (read-only)".
+	Heading string `json:"heading"`
+	// Title is the help-box subheading, e.g. "Signal contacts and chats".
+	Title string `json:"title"`
+	// Intro is the help-box paragraph under the title.
+	Intro string `json:"intro"`
+	// Steps are the "how to produce an export" list items, in order.
+	Steps []string `json:"steps,omitempty"`
+	// Placeholder is the import path input placeholder.
+	Placeholder string `json:"placeholder"`
 }
 
 // ImportAdmin is the declared admin surface of a local import store
 // (issue #265 pattern: declare, don't render). Core serves the status and
 // import routes generically and renders admin.html; every provider-facing
-// string — flag name, path hint, sample path, hint lines — lives here
-// beside the store it describes (issue #254).
+// string — flag name, path hint, sample path, hint lines, panel copy —
+// lives here beside the store it describes (issue #254).
 type ImportAdmin struct {
 	// FlagName is the disabling flag, e.g. "-quicken-store".
 	FlagName string
@@ -128,10 +152,21 @@ type ImportAdmin struct {
 	// BareResult returns the import result without the {result,status}
 	// envelope (Timeline's historical response shape).
 	BareResult bool
+	// Panel is the admin.html section copy for this store.
+	Panel ImportPanel
 	// Counts reports live row counts by counter name ("count", "contacts",
 	// "messages"). Counters a store does not use are absent. nil when the
 	// store is disabled.
 	Counts func() map[string]int
+	// ArchiveDetail phrases the ownership-evidence line from live counts,
+	// e.g. "3 connections imported". nil when the store has no ownership
+	// surface.
+	ArchiveDetail func(counts map[string]int) string
+	// AccessorDetail describes this import source in the admin
+	// permissions overview ("QIF/QFX/OFX import into the local
+	// transaction store."). The kind rows are derived from the
+	// connector's ProvidedTypes.
+	AccessorDetail string
 	// Hints phrases the state-dependent provider-facing hint lines.
 	Hints func(state ImportHintState) []string
 	// Import runs a one-shot import from path into the store. The returned
@@ -237,4 +272,10 @@ func shortHash(s string) string {
 		h *= 1099511628211
 	}
 	return fmt.Sprintf("%016x", h)
+}
+
+// importCountsSummary phrases the one-line run result most store outcomes
+// share; stores with per-kind counters phrase their own.
+func importCountsSummary(stored, skipped, errs int) string {
+	return fmt.Sprintf("%d stored, %d skipped, %d errors", stored, skipped, errs)
 }

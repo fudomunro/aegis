@@ -122,12 +122,10 @@ type Server struct {
 	mailIngests map[string]connectors.MailIngest
 	// search is the local library search index (issue #178). May be disabled.
 	search *search.Index
-	// quicken is the optional local Quicken import store (issue #141).
-	quicken *connectors.QuickenStore
-	// timeline is the optional local Google Timeline import store (issue #142).
-	timeline *connectors.TimelineStore
-	// signal is the optional local Signal import store (issue #168).
-	signal *connectors.SignalStore
+	// localStores are the optional local import stores keyed by stem
+	// (issue #393). Entries may be typed-nil behind the interface when the
+	// store is disabled — Admin() copy stays describable.
+	localStores map[string]connectors.ImportStore
 	// hookHealth records Aperture pre-request outcomes for admin diagnostics.
 	hookHealth *hookhealth.HookHealth
 	// audit is the durable access audit log (issue #105). May be disabled.

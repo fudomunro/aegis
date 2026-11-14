@@ -42,6 +42,28 @@ func TimelineService() LocalStoreService {
 	}
 }
 
+// timelineStoreSpec is the wiring declaration for the Timeline import
+// store (issue #393 registry).
+func timelineStoreSpec() LocalImportStoreSpec {
+	return LocalImportStoreSpec{
+		Service:        TimelineService(),
+		Stem:           "timeline",
+		DefaultFile:    "timeline.db",
+		StoreFlagHelp:  "path to local Google Timeline import store (default: <data-dir>/timeline.db; empty disables)",
+		ImportFlagHelp: "Google Timeline JSON file, directory, or Takeout zip to import into the local store, then exit",
+		Open: func(path string) (ImportStore, error) {
+			return OpenTimelineStore(path)
+		},
+		NewConnector: func(st ImportStore) ServiceConnector {
+			if st == nil {
+				return NewTimelineConnector(nil)
+			}
+			return NewTimelineConnector(st.(*TimelineStore))
+		},
+		Maturity: timelineMaturity,
+	}
+}
+
 // Admin declares the Timeline import admin surface (issue #254).
 func (s *TimelineStore) Admin() ImportAdmin {
 	return ImportAdmin{
@@ -50,6 +72,17 @@ func (s *TimelineStore) Admin() ImportAdmin {
 		SamplePath:  "~/Downloads/Takeout/Location History/Semantic Location History (JSON files or a Takeout zip)",
 		LibraryPath: "/v1/library/places",
 		BareResult:  true,
+		Panel: ImportPanel{
+			Heading: "Timeline import (read-only)",
+			Title:   "Google Maps Timeline history",
+			Intro:   "Import Timeline exports into the local place store so agents can answer where-you-were questions alongside live OwnTracks data. Visit and trip windows only — raw location points are never stored. Re-import skips rows already present.",
+			Steps: []string{
+				"Google Takeout → Location History → Export, or the Timeline app's export.",
+				"Import the Semantic Location History folder, its JSON files, or the Takeout zip.",
+				"Re-import is safe: rows already stored are skipped. Places access defaults to none — enable city, read, or precise on this service to let agents query it.",
+			},
+			Placeholder: "/path/to/Takeout.zip or Semantic Location History folder",
+		},
 		Counts: func() map[string]int {
 			if s == nil || !s.Enabled() {
 				return nil
@@ -60,6 +93,10 @@ func (s *TimelineStore) Admin() ImportAdmin {
 			}
 			return map[string]int{"count": n}
 		},
+		ArchiveDetail: func(counts map[string]int) string {
+			return fmt.Sprintf("%d place visits imported", counts["count"])
+		},
+		AccessorDetail: "Google Timeline export ingest into the local places store.",
 		Hints: func(state ImportHintState) []string {
 			switch {
 			case !state.Enabled:
@@ -86,6 +123,25 @@ type TimelineStore struct {
 	localStore
 }
 
+// Path, Close, and Enabled are re-declared on each concrete store:
+// embedded-field promotion panics on a typed-nil receiver, and disabled
+// stores must stay describable through ImportStore (issue #393).
+func (s *TimelineStore) Path() string {
+	if s == nil {
+		return ""
+	}
+	return s.path
+}
+
+func (s *TimelineStore) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
+func (s *TimelineStore) Enabled() bool { return s != nil && s.db != nil }
+
 // TimelineImportResult reports one import run.
 type TimelineImportResult struct {
 	Path    string `json:"path"`
@@ -105,6 +161,11 @@ func (r TimelineImportResult) LogAttrs() []any {
 
 // Failed reports a run that recorded errors but stored nothing.
 func (r TimelineImportResult) Failed() bool { return r.Errors > 0 && r.Stored == 0 }
+
+// Summary is the one-line run result the admin panel renders.
+func (r TimelineImportResult) Summary() string {
+	return importCountsSummary(r.Stored, r.Skipped, r.Errors)
+}
 
 var _ ImportStore = (*TimelineStore)(nil)
 var _ ImportOutcome = TimelineImportResult{}

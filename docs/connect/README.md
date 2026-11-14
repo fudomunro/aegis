@@ -19,6 +19,7 @@ service, call `GET /v1/library/playlists` to confirm the library is live.
 | CalDAV / CardDAV | [caldav-carddav.md](caldav-carddav.md) |
 | Local mail archive / Takeout | [mail-archive.md](mail-archive.md) |
 | Signal import | [signal.md](signal.md) |
+| LinkedIn import | [linkedin.md](linkedin.md) |
 
 Shared OAuth client setup (redirect URIs, `connections.google`) is under
 [Configuration → Provider connections](../configuration.md).
