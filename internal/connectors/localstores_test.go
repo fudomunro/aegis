@@ -93,6 +93,36 @@ func TestLocalImportStoreSpecs(t *testing.T) {
 		if m.Start.Kind == "" || m.Start.Label == "" {
 			t.Errorf("%s: maturity Start declaration incomplete", spec.Stem)
 		}
+
+		// services.go registration (the hand-written lines beside the
+		// registry): canonical name and at least one title alias, so
+		// adding a store cannot forget them.
+		if name, ok := ServiceName(spec.Service.ID); !ok || name != spec.Service.Name {
+			t.Errorf("%s: ServiceName(%q) = %q, %v; want %q, true",
+				spec.Stem, spec.Service.ID, name, ok, spec.Service.Name)
+		}
+		hasAlias := false
+		for _, canonical := range ServiceTitleAliases() {
+			if canonical == spec.Service.ID {
+				hasAlias = true
+				break
+			}
+		}
+		if !hasAlias {
+			t.Errorf("%s: service %q has no ServiceTitleAliases entry", spec.Stem, spec.Service.ID)
+		}
+	}
+
+	// LocalImportStoreIDs derives from this registry — the same set of
+	// service IDs, never a second hand-maintained list.
+	ids := LocalImportStoreIDs()
+	for id := range seenID {
+		if !ids[id] {
+			t.Errorf("LocalImportStoreIDs() missing %q", id)
+		}
+	}
+	if len(ids) != len(seenID) {
+		t.Errorf("LocalImportStoreIDs() has %d entries, registry declares %d", len(ids), len(seenID))
 	}
 
 	// The lookup helper sees the same registry.

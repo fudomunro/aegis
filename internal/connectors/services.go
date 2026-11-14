@@ -50,6 +50,7 @@ var serviceTitleAliases = map[string]string{
 	"google contacts":  GoogleContactsServiceID,
 	"google calendar":  GoogleCalendarServiceID,
 	"google drive":     GoogleDriveServiceID,
+	"google timeline":  TimelineServiceID,
 	"immich":           ImmichServiceID,
 	"bluesky":          BlueskyServiceID,
 	"ynab":             YNABServiceID,
@@ -73,13 +74,14 @@ var commonWordIDs = map[string]bool{
 // LocalImportStoreIDs are the service IDs of the local import stores: file
 // based, no OAuth or static credentials. They show on the Advanced import
 // panels, not the configured-services list (issues #141, #142, #168).
-func LocalImportStoreIDs() map[string]bool { return localImportStoreIDs }
-
-var localImportStoreIDs = map[string]bool{
-	QuickenServiceID:  true,
-	SignalServiceID:   true,
-	TimelineServiceID: true,
-	LinkedInServiceID: true,
+// Derived from LocalImportStoreSpecs() — the registry is the only list.
+func LocalImportStoreIDs() map[string]bool {
+	specs := LocalImportStoreSpecs()
+	out := make(map[string]bool, len(specs))
+	for _, s := range specs {
+		out[s.Service.ID] = true
+	}
+	return out
 }
 
 // PhotoShareDefaultTarget is the default destination for photo shares

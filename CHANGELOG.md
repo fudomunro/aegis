@@ -203,6 +203,16 @@ issue numbers; this file is where that context lives.
 
 ### Fixed
 
+- **Local import store service registration derives from the spec registry
+  (issue #393).** `LocalImportStoreIDs()` builds from
+  `LocalImportStoreSpecs()` instead of a second hand-maintained list (the
+  admin services view, sync-relationship readiness, and converge-target
+  checks all read it), and `TestLocalImportStoreSpecs` pins the
+  hand-written `services.go` lines — canonical name and title alias — to
+  every declared store. Google Timeline gains its missing
+  `"google timeline"` title alias, so maintenance issue titles attribute
+  to it like the other import stores.
+
 - **Sync job timestamps compare in fixed-width format.** The job store
   compares `next_run_at` / `lease_until` / `finished_at` lexicographically
   as TEXT in SQL, but wrote them as RFC3339Nano, which trims trailing
