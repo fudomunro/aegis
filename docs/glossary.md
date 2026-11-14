@@ -22,6 +22,7 @@ inventory and [`audience-map.md`](audience-map.md) for who each surface talks to
 | **Connection** | OAuth credential entry in top-level `connections{}` (`connection` + `oauth_scopes`) | The service itself |
 | **Connection maturity** | Coverage of one connection: of the kinds the service offers, how many Aegis serves through it, and how completely it fills their fields | Not an operational score — the sync dashboard's success / stability / confidence are separate; prefer **maturity** alone once the page is in view |
 | **Transport** | How a connection reaches its service: `api` / `protocol` / `reverse-engineered` / `export/archive` | The maturity modifier; not the content-transport APIs |
+| **LinkedIn connections** | 1st-degree connections imported from a LinkedIn data export; the rows behind the `linkedin` source on the contacts kind | Not a **connection** (the OAuth credential); LinkedIn has no public connections API, so these arrive by import |
 
 Config keys stay `services`, `connections`, `connector` is code-only.
 

@@ -24,6 +24,21 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **LinkedIn connections import (issue #218).** LinkedIn exposes no
+  third-party connections API, so 1st-degree connections arrive as a local
+  import store beside Signal/Quicken/Timeline: `-import-linkedin` reads the
+  LinkedIn data export — the archive `.zip`, `Connections.csv` /
+  `Contacts.csv`, or a directory of CSVs — into `<data-dir>/linkedin.db`,
+  and the `linkedin` source feeds `/v1/library/contacts` where identity
+  matching can fold connections into the same people as Google Contacts or
+  CardDAV. Name → `Contact.Name`, email → `emails`, profile public id →
+  `handles`, company → `organization`; the profile URL, position, and
+  connection date stay on `sources[].extra`. Contact metadata only —
+  profile photos and other media are never stored. Re-import skips rows
+  already stored (keyed by profile public id). Admin surface: Advanced →
+  LinkedIn import (`/v1/admin/linkedin/*`); maturity catalog declares the
+  messaging / posts / jobs / recommendations gap as unsupported.
+
 - **Identity-keyed copy watermarks (issue #384).** Per-item watermark rows
   key on the item's durable identity where it has one — vCard UID, email,
   iCal UID — with the display name as the fallback for items that carry

@@ -31,6 +31,7 @@ var serviceNames = map[string]string{
 	SignalServiceID:         SignalServiceName,
 	QuickenServiceID:        QuickenServiceName,
 	TimelineServiceID:       TimelineServiceName,
+	LinkedInServiceID:       LinkedInServiceName,
 }
 
 // ServiceTitleAliases maps unambiguous title phrases onto canonical service
@@ -56,6 +57,7 @@ var serviceTitleAliases = map[string]string{
 	"paperless":        PaperlessServiceID,
 	"quicken":          QuickenServiceID,
 	"signal messenger": SignalServiceID,
+	"linkedin":         LinkedInServiceID,
 }
 
 // CommonWordIDs are service IDs that are also common English words. A bare
@@ -77,6 +79,7 @@ var localImportStoreIDs = map[string]bool{
 	QuickenServiceID:  true,
 	SignalServiceID:   true,
 	TimelineServiceID: true,
+	LinkedInServiceID: true,
 }
 
 // PhotoShareDefaultTarget is the default destination for photo shares

@@ -128,6 +128,8 @@ type Server struct {
 	timeline *connectors.TimelineStore
 	// signal is the optional local Signal import store (issue #168).
 	signal *connectors.SignalStore
+	// linkedin is the optional local LinkedIn import store (issue #218).
+	linkedin *connectors.LinkedInStore
 	// hookHealth records Aperture pre-request outcomes for admin diagnostics.
 	hookHealth *hookhealth.HookHealth
 	// audit is the durable access audit log (issue #105). May be disabled.

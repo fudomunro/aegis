@@ -49,6 +49,7 @@ func (s *Server) admin() *admin.Handlers {
 				Quicken:       s.quicken,
 				Timeline:      s.timeline,
 				Signal:        s.signal,
+				LinkedIn:      s.linkedin,
 				Cache:         s.cache,
 				MBCache:       s.mbCache,
 				HookHealth:    s.hookHealth,

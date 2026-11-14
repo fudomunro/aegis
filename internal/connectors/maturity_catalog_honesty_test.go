@@ -59,6 +59,7 @@ func maturityTestConnectors() []catalogTestConnector {
 		{id: SignalServiceID, conn: NewSignalConnector(nil)},
 		{id: QuickenServiceID, conn: NewQuickenConnector(nil)},
 		{id: TimelineServiceID, conn: NewTimelineConnector(nil)},
+		{id: LinkedInServiceID, conn: NewLinkedInConnector(nil)},
 	}
 }
 
@@ -287,7 +288,7 @@ func TestOwnershipStartDeclarationsAreReal(t *testing.T) {
 		_, isOnboarder := conn.(Onboarder)
 		isImportStore := false
 		switch conn.(type) {
-		case *SignalConnector, *QuickenConnector, *TimelineConnector:
+		case *SignalConnector, *QuickenConnector, *TimelineConnector, *LinkedInConnector:
 			// Local import stores: their admin import panel is the seam
 			// an "import" action names (issue #266).
 			isImportStore = true

@@ -748,7 +748,7 @@ After this is **not** a general service API. Library (`/v1/library/{kind}`) is t
 | `/documents/{id}/download`, `/documents/{id}/preview` | Document file bytes (library lists carry metadata + short excerpt) |
 | `/files/{id}/export` | Google Docs HTML/plain-text export (library text endpoint is plain text) |
 | `/picker/*` | Google Photos user pick → library |
-| `/import`, `/import/status` | Local export ingest (Signal, Quicken) |
+| `/import`, `/import/status` | Local export ingest (Signal, Quicken, Timeline, LinkedIn) |
 
 Provider-shaped lists (`/me/...`), playback, catalog search, profiles, capabilities, and generic OAuth pass-through return **404**. Callers authenticate to Aegis; they never see upstream OAuth tokens.
 - `X-Aegis-Cache: hit` or `miss` on connector content GETs
@@ -807,6 +807,8 @@ GET /v1/admin/quicken/status — Quicken import store status (count, path hints)
 POST /v1/admin/quicken/import {"path":"…"} — import a QIF/QFX file or directory
 GET /v1/admin/signal/status — Signal import store status
 POST /v1/admin/signal/import {"path":"…"} — import a Signal export
+GET /v1/admin/linkedin/status — LinkedIn import store status
+POST /v1/admin/linkedin/import {"path":"…"} — import a LinkedIn data export or Connections.csv
 GET /v1/admin/timeline/status — Google Timeline import store status
 POST /v1/admin/timeline/import {"path":"…"} — import Timeline JSON, a directory, or a Takeout zip
 GET /v1/admin/udk/status — user-defined kinds: overlay path, loaded kinds, hints

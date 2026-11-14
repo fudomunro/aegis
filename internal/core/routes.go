@@ -162,6 +162,8 @@ func registerAdminRoutes(mux *http.ServeMux, srv *Server) {
 	mux.HandleFunc("/v1/admin/timeline/{path...}", adminOnly(srv.admin().HandleAdminTimeline))
 	mux.HandleFunc("/v1/admin/signal", adminOnly(srv.admin().HandleAdminSignal))
 	mux.HandleFunc("/v1/admin/signal/{path...}", adminOnly(srv.admin().HandleAdminSignal))
+	mux.HandleFunc("/v1/admin/linkedin", adminOnly(srv.admin().HandleAdminLinkedIn))
+	mux.HandleFunc("/v1/admin/linkedin/{path...}", adminOnly(srv.admin().HandleAdminLinkedIn))
 	mux.HandleFunc("/v1/admin/udk", adminOnly(srv.admin().HandleAdminUDK))
 	mux.HandleFunc("/v1/admin/udk/{path...}", adminOnly(srv.admin().HandleAdminUDK))
 

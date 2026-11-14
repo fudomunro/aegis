@@ -4,7 +4,9 @@ Status: **landed** — Signal, Quicken, and Timeline live in
 `internal/connectors` as local import stores; this note is the design record.
 Scope: Signal (`-import-signal`), Quicken (`-import-quicken`), Google
 Timeline (`-import-timeline`). The mail archive / Google Takeout pair is
-decided below but not moved by this note.
+decided below but not moved by this note. LinkedIn (`-import-linkedin`, issue
+#218) later joined the same family unchanged: a CSV/zip importer over the
+LinkedIn data export, feeding the contacts kind.
 
 ## The principle
 

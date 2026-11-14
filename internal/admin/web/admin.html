@@ -588,6 +588,7 @@
         <a href="#section-takeout">Google Takeout</a>
         <a href="#section-quicken">Quicken import</a>
         <a href="#section-signal">Signal import</a>
+        <a href="#section-linkedin">LinkedIn import</a>
         <a href="#section-user-kinds">User-defined kinds</a>
         <a href="#section-sync">Data sync</a>
         <a href="#section-copies">Copy ledger</a>
@@ -748,6 +749,27 @@
       </div>
       <div id="signal-result" class="meta"></div>
       <div id="signal-hints" class="meta" style="margin-top:0.35rem"></div>
+
+      <h2 class="section-heading" id="section-linkedin">LinkedIn import (read-only)</h2>
+      <div class="help-box">
+        <h3>LinkedIn connections</h3>
+        <p>LinkedIn has no public connections API. Export a copy of your data, then import it here so agents can answer questions about people you know professionally. Contact metadata only — profile photos and other media are never stored. Re-import skips rows already present.</p>
+        <p><strong>How to produce an export</strong></p>
+        <ul>
+          <li><strong>LinkedIn:</strong> Settings &amp; Privacy → Data Privacy → Get a copy of your data → select Connections (or the full archive), then wait for the download email.</li>
+          <li><strong>Archive:</strong> import the <code>.zip</code> LinkedIn sends — Aegis finds <code>Connections.csv</code> and <code>Contacts.csv</code> inside.</li>
+          <li><strong>CSV:</strong> or import those CSVs directly, or a folder containing them.</li>
+        </ul>
+      </div>
+      <div class="toolbar">
+        <div class="grow">
+          <input type="text" id="linkedin-path" placeholder="/path/to/linkedin-export.zip or Connections.csv" aria-label="LinkedIn export path" style="width:100%">
+        </div>
+        <button class="btn btn-primary" id="linkedin-import" type="button">Import</button>
+        <button class="btn" id="linkedin-refresh" type="button">Refresh</button>
+      </div>
+      <div id="linkedin-result" class="meta"></div>
+      <div id="linkedin-hints" class="meta" style="margin-top:0.35rem"></div>
 
       <h2 class="section-heading" id="section-user-kinds">User-defined kinds (local files)</h2>
       <div class="help-box">
@@ -1049,6 +1071,7 @@
     ynab: "M2.5 5.5h11v7h-11zM2.5 5.5 4 3.5h8l1.5 2M5 9h6",
     owntracks: "M8 13.5c2.5-3 4-5 4-6.8a4 4 0 1 0-8 0c0 1.8 1.5 3.8 4 6.8ZM8 7.2a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6Z",
     "sample-calendar": "M3.5 3h9v10.5h-9zM3.5 6h9M6.5 2v2M9.5 2v2M6.5 9.5h3",
+    linkedin: "M2.5 3.5h11v9h-11zM5.25 7.25a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8ZM3.4 10.4c.35-1 1-1.5 1.85-1.5s1.5.5 1.85 1.5M9.5 6.5h3.2M9.5 8.5h3.2M9.5 10.5h2",
     file: "M4 2.5h5.5L12 5v8.5H4zM9.5 2.5V5H12M6 8h4M6 10.5h3",
     // Aliases so source IDs match without a second icon table.
     google: "M4 2.5h8v11H4zM8 5.5a1.8 1.8 0 1 0 0 3.6A1.8 1.8 0 0 0 8 5.5ZM4.8 12c.6-1.4 1.8-2.1 3.2-2.1s2.6.7 3.2 2.1",
@@ -2603,7 +2626,7 @@
       key: "contacts",
       label: "contacts",
       filterPlaceholder: "Filter contacts…",
-      emptyAll: "No contacts found. Connect a contact-capable service, then reload.",
+      emptyAll: "No contacts found. Connect a contact-capable service or import a LinkedIn export (Advanced → LinkedIn import), then reload.",
       emptyFilter: "No contacts match this filter.",
     },
     photos: {
@@ -4581,6 +4604,57 @@ function selectTab(name, opts) {
   $("signal-import").addEventListener("click", () => runSignalImport());
   $("signal-refresh").addEventListener("click", () => loadSignalStatus());
   loadSignalStatus();
+
+  // --- LinkedIn import (issue #218) ---
+  async function loadLinkedInStatus() {
+    const result = $("linkedin-result");
+    const hints = $("linkedin-hints");
+    if (!result) return;
+    try {
+      const st = await api("/v1/admin/linkedin/status");
+      result.innerHTML = st.enabled
+        ? '<div class="meta">Store: <code>' + escapeHtml(st.path || "") + "</code> · " +
+          (st.contacts || 0) + " connection(s)</div>"
+        : '<div class="error-box">LinkedIn store disabled — restart with <code>-linkedin-store</code>.</div>';
+      if (hints) hints.innerHTML = (st.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
+      else result.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed to load LinkedIn status") + "</div>";
+    }
+  }
+
+  async function runLinkedInImport() {
+    const path = ($("linkedin-path").value || "").trim();
+    if (!path) {
+      $("linkedin-result").innerHTML = '<div class="error-box">Enter a LinkedIn export file or directory first.</div>';
+      return;
+    }
+    const btn = $("linkedin-import");
+    if (btn) btn.disabled = true;
+    $("linkedin-result").textContent = "Importing…";
+    try {
+      const res = await api("/v1/admin/linkedin/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const r = (res && res.result) || {};
+      $("linkedin-result").innerHTML =
+        '<div class="meta">Import finished: connections stored ' + (r.stored || 0) +
+        " / skipped " + (r.skipped || 0) +
+        " · errors " + (r.errors || 0) + "</div>";
+      await loadLinkedInStatus();
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
+      else $("linkedin-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "import failed") + "</div>";
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  $("linkedin-import").addEventListener("click", () => runLinkedInImport());
+  $("linkedin-refresh").addEventListener("click", () => loadLinkedInStatus());
+  loadLinkedInStatus();
 
   // --- User-defined kind local files (issue #15) ---
   let udkBrowseTarget = null; // {kindId, sourceId} or {kindId, extraId}

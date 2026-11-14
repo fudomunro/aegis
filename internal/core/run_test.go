@@ -23,6 +23,9 @@ func TestRunCLIMode_Dispatch(t *testing.T) {
 	if _, handled := runCLIMode(cliModeOptions{importSignal: "\t"}, paths); handled {
 		t.Fatal("blank import-signal should not trigger a CLI mode")
 	}
+	if _, handled := runCLIMode(cliModeOptions{importLinkedIn: " "}, paths); handled {
+		t.Fatal("blank import-linkedin should not trigger a CLI mode")
+	}
 	if _, handled := runCLIMode(cliModeOptions{importTakeout: ""}, paths); handled {
 		t.Fatal("blank import-takeout should not trigger a CLI mode")
 	}
@@ -61,6 +64,11 @@ func TestRunCLIMode_Dispatch(t *testing.T) {
 	// import-signal triggers a Signal import.
 	if _, handled := runCLIMode(cliModeOptions{importSignal: "/tmp/missing.jsonl"}, paths); !handled {
 		t.Fatal("import-signal should trigger a CLI mode")
+	}
+
+	// import-linkedin triggers a LinkedIn import.
+	if _, handled := runCLIMode(cliModeOptions{importLinkedIn: "/tmp/missing.csv"}, paths); !handled {
+		t.Fatal("import-linkedin should trigger a CLI mode")
 	}
 
 	// import-takeout triggers a Takeout import.

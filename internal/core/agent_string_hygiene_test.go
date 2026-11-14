@@ -44,6 +44,8 @@ var agentStringCLIFlags = []string{
 	"-import-signal",
 	"-import-takeout",
 	"-import-timeline",
+	"-import-linkedin",
+	"-linkedin-store",
 	"-log-file",
 	"-log-format",
 	"-log-level",
@@ -142,6 +144,7 @@ func connectorAgentSamples(t *testing.T, host connectors.Host) []agentStringSamp
 		{"quicken", connectors.NewQuickenConnector(nil)},
 		{"google-timeline", connectors.NewTimelineConnector(nil)},
 		{"signal", connectors.NewSignalConnector(nil)},
+		{"linkedin", connectors.NewLinkedInConnector(nil)},
 	}
 
 	base := "https://aegis.example.com"

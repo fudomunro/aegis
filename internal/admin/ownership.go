@@ -205,6 +205,13 @@ func (h *Handlers) ownershipServiceUse() map[string]ownershipUse {
 				fmt.Sprintf("%d place visits imported", n))
 		}
 	}
+	if h.LinkedIn != nil && h.LinkedIn.Enabled() {
+		n, err := h.LinkedIn.Counts()
+		if err == nil {
+			markArchive(connectors.LinkedInServiceID, n,
+				fmt.Sprintf("%d connections imported", n))
+		}
+	}
 	return out
 }
 

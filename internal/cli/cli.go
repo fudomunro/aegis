@@ -244,6 +244,18 @@ func ImportSignal(storePath, importPath string) int {
 		})
 }
 
+// ImportLinkedIn imports a LinkedIn data export (.zip or CSV) into the local
+// store, then exits (issue #218).
+func ImportLinkedIn(storePath, importPath string) int {
+	return importStore("linkedin", storePath, importPath,
+		func(p string) (connectors.ImportStore, error) {
+			return connectors.OpenLinkedInStore(p)
+		},
+		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
+			return connectors.ImportLinkedInPath(st.(*connectors.LinkedInStore), p)
+		})
+}
+
 // runTokenRekeyCLI re-encrypts the token store under a new passphrase with
 // current KDF parameters, then exits (issue #101). Passing the same passphrase
 // still rotates the master salt and raises PBKDF2 cost on legacy files.

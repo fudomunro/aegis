@@ -28,6 +28,7 @@ const (
 	defaultQuickenName      = "quicken.db"
 	defaultTimelineName     = "timeline.db"
 	defaultSignalName       = "signal.db"
+	defaultLinkedInName     = "linkedin.db"
 	defaultAuditLogName     = "audit_log.db"
 	defaultLogFileName      = "aegis.log"
 	dataDirLogsSubdir       = "logs"
@@ -77,6 +78,9 @@ type DataPaths struct {
 	// Signal is the SQLite Signal import store path (issue #168).
 	// Empty disables the local Signal source.
 	Signal string
+	// LinkedIn is the SQLite LinkedIn import store path (issue #218).
+	// Empty disables the local LinkedIn source.
+	LinkedIn string
 	// AuditLog is the SQLite access-audit path (issue #105). Empty disables it.
 	AuditLog string
 	// LogFile is the optional process log path. Empty logs to stderr only.
@@ -110,6 +114,8 @@ type StatePathOverrides struct {
 	TimelineSet        bool
 	Signal             string
 	SignalSet          bool
+	LinkedIn           string
+	LinkedInSet        bool
 	AuditLog           string
 	AuditLogSet        bool
 	LogFile            string
@@ -251,6 +257,15 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		paths.Signal = ""
 	default:
 		paths.Signal = shared.ExpandUserPath(ov.Signal)
+	}
+	// LinkedIn import store: omitted → default under data dir; explicitly empty → disabled.
+	switch {
+	case !ov.LinkedInSet:
+		paths.LinkedIn = filepath.Join(dir, defaultLinkedInName)
+	case strings.TrimSpace(ov.LinkedIn) == "":
+		paths.LinkedIn = ""
+	default:
+		paths.LinkedIn = shared.ExpandUserPath(ov.LinkedIn)
 	}
 	// Audit log: omitted → default under data dir; explicitly empty → disabled.
 	switch {

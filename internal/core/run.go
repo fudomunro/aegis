@@ -71,6 +71,8 @@ func Run() {
 	importTimeline := flag.String("import-timeline", "", "Google Timeline JSON file, directory, or Takeout zip to import into the local store, then exit")
 	signalPath := flag.String("signal-store", "", "path to local Signal import store (default: <data-dir>/signal.db; empty disables)")
 	importSignal := flag.String("import-signal", "", "Signal export file or directory (JSONL/JSON or plaintext SQLite) to import into the local store, then exit")
+	linkedinPath := flag.String("linkedin-store", "", "path to local LinkedIn import store (default: <data-dir>/linkedin.db; empty disables)")
+	importLinkedIn := flag.String("import-linkedin", "", "LinkedIn data export (.zip) or Connections.csv file/directory to import into the local store, then exit")
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
 	fakeUpstream := flag.Bool("fake-upstream", false, "dev/test only: serve an injectable fake provider at /demo/fake-upstream and seed placeholder tokens for services pointed at it (never enable on a real instance)")
 	auditRetentionDays := flag.Int("audit-retention-days", audit.DefaultRetentionDays, "how many days of audit events to retain before pruning")
@@ -112,6 +114,8 @@ func Run() {
 		TimelineSet:        setFlags["timeline-store"],
 		Signal:             *signalPath,
 		SignalSet:          setFlags["signal-store"],
+		LinkedIn:           *linkedinPath,
+		LinkedInSet:        setFlags["linkedin-store"],
 		AuditLog:           *auditLogPath,
 		AuditLogSet:        setFlags["audit-log"],
 		LogFile:            *logFile,
@@ -155,6 +159,7 @@ func Run() {
 		"quicken_store", paths.Quicken,
 		"timeline_store", paths.Timeline,
 		"signal_store", paths.Signal,
+		"linkedin_store", paths.LinkedIn,
 		"audit_log", paths.AuditLog,
 		"log_file", paths.LogFile,
 	)
@@ -172,6 +177,7 @@ func Run() {
 		importQuicken:      *importQuicken,
 		importTimeline:     *importTimeline,
 		importSignal:       *importSignal,
+		importLinkedIn:     *importLinkedIn,
 		tokenNewPass:       *tokenNewPass,
 		tokenPass:          *tokenPass,
 	}, paths); done {
@@ -445,6 +451,20 @@ func Run() {
 		slog.Info("signal store disabled")
 	}
 
+	linkedinStore, err := connectors.OpenLinkedInStore(paths.LinkedIn)
+	if err != nil {
+		slog.Error("failed to open linkedin store", "path", paths.LinkedIn, "error", err)
+		os.Exit(1)
+	}
+	if linkedinStore != nil {
+		defer linkedinStore.Close()
+		slog.Info("linkedin store ready", "path", linkedinStore.Path())
+		// File-based import source. Connections from a LinkedIn data export.
+		ensureLocalStoreService(cfg, connectors.LinkedInService())
+	} else {
+		slog.Info("linkedin store disabled")
+	}
+
 	auditLog, err := audit.Open(paths.AuditLog, *auditRetentionDays)
 	if err != nil {
 		slog.Error("failed to open audit log", "path", paths.AuditLog, "error", err)
@@ -491,6 +511,7 @@ func Run() {
 		quicken:       quickenStore,
 		timeline:      timelineStore,
 		signal:        signalStore,
+		linkedin:      linkedinStore,
 		hookHealth:    hookhealth.NewHookHealth(hookhealth.DefaultObservationCapacity),
 		audit:         auditLog,
 		prom:          metrics.NewPromMetrics(Version, Commit),
@@ -546,6 +567,8 @@ func Run() {
 	srv.connectors[connectors.TimelineServiceID] = connectors.NewTimelineConnector(timelineStore)
 	// Signal contacts + messages (issue #168): local file-based import only.
 	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(signalStore)
+	// LinkedIn connections (issue #218): local file-based import only.
+	srv.connectors[connectors.LinkedInServiceID] = connectors.NewLinkedInConnector(linkedinStore)
 	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
 	// A service with endpoint sample://calendar gets this connector instead of
 	// a live provider so free/busy demos work without OAuth.
@@ -816,6 +839,7 @@ type cliModeOptions struct {
 	importQuicken      string
 	importTimeline     string
 	importSignal       string
+	importLinkedIn     string
 	tokenNewPass       string
 	tokenPass          string
 }
@@ -875,6 +899,9 @@ func runCLIMode(opts cliModeOptions, paths DataPaths) (code int, handled bool) {
 	}
 	if strings.TrimSpace(opts.importSignal) != "" {
 		return cli.ImportSignal(paths.Signal, opts.importSignal), true
+	}
+	if strings.TrimSpace(opts.importLinkedIn) != "" {
+		return cli.ImportLinkedIn(paths.LinkedIn, opts.importLinkedIn), true
 	}
 	if strings.TrimSpace(opts.tokenNewPass) != "" {
 		pass := opts.tokenPass
