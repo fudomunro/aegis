@@ -40,7 +40,7 @@ func TestSignalImportStatusHints(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	srv = &Server{signal: store, baseURL: "http://aegis.test"}
+	srv = &Server{localStores: map[string]connectors.ImportStore{"signal": store}, baseURL: "http://aegis.test"}
 	st = signalStatusOf(srv)
 	if !st.Enabled || !st.StoreEmpty {
 		t.Fatalf("status = %+v", st)
@@ -53,16 +53,8 @@ func TestSignalImportStatusHints(t *testing.T) {
 // signalStatusOf renders the Signal import status through the store's
 // declared connectors.ImportAdmin copy (issue #254).
 func signalStatusOf(srv *Server) connectors.ImportStoreStatus {
-	var store connectors.ImportStore
-	if srv.signal != nil {
-		store = srv.signal
-	}
-	return admin.ImportStoreAdmin{
-		Prefix:    "/v1/admin/signal",
-		ServiceID: connectors.SignalServiceID,
-		Store:     store,
-		Admin:     srv.signal.Admin(),
-	}.Status(srv.baseURL)
+	spec, _ := connectors.LocalImportStoreSpecFor("signal")
+	return admin.ImportStoreAdmin{Spec: spec, Store: srv.localStores["signal"]}.Status(srv.baseURL)
 }
 
 func TestPermissionsOverview_SignalImport(t *testing.T) {
@@ -74,7 +66,7 @@ func TestPermissionsOverview_SignalImport(t *testing.T) {
 	defer store.Close()
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.signal = store
+	srv.localStores["signal"] = store
 	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(store)
 
 	overview := srv.admin().PermissionsOverview()
@@ -90,7 +82,7 @@ func TestPermissionsOverview_SignalImport(t *testing.T) {
 		}
 		found := false
 		for _, acc := range row.Accessors {
-			if acc.ID != admin.SyncSignalID {
+			if acc.ID != "sync:signal" {
 				continue
 			}
 			found = true
@@ -112,34 +104,45 @@ func TestPermissionsOverview_SignalImport(t *testing.T) {
 	}
 }
 
-func TestResolveStatePaths_SignalStore(t *testing.T) {
+func TestResolveStatePaths_LocalStores(t *testing.T) {
 	paths, err := ResolveStatePaths(StatePathOverrides{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if paths.Signal == "" || filepath.Base(paths.Signal) != "signal.db" {
-		t.Fatalf("default Signal path = %q", paths.Signal)
+	// Every declared store defaults to its spec file name under the data
+	// dir (issue #393) — a new store is covered without edits here.
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		got := paths.LocalStores[spec.Stem]
+		if got == "" || filepath.Base(got) != spec.DefaultFile {
+			t.Fatalf("%s default path = %q, want file %q", spec.Stem, got, spec.DefaultFile)
+		}
 	}
 
-	empty, err := ResolveStatePaths(StatePathOverrides{Dir: t.TempDir(), SignalSet: true})
+	empty, err := ResolveStatePaths(StatePathOverrides{
+		Dir:        t.TempDir(),
+		LocalStores: map[string]LocalStoreOverride{"signal": {Set: true}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if empty.Signal != "" {
-		t.Fatalf("explicit empty Signal path = %q, want disabled", empty.Signal)
+	if empty.LocalStores["signal"] != "" {
+		t.Fatalf("explicit empty Signal path = %q, want disabled", empty.LocalStores["signal"])
 	}
 
 	custom := filepath.Join(t.TempDir(), "custom-signal.db")
-	got, err := ResolveStatePaths(StatePathOverrides{Dir: t.TempDir(), Signal: custom, SignalSet: true})
+	got, err := ResolveStatePaths(StatePathOverrides{
+		Dir:        t.TempDir(),
+		LocalStores: map[string]LocalStoreOverride{"signal": {Path: custom, Set: true}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Signal != custom {
-		t.Fatalf("custom Signal path = %q, want %q", got.Signal, custom)
+	if got.LocalStores["signal"] != custom {
+		t.Fatalf("custom Signal path = %q, want %q", got.LocalStores["signal"], custom)
 	}
 }
 
-func TestHandleAdminSignal(t *testing.T) {
+func TestImportStoreHandler_Signal(t *testing.T) {
 	dir := t.TempDir()
 	store, err := connectors.OpenSignalStore(filepath.Join(dir, "signal.db"))
 	if err != nil {
@@ -147,21 +150,26 @@ func TestHandleAdminSignal(t *testing.T) {
 	}
 	defer store.Close()
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.signal = store
+	srv.localStores["signal"] = store
 	srv.cache = shared.NewCache()
 	srv.mbCache = shared.NewCache()
+	signalSpec, ok := connectors.LocalImportStoreSpecFor("signal")
+	if !ok {
+		t.Fatal("signal import store spec missing")
+	}
+	handle := srv.admin().ImportStoreHandler(signalSpec)
 
 	// Status
 	req := httptest.NewRequest("GET", "/v1/admin/signal/status", nil)
 	w := httptest.NewRecorder()
-	srv.admin().HandleAdminSignal(w, req)
+	handle(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status code %d body=%s", w.Code, w.Body.String())
 	}
 
 	// Wrong method on status
 	w2 := httptest.NewRecorder()
-	srv.admin().HandleAdminSignal(w2, httptest.NewRequest("POST", "/v1/admin/signal/status", nil))
+	handle(w2, httptest.NewRequest("POST", "/v1/admin/signal/status", nil))
 	if w2.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status POST code %d", w2.Code)
 	}
@@ -174,21 +182,21 @@ func TestHandleAdminSignal(t *testing.T) {
 	body := strings.NewReader(`{"path":"` + path + `"}`)
 	req3 := httptest.NewRequest("POST", "/v1/admin/signal/import", body)
 	w3 := httptest.NewRecorder()
-	srv.admin().HandleAdminSignal(w3, req3)
+	handle(w3, req3)
 	if w3.Code != http.StatusOK {
 		t.Fatalf("import code %d body=%s", w3.Code, w3.Body.String())
 	}
 
 	// Import missing path
 	w4 := httptest.NewRecorder()
-	srv.admin().HandleAdminSignal(w4, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{}`)))
+	handle(w4, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{}`)))
 	if w4.Code != http.StatusBadRequest {
 		t.Fatalf("empty path code %d", w4.Code)
 	}
 
 	// Unknown subpath
 	w5 := httptest.NewRecorder()
-	srv.admin().HandleAdminSignal(w5, httptest.NewRequest("GET", "/v1/admin/signal/nope", nil))
+	handle(w5, httptest.NewRequest("GET", "/v1/admin/signal/nope", nil))
 	if w5.Code != http.StatusNotFound {
 		t.Fatalf("nope code %d", w5.Code)
 	}
@@ -197,8 +205,10 @@ func TestHandleAdminSignal(t *testing.T) {
 	srv2 := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv2.cache = shared.NewCache()
 	srv2.mbCache = shared.NewCache()
+	signalSpec2, _ := connectors.LocalImportStoreSpecFor("signal")
+	handle2 := srv2.admin().ImportStoreHandler(signalSpec2)
 	w6 := httptest.NewRecorder()
-	srv2.admin().HandleAdminSignal(w6, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{"path":"/tmp/x"}`)))
+	handle2(w6, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{"path":"/tmp/x"}`)))
 	if w6.Code != http.StatusBadRequest {
 		t.Fatalf("disabled import code %d", w6.Code)
 	}

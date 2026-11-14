@@ -156,14 +156,14 @@ func registerAdminRoutes(mux *http.ServeMux, srv *Server) {
 	mux.HandleFunc("/v1/admin/apps", adminOnly(srv.admin().HandleAdminApps))
 	mux.HandleFunc("/v1/admin/apps/{path...}", adminOnly(srv.admin().HandleAdminApps))
 	mux.HandleFunc("/v1/admin/setup/{path...}", adminOnly(srv.admin().HandleAdminOnboarding))
-	mux.HandleFunc("/v1/admin/quicken", adminOnly(srv.admin().HandleAdminQuicken))
-	mux.HandleFunc("/v1/admin/quicken/{path...}", adminOnly(srv.admin().HandleAdminQuicken))
-	mux.HandleFunc("/v1/admin/timeline", adminOnly(srv.admin().HandleAdminTimeline))
-	mux.HandleFunc("/v1/admin/timeline/{path...}", adminOnly(srv.admin().HandleAdminTimeline))
-	mux.HandleFunc("/v1/admin/signal", adminOnly(srv.admin().HandleAdminSignal))
-	mux.HandleFunc("/v1/admin/signal/{path...}", adminOnly(srv.admin().HandleAdminSignal))
-	mux.HandleFunc("/v1/admin/linkedin", adminOnly(srv.admin().HandleAdminLinkedIn))
-	mux.HandleFunc("/v1/admin/linkedin/{path...}", adminOnly(srv.admin().HandleAdminLinkedIn))
+	// Local import stores (issue #393): status/import routes registered
+	// from the connectors registry, plus the panel-copy metadata endpoint.
+	mux.HandleFunc("/v1/admin/import-stores", adminOnly(srv.admin().HandleAdminImportStores))
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		handler := adminOnly(srv.admin().ImportStoreHandler(spec))
+		mux.HandleFunc(spec.AdminPrefix(), handler)
+		mux.HandleFunc(spec.AdminPrefix()+"/{path...}", handler)
+	}
 	mux.HandleFunc("/v1/admin/udk", adminOnly(srv.admin().HandleAdminUDK))
 	mux.HandleFunc("/v1/admin/udk/{path...}", adminOnly(srv.admin().HandleAdminUDK))
 

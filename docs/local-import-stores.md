@@ -6,7 +6,9 @@ Scope: Signal (`-import-signal`), Quicken (`-import-quicken`), Google
 Timeline (`-import-timeline`). The mail archive / Google Takeout pair is
 decided below but not moved by this note. LinkedIn (`-import-linkedin`, issue
 #218) later joined the same family unchanged: a CSV/zip importer over the
-LinkedIn data export, feeding the contacts kind.
+LinkedIn data export, feeding the contacts kind. The family now registers
+through one connectors-side spec list (`LocalImportStoreSpecs()`, issue
+#393) — see "The spec registry" below.
 
 ## The principle
 
@@ -120,4 +122,42 @@ thin wrapper over the ingest.
 Flags stay in `run.go` (the CLI entry point is the right owner for flag
 parsing) and delegate to the shared import runner; `-import-takeout`
 stays separate per above. Data-dir paths stay in `datadir.go`; an empty
-explicit path disables the store — unchanged contract.
+explicit path disables the store — unchanged contract. Since the spec
+registry (below) the per-store flag names, help text, and default file
+names are declared beside the store; `run.go` and `datadir.go` iterate
+the registry instead of naming stores.
+
+## The spec registry (issue #393)
+
+Adding a store used to mean hand-wiring seven seams outside the
+connector package (flags, data paths, CLI dispatch, Server fields, admin
+routes, thin admin wrappers, ownership/permissions rows, admin.html
+panels) — the LinkedIn store's PR touched 28 files, 23 of them outside
+`internal/connectors`. Those seams are all the same shape, so they now
+consume one declaration:
+
+- **`LocalImportStoreSpec`** (`localstores.go`) — naming (service card,
+  stem, default file), flag help, `Open`, `NewConnector`, `Maturity`.
+  Each store file keeps its `xStoreSpec()` constructor and its provider
+  copy (the `Admin()` surface: panel copy, hints, path hint, ownership
+  and permissions phrasing) beside the store it describes (issue #254).
+- **`LocalImportStoreSpecs()`** — the ordered literal list (explicit
+  wiring, no `init()`), the same class as `kinds.Builtin()`.
+- **Generic consumers** — `run.go` registers `-<stem>-store` /
+  `-import-<stem>` and opens/registers stores in one loop;
+  `datadir.go` resolves `LocalStores[stem]` paths; `runCLIMode` and
+  `cli.ImportLocalStore` dispatch through the spec; `routes.go`
+  registers `/v1/admin/<stem>` plus `GET /v1/admin/import-stores`;
+  ownership and the permissions overview iterate the registry (kinds
+  derive from `kinds.ProvidedTypes`).
+- **admin.html renders panels from declarations** — the per-store
+  sections are gone; one renderer draws every panel from the
+  `/v1/admin/import-stores` view (declared copy + live status).
+  `TestAdminHTML_RestatesNoImportPanelCopy` enforces the issue #265
+  "declare, don't render" rule for this family.
+
+What adding a store now takes: `internal/connectors/<x>.go` (+ test),
+one line in `LocalImportStoreSpecs()`, two lines in `services.go`
+(canonical name + title alias), and docs. `TestLocalImportStoreSpecs`
+pins the declaration contract so a partial spec fails in CI, and the
+dispatch/hygiene tests cover new stores without edits.

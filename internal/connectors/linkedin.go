@@ -41,6 +41,28 @@ func LinkedInService() LocalStoreService {
 	}
 }
 
+// linkedinStoreSpec is the wiring declaration for the LinkedIn import
+// store (issue #393 registry).
+func linkedinStoreSpec() LocalImportStoreSpec {
+	return LocalImportStoreSpec{
+		Service:        LinkedInService(),
+		Stem:           "linkedin",
+		DefaultFile:    "linkedin.db",
+		StoreFlagHelp:  "path to local LinkedIn import store (default: <data-dir>/linkedin.db; empty disables)",
+		ImportFlagHelp: "LinkedIn data export (.zip) or Connections.csv file/directory to import into the local store, then exit",
+		Open: func(path string) (ImportStore, error) {
+			return OpenLinkedInStore(path)
+		},
+		NewConnector: func(st ImportStore) ServiceConnector {
+			if st == nil {
+				return NewLinkedInConnector(nil)
+			}
+			return NewLinkedInConnector(st.(*LinkedInStore))
+		},
+		Maturity: linkedinMaturity,
+	}
+}
+
 // Admin declares the LinkedIn import admin surface (issue #254).
 func (s *LinkedInStore) Admin() ImportAdmin {
 	return ImportAdmin{
@@ -48,6 +70,17 @@ func (s *LinkedInStore) Admin() ImportAdmin {
 		PathHint:    "a LinkedIn data export file or directory",
 		SamplePath:  "~/Downloads/linkedin-export.zip (or Connections.csv extracted from it)",
 		LibraryPath: "/v1/library/contacts",
+		Panel: ImportPanel{
+			Heading: "LinkedIn import (read-only)",
+			Title:   "LinkedIn connections",
+			Intro:   "LinkedIn has no public connections API. Export a copy of your data, then import it here so agents can answer questions about people you know professionally. Contact metadata only — profile photos and other media are never stored. Re-import skips rows already present.",
+			Steps: []string{
+				"LinkedIn: Settings & Privacy → Data Privacy → Get a copy of your data → select Connections (or the full archive), then wait for the download email.",
+				"Archive: import the `.zip` LinkedIn sends — Aegis finds `Connections.csv` and `Contacts.csv` inside.",
+				"CSV: or import those CSVs directly, or a folder containing them.",
+			},
+			Placeholder: "/path/to/linkedin-export.zip or Connections.csv",
+		},
 		Counts: func() map[string]int {
 			if s == nil || !s.Enabled() {
 				return nil
@@ -58,6 +91,10 @@ func (s *LinkedInStore) Admin() ImportAdmin {
 			}
 			return map[string]int{"contacts": c}
 		},
+		ArchiveDetail: func(counts map[string]int) string {
+			return fmt.Sprintf("%d connections imported", counts["contacts"])
+		},
+		AccessorDetail: "LinkedIn data export ingest into the local contacts store. Profile photos are never stored.",
 		Hints: func(state ImportHintState) []string {
 			contacts := state.Counts["contacts"]
 			switch {
@@ -87,6 +124,25 @@ type LinkedInStore struct {
 	localStore
 }
 
+// Path, Close, and Enabled are re-declared on each concrete store:
+// embedded-field promotion panics on a typed-nil receiver, and disabled
+// stores must stay describable through ImportStore (issue #393).
+func (s *LinkedInStore) Path() string {
+	if s == nil {
+		return ""
+	}
+	return s.path
+}
+
+func (s *LinkedInStore) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
+func (s *LinkedInStore) Enabled() bool { return s != nil && s.db != nil }
+
 // LinkedInImportResult reports one import run.
 type LinkedInImportResult struct {
 	Path    string `json:"path"`
@@ -108,6 +164,11 @@ func (r LinkedInImportResult) LogAttrs() []any {
 // Failed reports a run that recorded errors but stored nothing.
 func (r LinkedInImportResult) Failed() bool {
 	return r.Errors > 0 && r.Stored == 0
+}
+
+// Summary is the one-line run result the admin panel renders.
+func (r LinkedInImportResult) Summary() string {
+	return importCountsSummary(r.Stored, r.Skipped, r.Errors)
 }
 
 var _ ImportStore = (*LinkedInStore)(nil)
@@ -140,8 +201,6 @@ CREATE TABLE IF NOT EXISTS linkedin_contacts (
   raw_json TEXT
 );
 `
-
-func (s *LinkedInStore) Enabled() bool { return s != nil && s.db != nil }
 
 // upsertLinkedInContactTx stores or replaces one imported contact keyed by
 // source_id.

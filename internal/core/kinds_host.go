@@ -269,8 +269,22 @@ func (s *Server) libraryDeps() kinds.Deps {
 		ResolveTracks:   mb.ResolveTracks,
 		ResolveAlbums:   mb.ResolveAlbums,
 		ResolveArtists:  mb.ResolveArtists,
-		PlacesLocalSource: func() bool {
-			return s.timeline != nil && s.timeline.Enabled()
+		// LocalSource answers whether an enabled local import store can
+		// feed a kind (issue #393). Kinds pass their own permission key;
+		// this closure stays generic so the hub never names a kind.
+		LocalSource: func(kind string) bool {
+			for _, spec := range connectors.LocalImportStoreSpecs() {
+				store := s.localStores[spec.Stem]
+				if store == nil || !store.Enabled() {
+					continue
+				}
+				for _, provided := range kinds.ProvidedTypes(spec.NewConnector(store)) {
+					if provided == kind {
+						return true
+					}
+				}
+			}
+			return false
 		},
 		MailArchive: mailArchive{s},
 	}

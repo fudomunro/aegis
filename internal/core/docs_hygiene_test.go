@@ -623,3 +623,45 @@ func TestAdminHTML_RestatesNoOnboardingCopy(t *testing.T) {
 		t.Fatalf("only %d distinct copy strings walked — the spec walk looks broken", len(seen))
 	}
 }
+
+// TestAdminHTML_RestatesNoImportPanelCopy walks every string the local
+// import stores declare for their admin panels and rejects each one in
+// web/admin.html (issue #393). Panels render from the connectors registry
+// via /v1/admin/import-stores, so the render file cannot also contain the
+// copy — the issue #265 "declare, don't render" rule for the import family.
+func TestAdminHTML_RestatesNoImportPanelCopy(t *testing.T) {
+	root := repoRoot(t)
+	b, err := os.ReadFile(filepath.Join(root, "internal/admin/web/admin.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := string(b)
+
+	seen := map[string]bool{}
+	check := func(s string) {
+		s = strings.TrimSpace(s)
+		if len(s) < 8 || seen[s] {
+			return
+		}
+		seen[s] = true
+		if strings.Contains(admin, s) {
+			t.Errorf("web/admin.html restates import panel copy %q — render it from the spec instead (issue #393)", s)
+		}
+	}
+	for _, spec := range connectors.LocalImportStoreSpecs() {
+		st, _ := spec.Open("")
+		adminCopy := st.Admin()
+		check(adminCopy.Panel.Heading)
+		check(adminCopy.Panel.Title)
+		check(adminCopy.Panel.Intro)
+		check(adminCopy.Panel.Placeholder)
+		for _, step := range adminCopy.Panel.Steps {
+			check(step)
+		}
+		check(adminCopy.PathHint)
+		check(adminCopy.SamplePath)
+	}
+	if len(seen) < 20 {
+		t.Fatalf("only %d distinct copy strings walked — the spec walk looks broken", len(seen))
+	}
+}

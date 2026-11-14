@@ -29,7 +29,7 @@ import "github.com/fudomunro/aegis/internal/shared"
 // import store. Sample fixtures and the drift-injection harness are
 // excluded: they are test surfaces, not connections to mature.
 func ConnectionMaturityCatalog() []ConnectionMaturity {
-	return []ConnectionMaturity{
+	out := []ConnectionMaturity{
 		spotifyMaturity(),
 		youtubeMusicMaturity(),
 		amazonMusicMaturity(),
@@ -45,11 +45,12 @@ func ConnectionMaturityCatalog() []ConnectionMaturity {
 		calDAVMaturity(),
 		cardDAVMaturity(),
 		paperlessMaturity(),
-		signalMaturity(),
-		quickenMaturity(),
-		timelineMaturity(),
-		linkedinMaturity(),
 	}
+	// Local import stores declare maturity beside the store (issue #393).
+	for _, spec := range LocalImportStoreSpecs() {
+		out = append(out, spec.Maturity())
+	}
+	return out
 }
 
 func signalMaturity() ConnectionMaturity {
