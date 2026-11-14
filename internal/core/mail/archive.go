@@ -60,6 +60,10 @@ type Record struct {
 	Read        bool
 	BodyText    string
 	PayloadGzip []byte
+	// Attachments are the MIME attachment summaries parsed from the stored
+	// payload (issue #215). nil means not yet examined (legacy rows); an
+	// empty non-nil slice means examined and none were found.
+	Attachments []kinds.AttachmentRef
 	// Dataset is the data-scope partition id (docs/data-scopes.md). Empty is
 	// the owner/default partition.
 	Dataset string
@@ -96,6 +100,12 @@ func (r Record) Message() kinds.Message {
 			src.Extra = map[string]any{}
 		}
 		src.Extra["snippet"] = r.Snippet
+	}
+	if len(r.Attachments) > 0 {
+		if src.Extra == nil {
+			src.Extra = map[string]any{}
+		}
+		src.Extra["attachments"] = r.Attachments
 	}
 	return kinds.Message{
 		Channel:    kinds.MessageChannelEmail,
@@ -244,6 +254,7 @@ CREATE TABLE IF NOT EXISTS mail_messages (
   is_read INTEGER NOT NULL DEFAULT 1,
   body_text TEXT NOT NULL DEFAULT '',
   payload_gzip BLOB,
+  attachments_json TEXT,
   dataset TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL DEFAULT '',
   UNIQUE(service, service_msg_id)
@@ -273,6 +284,13 @@ CREATE TABLE IF NOT EXISTS mail_meta (
 	if _, err := a.db.Exec(`ALTER TABLE mail_messages ADD COLUMN dataset TEXT NOT NULL DEFAULT ''`); err != nil &&
 		!strings.Contains(err.Error(), "duplicate column") {
 		return fmt.Errorf("mail archive dataset column: %w", err)
+	}
+	// Older archives predate attachment summaries (issue #215). NULL marks
+	// an unexamined row — distinct from '[]' ("examined, none found") so the
+	// documents listing can backfill legacy payloads once.
+	if _, err := a.db.Exec(`ALTER TABLE mail_messages ADD COLUMN attachments_json TEXT`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("mail archive attachments column: %w", err)
 	}
 	if _, err := a.db.Exec(`CREATE INDEX IF NOT EXISTS mail_messages_dataset ON mail_messages(dataset)`); err != nil {
 		return fmt.Errorf("mail archive dataset index: %w", err)
@@ -306,6 +324,17 @@ func (a *Archive) Upsert(rec Record) error {
 	if err != nil {
 		return err
 	}
+	// nil Attachments stores SQL NULL (unexamined); an empty slice stores
+	// '[]' (examined, none found). The conflict path preserves the prior
+	// value on a NULL re-upsert, like the payload.
+	var attachmentsJSON any
+	if rec.Attachments != nil {
+		buf, err := json.Marshal(rec.Attachments)
+		if err != nil {
+			return err
+		}
+		attachmentsJSON = string(buf)
+	}
 	read := 0
 	if rec.Read {
 		read = 1
@@ -323,8 +352,8 @@ func (a *Archive) Upsert(rec Record) error {
 INSERT INTO mail_messages (
   service, service_msg_id, thread_id, message_id, mailbox, labels_json,
   subject, snippet, from_name, from_email, to_json, cc_json,
-  sent_at, received_at, direction, is_read, body_text, payload_gzip, dataset, updated_at
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  sent_at, received_at, direction, is_read, body_text, payload_gzip, attachments_json, dataset, updated_at
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(service, service_msg_id) DO UPDATE SET
   thread_id=excluded.thread_id,
   message_id=excluded.message_id,
@@ -342,12 +371,13 @@ ON CONFLICT(service, service_msg_id) DO UPDATE SET
   is_read=excluded.is_read,
   body_text=excluded.body_text,
   payload_gzip=COALESCE(excluded.payload_gzip, mail_messages.payload_gzip),
+  attachments_json=COALESCE(excluded.attachments_json, mail_messages.attachments_json),
   dataset=excluded.dataset,
   updated_at=excluded.updated_at
 `, rec.Service, rec.ID, rec.ThreadID, rec.MessageID, rec.Mailbox, string(labelsJSON),
 		rec.Subject, rec.Snippet, rec.FromName, strings.ToLower(rec.FromEmail),
 		string(toJSON), string(ccJSON), rec.SentAt, rec.ReceivedAt, rec.Direction,
-		read, rec.BodyText, rec.PayloadGzip, rec.Dataset, now); err != nil {
+		read, rec.BodyText, rec.PayloadGzip, attachmentsJSON, rec.Dataset, now); err != nil {
 		return err
 	}
 
@@ -376,7 +406,8 @@ func (a *Archive) Get(service, id string) (Record, error) {
 	row := a.db.QueryRow(`
 SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
        subject, snippet, from_name, from_email, to_json, cc_json,
-       sent_at, received_at, direction, is_read, body_text, dataset
+       sent_at, received_at, direction, is_read, body_text, dataset,
+       COALESCE(attachments_json, '')
 FROM mail_messages WHERE service=? AND service_msg_id=?`, service, id)
 	rec, err := scanMailRecord(row, true)
 	if err != nil {
@@ -482,7 +513,8 @@ func (a *Archive) Search(q SearchQuery) (SearchResponse, error) {
 	fts := strings.TrimSpace(q.Q)
 	querySQL := `SELECT m.service, m.service_msg_id, m.thread_id, m.message_id, m.mailbox, m.labels_json,
        m.subject, m.snippet, m.from_name, m.from_email, m.to_json, m.cc_json,
-       m.sent_at, m.received_at, m.direction, m.is_read, m.body_text, m.dataset `
+       m.sent_at, m.received_at, m.direction, m.is_read, m.body_text, m.dataset,
+       COALESCE(m.attachments_json, '') `
 	queryArgs := args
 	if fts != "" {
 		match, _ := mailFTSMatch(fts)
@@ -609,7 +641,8 @@ func (a *Archive) hydrateMessageSiblings(msgs []kinds.Message, dataset string) [
 	}
 	querySQL := `SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
        subject, snippet, from_name, from_email, to_json, cc_json,
-       sent_at, received_at, direction, is_read, body_text, dataset
+       sent_at, received_at, direction, is_read, body_text, dataset,
+       COALESCE(attachments_json, '')
        FROM mail_messages WHERE message_id IN (` + strings.Join(placeholders, ",") + `)`
 	if dataset != "" {
 		querySQL += ` AND dataset = ?`
@@ -837,17 +870,19 @@ func normalizeMailTimeBound(raw string, lower bool) string {
 
 func scanMailRecord(row shared.RowScanner, withBody bool) (Record, error) {
 	var (
-		rec        Record
-		labelsJSON string
-		toJSON     string
-		ccJSON     string
-		isRead     int
-		body       string
+		rec            Record
+		labelsJSON     string
+		toJSON         string
+		ccJSON         string
+		attachmentsStr string
+		isRead         int
+		body           string
 	)
 	scanDest := []any{
 		&rec.Service, &rec.ID, &rec.ThreadID, &rec.MessageID, &rec.Mailbox, &labelsJSON,
 		&rec.Subject, &rec.Snippet, &rec.FromName, &rec.FromEmail, &toJSON, &ccJSON,
 		&rec.SentAt, &rec.ReceivedAt, &rec.Direction, &isRead, &body, &rec.Dataset,
+		&attachmentsStr,
 	}
 	if err := row.Scan(scanDest...); err != nil {
 		return Record{}, err
@@ -866,6 +901,9 @@ func scanMailRecord(row shared.RowScanner, withBody bool) (Record, error) {
 	}
 	if ccJSON != "" {
 		_ = json.Unmarshal([]byte(ccJSON), &rec.CC)
+	}
+	if attachmentsStr != "" {
+		_ = json.Unmarshal([]byte(attachmentsStr), &rec.Attachments)
 	}
 	rec.ServiceName = rec.Service
 	if name, ok := connectors.ServiceName(rec.Service); ok {
@@ -928,6 +966,17 @@ func RecordFromMessage(service, serviceName string, msg kinds.Message, payloadGz
 	}
 	if len(msg.Sources) > 0 {
 		rec.Mailbox = msg.Sources[0].Mailbox
+		// Ingest-provided attachment summaries (the live-Gmail and Takeout
+		// shapes) persist as the row's examined state; nil stays nil so the
+		// documents listing can examine legacy payloads (issue #215).
+		if raw, ok := msg.Sources[0].Extra["attachments"]; ok && raw != nil {
+			if buf, err := json.Marshal(raw); err == nil {
+				var atts []kinds.AttachmentRef
+				if err := json.Unmarshal(buf, &atts); err == nil && atts != nil {
+					rec.Attachments = atts
+				}
+			}
+		}
 	}
 	if msg.From != nil {
 		rec.FromName = msg.From.Name

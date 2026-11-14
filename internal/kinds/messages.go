@@ -40,10 +40,26 @@ type MailQuery struct {
 	Cap int
 }
 
-// MailArchive is the messages kind's declared local collection source
-// (issue #139): the compressed mail archive and its ingest sources. Core
-// adapts it beside Host (issue #312) — a constructor dep, not a Host
-// method, because only this kind owns it.
+// MailAttachmentQuery selects archived attachment documents (issue #215):
+// the documents list's coarse row window. The archive filters rows with
+// these bounds; precise list filtering stays on the documents kind.
+type MailAttachmentQuery struct {
+	// Dataset restricts to one data-scope partition. Empty is the
+	// owner/default partition.
+	Dataset string
+	// Q, After, Before are the document list's coarse filters (issue #143).
+	Q      string
+	After  string
+	Before string
+	// Cap bounds scanned rows (newest first). 0 returns every match up to
+	// the store's merge window, with truncated when it filled.
+	Cap int
+}
+
+// MailArchive is the messages and documents kinds' declared local collection
+// source (issue #139): the compressed mail archive and its ingest sources.
+// Core adapts it beside Host (issue #312) — a constructor dep, not a Host
+// method, because only those kinds own it.
 type MailArchive interface {
 	// Available reports whether the archive can feed the kind at all
 	// (HasProviders without a request).
@@ -66,6 +82,16 @@ type MailArchive interface {
 	// Parent returns the declared parent source id for ingest grouping
 	// (issue #286).
 	Parent(id string) string
+	// ListAttachments lists email-attachment documents for archived rows
+	// of read-only export sources (issue #215) — canonical sources serve
+	// their own attachment surface. truncated reports a filled row window.
+	ListAttachments(ctx context.Context, q MailAttachmentQuery) ([]Document, bool, error)
+	// AttachmentText returns the decoded text of one archived attachment
+	// ("" for binary parts). ok=false when the named copy is missing.
+	AttachmentText(dataset, service, id string) (string, bool)
+	// AttachmentBytes returns one archived attachment's decoded bytes with
+	// its media type and filename. ok=false when the named copy is missing.
+	AttachmentBytes(dataset, service, id string) (data []byte, mimeType, filename string, ok bool)
 }
 
 // messagesKind owns the messages aggregate (issue #139): live

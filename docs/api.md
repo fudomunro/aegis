@@ -522,7 +522,13 @@ Neutral message fields (user-facing):
 | `entity_id` | Durable id when present (RFC 5322 Message-ID) |
 | `match` | Cross-service identity: `message_id` or `subject_from_time` |
 | `labels[]` | Service-local labels (`INBOX`, `SENT`, `UNREAD`, …) |
-| `sources[]` | Service-local copies: `service`, `id`, `thread_id`, `url`, `mailbox`, `canonical`, `copy` |
+| `sources[]` | Service-local copies: `service`, `id`, `thread_id`, `url`, `mailbox`, `canonical`, `copy`, `extra` |
+
+A source's `extra` may carry `message_id`, `snippet`, and `attachments` — one
+summary per MIME attachment (`id`, `filename`, `mime_type`, `size`) — so
+agents can see what a message carried without fetching payloads. Those
+attachments also appear as `email-attachment` documents (Documents as a
+kind).
 
 Cross-service merge prefers **RFC Message-ID** when a provider supplies it
 (`match=message_id`); otherwise **subject + from + sent_at**
@@ -690,6 +696,16 @@ service (Paperless-ngx, Google Docs/Drive, and Gmail attachments on the same
 `google-gmail` source as the parent message; Nextcloud remains a candidate).
 Aegis never stores document bytes and never runs OCR.
 
+One declared exception: attachments of messages that exist only in a **local
+mail export** (Google Takeout) are listed as `email-attachment` documents
+whose `sources[].blob_url` points at the library byte route below. The mail
+archive already keeps the full exported payload, so those bytes are read back
+from it — live Gmail copies keep their Gmail `blob_url` and are not listed
+from the archive. When both a live service and an export know the same
+attachment of one message (matched on Message-ID plus filename, type, and
+size), the listing merges them into a single document with one source per
+copy.
+
 ```json
 {
   "documents": [{
@@ -726,9 +742,12 @@ Query filters: `q`, `tag`, `after`, `before`.
 | `read` / `read-write` | same + short `excerpt` | `GET /v1/library/documents/{service}/{id}/text` |
 
 The text endpoint is a separate gate so `metadata` (or “read the list”) never
-implies reading content. Prefer `canonical` / `blob_url` on `sources[]` for
-the real file. Out of scope: upload/edit, Aegis-side OCR or file storage, and
-per-tag allow/deny (design spike).
+implies reading content. Archived export copies additionally serve raw
+attachment bytes (octet streams, `Content-Type` from the part) at
+`GET /v1/library/documents/{service}/{id}/bytes` — the `blob_url` those
+sources carry — gated like text. Prefer `canonical` / `blob_url` on
+`sources[]` for the real file. Out of scope: upload/edit, Aegis-side OCR or
+file storage, and per-tag allow/deny (design spike).
 
 ## Content transport (`/v1/services/{id}/...`)
 

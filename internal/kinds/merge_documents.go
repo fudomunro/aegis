@@ -1,14 +1,24 @@
 package kinds
 
 import (
+	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 // DocumentIdentityKey is the sort/merge key used by the library aggregate.
-// Prefer durable content checksum, then archive serial, then title + created.
-// Documents without any identity fall back to service:id so they stay distinct.
+// Email attachments key on their parent Message-ID plus content markers so
+// copies from different ingest sources of one message join (issue #215).
+// Otherwise prefer durable content checksum, then archive serial, then
+// title + created. Documents without any identity fall back to service:id
+// so they stay distinct.
 func DocumentIdentityKey(d Document) string {
+	if d.DocumentType == EmailAttachmentDocumentType {
+		if key, ok := emailAttachmentIdentityKey(d); ok {
+			return key
+		}
+	}
 	if id := strings.TrimSpace(d.EntityID); id != "" {
 		return "entity:" + strings.ToLower(id)
 	}
@@ -29,6 +39,38 @@ func DocumentIdentityKey(d Document) string {
 		return "anon:" + DocumentServiceName(d) + ":" + d.Title + ":" + d.CreatedAt
 	}
 	return "title:" + title + "|created:" + created
+}
+
+// emailAttachmentIdentityKey derives the cross-source identity of one email
+// attachment from its Extra identity fields. ok is false when the parent
+// message is unknown — the caller then falls back to the provider's own id.
+func emailAttachmentIdentityKey(d Document) (string, bool) {
+	msgID := NormalizeMessageID(ExtraString(d.Extra, "message_id"))
+	if msgID == "" {
+		return "", false
+	}
+	file := NormalizeIdentityKey(ExtraString(d.Extra, "filename"))
+	mime := strings.ToLower(strings.TrimSpace(ExtraString(d.Extra, "mime_type")))
+	return "entity:" + msgID + "|att:" + file + "|size:" + extraSizeString(d.Extra) + "|mime:" + mime, true
+}
+
+// extraSizeString renders an Extra size field uniformly across in-memory
+// ints and JSON-derived floats.
+func extraSizeString(extra map[string]any) string {
+	switch v := extra["size"].(type) {
+	case nil:
+		return "0"
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		return strconv.Itoa(int(v))
+	case string:
+		return v
+	default:
+		return fmt.Sprint(v)
+	}
 }
 
 // documentMatchKind records how identity was established for multi-source merges.

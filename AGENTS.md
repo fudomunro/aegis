@@ -387,6 +387,7 @@ go test -run='^$' -fuzz='^FuzzParseTakeoutMessage$' -fuzztime=30s ./internal/con
 go test -run='^$' -fuzz='^FuzzWalkMboxFrom$' -fuzztime=30s ./internal/connectors
 # Other targets (CI fuzzes every one in scope; keep the lists complete):
 # FuzzDetectBodyShape, FuzzIsMboxFromLine, FuzzTakeoutMessageID,
+# FuzzRFC822Attachments, FuzzRFC822AttachmentPart,
 # FuzzNormalizeIdentityKey, FuzzCleanYouTubeTitle,
 # FuzzTrackIdentityKey, FuzzMergePlaylistsSync, FuzzPlaylistLinkKey, FuzzMergeAlbumsSync
 

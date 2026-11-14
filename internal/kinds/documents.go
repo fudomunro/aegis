@@ -3,7 +3,9 @@ package kinds
 import (
 	"context"
 	"errors"
+	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
@@ -11,11 +13,13 @@ import (
 
 // documentsKind owns the documents aggregate and its full-text subroute
 // (issue #143): list filters, metadata-only redaction, and a separately
-// gated text read that metadata access cannot use.
+// gated text read that metadata access cannot use. The local mail archive
+// feeds it attachment documents for archived export copies (issue #215).
 type documentsKind struct {
 	providerKind
 	h      Host
 	e      *Engine
+	mail   MailArchive
 	mark   func([]Document, string)
 	copies func([]Document)
 }
@@ -26,8 +30,13 @@ const (
 	documentsMetadataRouteKey = "documents/metadata"
 )
 
+// libraryArchiveDocumentCap bounds archive rows feeding the unfiltered
+// documents overview. Filtered queries walk the full archive instead — the
+// same shape the messages overview uses (issue #311/#215).
+const libraryArchiveDocumentCap = 200
+
 func newDocumentsKind(h Host, e *Engine, d Deps) Kind {
-	k := &documentsKind{h: h, e: e}
+	k := &documentsKind{h: h, e: e, mail: d.MailArchive}
 	k.mark, k.copies = Stamps(h, "documents", forEachDocumentSource)
 	def := *BuiltinKindByID("documents")
 	k.providerKind = providerKind{
@@ -39,9 +48,21 @@ func newDocumentsKind(h Host, e *Engine, d Deps) Kind {
 			// Full text is a read on the documents route: the metadata
 			// route never sees it (issue #143).
 			{Pattern: "/v1/library/documents/{service}/{id}/text", Handler: k.serveText, GrantKey: documentsRouteKey},
+			// Attachment bytes for archived export copies (issue #215):
+			// neutral octet streams, gated like text. Live-provider
+			// documents keep their own sources[].blob_url.
+			{Pattern: "/v1/library/documents/{service}/{id}/bytes", Handler: k.serveBytes, GrantKey: documentsRouteKey},
 		},
 	}
 	return k
+}
+
+// HasProviders adds the local mail archive to the connector scan (issue #215).
+func (k *documentsKind) HasProviders(h Host) bool {
+	if k.providerKind.HasProviders(h) {
+		return true
+	}
+	return k.mail != nil && k.mail.Available()
 }
 
 // serve returns the user's documents with list excerpts:
@@ -69,7 +90,34 @@ func (k *documentsKind) serveShape(w http.ResponseWriter, r *http.Request, grant
 		Kind:     kind,
 		GrantKey: grantKey,
 		Targets: func(r *http.Request) ([]NamedLister[Document], []string) {
-			return documentsProviderTargets(k.h, r, grantKey)
+			targets, denied := documentsProviderTargets(k.h, r, grantKey)
+			// The local mail archive is another source of the same
+			// collection (archived export attachments). Access is the
+			// documents grant the aggregate already checked; rows are
+			// dataset-scoped. Fail-open with the live providers when the
+			// archive is disabled (issue #215).
+			if k.mail != nil {
+				mail := k.mail
+				dataset := shared.Dataset(r)
+				cap := libraryArchiveDocumentCap
+				if !filters.empty() {
+					cap = 0
+				}
+				targets = append(targets, NamedLister[Document]{
+					ID:    MailArchiveSourceID,
+					Local: true,
+					List: func(ctx context.Context) ([]Document, bool, error) {
+						return mail.ListAttachments(ctx, MailAttachmentQuery{
+							Dataset: dataset,
+							Q:       filters.Q,
+							After:   filters.After,
+							Before:  filters.Before,
+							Cap:     cap,
+						})
+					},
+				})
+			}
+			return targets, denied
 		},
 		ServiceOf: documentServiceName,
 		SortKey:   DocumentIdentityKey,
@@ -137,43 +185,128 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
-	connector, ok := k.h.Connectors()[serviceID]
-	if !ok {
-		shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
-		return
-	}
-	provider, ok := connector.(DocumentProvider)
-	if !ok {
-		shared.WriteJSONError(w, http.StatusNotFound, "service does not provide documents")
-		return
-	}
 	if known && svc.Action == "block" {
 		shared.WriteJSONError(w, http.StatusForbidden, "denied: service is blocked")
 		return
 	}
 
-	text, truncated, err := provider.FetchDocumentText(r.Context(), id)
-	switch {
-	case err == nil:
-		// ok
-	case errors.Is(err, ErrUnauthorized) || strings.Contains(strings.ToLower(err.Error()), "unauthorized"):
-		shared.WriteJSONError(w, http.StatusUnauthorized,
-			"not authorized — connect at /v1/auth/"+serviceID+"/login")
+	// Live provider first so provider-backed documents behave unchanged;
+	// archived export copies fall to the local mail archive (issue #215).
+	if connector, ok := k.h.Connectors()[serviceID]; ok {
+		if provider, ok := connector.(DocumentProvider); ok {
+			text, truncated, err := provider.FetchDocumentText(r.Context(), id)
+			switch {
+			case err == nil:
+				// ok
+			case errors.Is(err, ErrUnauthorized) || strings.Contains(strings.ToLower(err.Error()), "unauthorized"):
+				shared.WriteJSONError(w, http.StatusUnauthorized,
+					"not authorized — connect at /v1/auth/"+serviceID+"/login")
+				return
+			default:
+				logger.Warn("document text failed", "service", serviceID, "id", id, "error", err)
+				shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch document text")
+				return
+			}
+			shared.WriteJSON(w, DocumentText{
+				Service:   serviceID,
+				ID:        id,
+				Text:      text,
+				Truncated: truncated,
+			})
+			k.h.RecordAccess(r, AccessEvent{
+				Agent:   agent,
+				Surface: SurfaceLibrary,
+				Target:  kind.ID,
+				Kind:    kind.ID,
+				Cache:   CacheMiss,
+			})
+			return
+		}
+	}
+	if k.mail != nil {
+		if text, ok := k.mail.AttachmentText(shared.Dataset(r), serviceID, id); ok {
+			shared.WriteJSON(w, DocumentText{
+				Service: serviceID,
+				ID:      id,
+				Text:    text,
+			})
+			k.h.RecordAccess(r, AccessEvent{
+				Agent:   agent,
+				Surface: SurfaceLibrary,
+				Target:  kind.ID,
+				Kind:    kind.ID,
+				Cache:   CacheMiss,
+			})
+			return
+		}
+	}
+	if _, ok := k.h.Connectors()[serviceID]; ok {
+		shared.WriteJSONError(w, http.StatusNotFound, "service does not provide documents")
 		return
-	default:
-		logger.Warn("document text failed", "service", serviceID, "id", id, "error", err)
-		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch document text")
+	}
+	shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
+}
+
+// serveBytes returns one archived attachment's raw bytes:
+// GET /v1/library/documents/{service}/{id}/bytes. The neutral byte read for
+// export copies (issue #215) — live-provider documents keep their own
+// sources[].blob_url. Gated like full text: metadata access cannot read it.
+func (k *documentsKind) serveBytes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	kind := k.def
+	logger := k.h.Logger(r, "library_documents_bytes")
+	agent := k.h.Agent(r)
+
+	serviceID := r.PathValue("service")
+	id := r.PathValue("id")
+	if serviceID == "" || id == "" {
+		shared.WriteJSONError(w, http.StatusNotFound, "expected /v1/library/documents/{service}/{id}/bytes")
 		return
 	}
 
-	result := DocumentText{
-		Service:   serviceID,
-		ID:        id,
-		Text:      text,
-		Truncated: truncated,
+	grants, _ := k.h.Grants(r)
+	level := grants.Level(documentsRouteKey)
+	if !grants.AllowsKindMethod(documentsRouteKey, r.Method) {
+		k.h.RecordAccess(r, AccessEvent{
+			Agent:    agent,
+			Surface:  SurfaceLibrary,
+			Target:   kind.ID,
+			Kind:     kind.ID,
+			Decision: DecisionDeny,
+			Reason:   "data_grant",
+			Method:   r.Method,
+			Status:   http.StatusForbidden,
+		})
+		shared.WriteJSONError(w, http.StatusForbidden,
+			"denied: data grant for documents is "+level)
+		return
 	}
-	shared.WriteJSON(w, result)
+	if k.mail == nil {
+		shared.WriteJSONError(w, http.StatusNotFound, "attachment not found")
+		return
+	}
+	data, mimeType, filename, ok := k.mail.AttachmentBytes(shared.Dataset(r), serviceID, id)
+	if !ok {
+		logger.Warn("document bytes not found", "service", serviceID, "id", id)
+		shared.WriteJSONError(w, http.StatusNotFound, "attachment not found")
+		return
+	}
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mimeType)
+	if filename != "" {
+		if disp := mime.FormatMediaType("attachment", map[string]string{"filename": filename}); disp != "" {
+			w.Header().Set("Content-Disposition", disp)
+		}
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(data)
+	}
 	k.h.RecordAccess(r, AccessEvent{
 		Agent:   agent,
 		Surface: SurfaceLibrary,

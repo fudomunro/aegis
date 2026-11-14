@@ -624,6 +624,12 @@ func parseTakeoutMessage(raw []byte, source string) (kinds.Message, error) {
 	if len(fromList) > 0 {
 		out.From = &fromList[0]
 	}
+	// Attachment metadata rides the source Extra in the same shape live
+	// Gmail carries (issue #215); the archive persists it for the
+	// documents surface.
+	if atts := RFC822Attachments(raw); len(atts) > 0 {
+		out.Sources[0].Extra = map[string]any{"attachments": atts}
+	}
 	return out, nil
 }
 
