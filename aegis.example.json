@@ -37,6 +37,17 @@
       "scopes": [
         "music:user_profile"
       ]
+    },
+    "github": {
+      "name": "GitHub",
+      "client_id": "YOUR_GITHUB_CLIENT_ID",
+      "client_secret": "$ENV:GITHUB_CLIENT_SECRET",
+      "auth_url": "https://github.com/login/oauth/authorize",
+      "token_url": "https://github.com/login/oauth/access_token",
+      "scopes": [
+        "read:user",
+        "read:org"
+      ]
     }
   },
   "hook": {
@@ -370,6 +381,26 @@
       "description": "CalDAV calendar (Nextcloud, iCloud, Fastmail, Radicale, Baïkal). Lists events as neutral CalendarEvent values with RRULE expansion in the requested window. Credentials are username + app-specific password. Set canonical_for: [\"events\"] if this DAV server is your home copy (and remove it from Google Calendar). Events also feed /v1/library/freebusy.",
       "canonical_for": [
         "events"
+      ]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "aliases": [
+        "github",
+        "gh",
+        "github contacts",
+        "github people",
+        "org members"
+      ],
+      "action": "inject",
+      "endpoint": "https://api.github.com",
+      "cache_ttl": "5m",
+      "description": "GitHub contacts for /v1/library/contacts — organization members and followed users as neutral Contact values (name, email, handle, company). Profile metadata only; no repos, issues, or activity. Shares the GitHub OAuth connection (read:user, read:org).",
+      "connection": "github",
+      "oauth_scopes": [
+        "read:user",
+        "read:org"
       ]
     }
   ]

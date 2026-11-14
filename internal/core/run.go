@@ -526,6 +526,8 @@ func Run() {
 	srv.connectors[connectors.BlueskyServiceID] = connectors.NewBlueskyConnector(srv)
 	srv.connectors[connectors.PaperlessServiceID] = connectors.NewPaperlessConnector(srv)
 	srv.connectors[connectors.GoogleDriveServiceID] = connectors.NewGoogleDriveConnector(srv)
+	// GitHub contacts (issue #289): org members + following as neutral contacts.
+	srv.connectors[connectors.GitHubServiceID] = connectors.NewGitHubConnector(srv)
 	// CalDAV/CardDAV (issue #146): Nextcloud, iCloud, Fastmail contacts + calendar.
 	srv.connectors[connectors.CardDAVServiceID] = connectors.NewCardDAVConnector(srv)
 	srv.connectors[connectors.CalDAVServiceID] = connectors.NewCalDAVConnector(srv)

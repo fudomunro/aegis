@@ -17,6 +17,7 @@ service, call `GET /v1/library/playlists` to confirm the library is live.
 | Google Maps Timeline import | [google-timeline.md](google-timeline.md) |
 | Bluesky (photos, messages, contacts + photo share) | [bluesky.md](bluesky.md) |
 | CalDAV / CardDAV | [caldav-carddav.md](caldav-carddav.md) |
+| GitHub (contacts) | [github.md](github.md) |
 | Local mail archive / Takeout | [mail-archive.md](mail-archive.md) |
 | Signal import | [signal.md](signal.md) |
 | LinkedIn import | [linkedin.md](linkedin.md) |

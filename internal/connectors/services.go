@@ -32,6 +32,7 @@ var serviceNames = map[string]string{
 	QuickenServiceID:        QuickenServiceName,
 	TimelineServiceID:       TimelineServiceName,
 	LinkedInServiceID:       LinkedInServiceName,
+	GitHubServiceID:         GitHubServiceName,
 }
 
 // ServiceTitleAliases maps unambiguous title phrases onto canonical service
@@ -59,6 +60,7 @@ var serviceTitleAliases = map[string]string{
 	"quicken":          QuickenServiceID,
 	"signal messenger": SignalServiceID,
 	"linkedin":         LinkedInServiceID,
+	"github":           GitHubServiceID,
 }
 
 // CommonWordIDs are service IDs that are also common English words. A bare

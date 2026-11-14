@@ -56,6 +56,7 @@ func maturityTestConnectors() []catalogTestConnector {
 		{id: CalDAVServiceID, conn: NewCalDAVConnector(host)},
 		{id: CardDAVServiceID, conn: NewCardDAVConnector(host)},
 		{id: PaperlessServiceID, conn: NewPaperlessConnector(host)},
+		{id: GitHubServiceID, conn: NewGitHubConnector(host)},
 	}
 	// Local import stores come from the registry (issue #393).
 	for _, spec := range LocalImportStoreSpecs() {

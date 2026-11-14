@@ -5,6 +5,20 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Added
+
+- **GitHub contacts (issue #289).** A hosted connector that lists
+  organization members and followed users from the GitHub REST API as
+  neutral `Contact` values on `/v1/library/contacts`. OAuth app auth
+  (`connections.github`, `read:user` + `read:org`); tokens stay in
+  Aegis's encrypted store. `login` maps to `handles: ["github:login"]`,
+  `name` falls back to login, `company` becomes `organization` (falling
+  back to the first org the user was seen in), and public profile email
+  becomes `emails`. Profile metadata only — no avatars, repos, issues,
+  or activity. The maturity catalog declares those gaps (repositories /
+  issues / activity unsupported). Service id `github`, display name
+  "GitHub"; connection guide at `docs/connect/github.md`.
+
 ### Changed
 
 - **Local import store spec registry (issue #393).** Signal, Quicken,
