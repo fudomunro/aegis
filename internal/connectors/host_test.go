@@ -42,6 +42,9 @@ func (h *testHost) setService(id, endpoint string) {
 func (h *testHost) setToken(id, token string) { h.tokens[id] = token }
 
 func (h *testHost) GetValidToken(serviceID string, logger *slog.Logger) string {
+	// Touch the logger as the production GetValidToken does, so a nil logger
+	// passed by a connector write path panics in tests.
+	logger.Debug("testHost token lookup", "service", serviceID)
 	return h.tokens[serviceID]
 }
 

@@ -235,3 +235,31 @@ func TestMicrosoftContacts_Delta410RestartsFeed(t *testing.T) {
 		t.Fatalf("fresh=%v next=%q contacts=%+v", freshServed, next, contacts)
 	}
 }
+
+func TestMicrosoftContacts_HandleProxy_GetByIDEscapesID(t *testing.T) {
+	var gotRequestURI string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRequestURI = r.RequestURI
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"a/b","displayName":"Escaped"}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftContactsServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftContactsServiceID, "tok")
+	c := NewMicrosoftContactsConnector(th)
+
+	req := httptest.NewRequest("GET", "/v1/services/microsoft-contacts/contacts/a/b", nil)
+	w := httptest.NewRecorder()
+	c.HandleProxy(w, req, "/contacts/a/b")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(gotRequestURI, "/me/contacts/a%2Fb") {
+		t.Fatalf("upstream request URI %q does not carry the escaped id", gotRequestURI)
+	}
+	if strings.Contains(gotRequestURI, "/me/contacts/a/b") {
+		t.Fatalf("upstream request URI %q forwards the id as extra path segments", gotRequestURI)
+	}
+}

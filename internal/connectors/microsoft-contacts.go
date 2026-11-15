@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -173,7 +174,7 @@ func (c *MicrosoftContactsConnector) HandleListContacts(w http.ResponseWriter, r
 
 func (c *MicrosoftContactsConnector) HandleGetContact(w http.ResponseWriter, r *http.Request, token, id string) {
 	id = strings.Trim(strings.TrimSpace(id), "/")
-	upstreamURL := microsoftGraphURL(c.MicrosoftContactsUpstreamBase(), "/me/contacts/"+id+"?$select="+microsoftContactsSelect)
+	upstreamURL := microsoftGraphURL(c.MicrosoftContactsUpstreamBase(), "/me/contacts/"+url.PathEscape(id)+"?$select="+microsoftContactsSelect)
 	data, status, err := microsoftGraphRequest(r.Context(), token, http.MethodGet, upstreamURL, nil)
 	if err != nil {
 		slog.Error("microsoft contact request failed", "error", err)

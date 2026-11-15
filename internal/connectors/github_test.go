@@ -401,3 +401,19 @@ func TestGitHubConnector_CapabilitiesAndInstructions(t *testing.T) {
 		t.Errorf("instructions missing GitHub: %s", inst)
 	}
 }
+
+func TestGitHubConnector_GetJSON_CapsResponseBodies(t *testing.T) {
+	// Valid JSON, but far past the read cap: the capped read truncates mid-body
+	// and fails to decode instead of buffering the whole response.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"login":"ada"` + strings.Repeat(" ", 2<<20) + `,"id":1}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	c := NewGitHubConnector(newGitHubTestHost(ts.URL))
+	var u githubUser
+	if _, err := c.getJSON(context.Background(), "tok", "/users/ada", &u); err == nil {
+		t.Fatal("oversized response decoded without error; body read is uncapped")
+	}
+}
