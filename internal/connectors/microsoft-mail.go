@@ -285,16 +285,9 @@ func (c *MicrosoftMailConnector) ListMessages(ctx context.Context) ([]kinds.Mess
 	var all []kinds.Message
 	truncated := false
 	for page := 0; page < shared.LibraryPageCap && next != ""; page++ {
-		data, status, err := microsoftGraphRequest(ctx, token, http.MethodGet, next, nil)
+		raw, err := graphPage[microsoftMailboxMessage](ctx, token, next)
 		if err != nil {
-			return nil, false, err
-		}
-		if status != http.StatusOK {
-			return nil, false, fmt.Errorf("microsoft mail list returned %d", status)
-		}
-		var raw graphList[microsoftMailboxMessage]
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, false, err
+			return stopGraphWalk(all, err)
 		}
 		for _, item := range raw.Value {
 			if item.ID == "" {

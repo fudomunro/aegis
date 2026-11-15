@@ -317,3 +317,61 @@ func TestMicrosoftCalendar_HandleProxy_ListCalendarEvents(t *testing.T) {
 		t.Fatalf("envelope = %+v", list)
 	}
 }
+
+func TestMicrosoftCalendar_ListEventsForCalendar_FailOpenPartial(t *testing.T) {
+	page := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page++
+		if page == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			next := "http://" + r.Host + "/me/calendars/cal1/calendarView?%24skiptoken=2"
+			_, _ = w.Write([]byte(`{"value":[
+				{"id":"ev1","iCalUId":"ical-1","subject":"Design review",
+				 "start":{"dateTime":"2026-01-05T09:00:00.0000000","timeZone":"UTC"},
+				 "end":{"dateTime":"2026-01-05T10:00:00.0000000","timeZone":"UTC"}}
+			],"@odata.nextLink":"` + next + `"}`))
+			return
+		}
+		http.Error(w, "graph exploded", http.StatusInternalServerError)
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftCalendarServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftCalendarServiceID, "tok")
+	c := NewMicrosoftCalendarConnector(th)
+
+	events, truncated, err := c.ListEventsForCalendar(context.Background(), "tok", "cal1", nil)
+	if err != nil {
+		t.Fatalf("ListEventsForCalendar: %v", err)
+	}
+	if len(events) != 1 || events[0].Title != "Design review" {
+		t.Fatalf("events = %+v, want the gathered page", events)
+	}
+	if !truncated {
+		t.Fatal("want truncated when the walk stopped on a failed page")
+	}
+}
+
+func TestMicrosoftCalendar_HandleProxy_GetEventUpstreamErrorIsSanitized(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":"ItemNotFound","message":"secret internal detail"}}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftCalendarServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftCalendarServiceID, "tok")
+	c := NewMicrosoftCalendarConnector(th)
+
+	req := httptest.NewRequest("GET", "/v1/services/microsoft-calendar/events/missing", nil)
+	w := httptest.NewRecorder()
+	c.HandleProxy(w, req, "/events/missing")
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "secret internal detail") {
+		t.Fatalf("upstream error body leaked to the agent: %s", w.Body.String())
+	}
+}

@@ -574,3 +574,41 @@ func TestMicrosoftMailIDFromProxyPath(t *testing.T) {
 		}
 	}
 }
+
+func TestMicrosoftMail_ListMessages_FailOpenPartial(t *testing.T) {
+	page := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/me/mailFolders" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"value":[]}`))
+			return
+		}
+		page++
+		if page == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			next := "http://" + r.Host + "/me/messages?$skiptoken=2"
+			_, _ = w.Write([]byte(`{"value":[
+				{"id":"m1","subject":"Hello","bodyPreview":"hi",
+				 "from":{"emailAddress":{"name":"Ada","address":"ada@example.com"}}}
+			],"@odata.nextLink":"` + next + `"}`))
+			return
+		}
+		http.Error(w, "graph exploded", http.StatusInternalServerError)
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftMailServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftMailServiceID, "tok")
+	c := NewMicrosoftMailConnector(th)
+
+	msgs, truncated, err := c.ListMessages(context.Background())
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 1 || msgs[0].Subject != "Hello" {
+		t.Fatalf("messages = %+v, want the gathered page", msgs)
+	}
+	if !truncated {
+		t.Fatal("want truncated when the walk stopped on a failed page")
+	}
+}

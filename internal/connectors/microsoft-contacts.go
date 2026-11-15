@@ -178,9 +178,9 @@ func (c *MicrosoftContactsConnector) HandleGetContact(w http.ResponseWriter, r *
 		return
 	}
 	if status != http.StatusOK {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		w.Write(data)
+		// Sanitized: the upstream error body is for logs, never the agent.
+		slog.Warn("microsoft contact request failed", "status", status, "body", truncateBytes(data, 200))
+		shared.WriteJSONError(w, http.StatusBadGateway, "Microsoft Graph request failed")
 		return
 	}
 	var raw microsoftContact
@@ -228,16 +228,9 @@ func (c *MicrosoftContactsConnector) ListUserContacts(ctx context.Context) ([]ki
 	var all []kinds.Contact
 	truncated := false
 	for page := 0; page < shared.LibraryPageCap && next != ""; page++ {
-		data, status, err := microsoftGraphRequest(ctx, token, http.MethodGet, next, nil)
+		raw, err := graphPage[microsoftContact](ctx, token, next)
 		if err != nil {
-			return nil, false, err
-		}
-		if status != http.StatusOK {
-			return nil, false, fmt.Errorf("microsoft contacts list returned %d", status)
-		}
-		var raw graphList[microsoftContact]
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, false, err
+			return stopGraphWalk(all, err)
 		}
 		for _, person := range raw.Value {
 			mapped := MapMicrosoftContact(person)

@@ -189,7 +189,9 @@ func (c *GitHubConnector) handleGetContact(w http.ResponseWriter, r *http.Reques
 // neutral Contact values for the unified library and cross-type matching.
 //
 // Fail-open: a failed org or following page is logged and skipped, never
-// fatal. Enrichment failures fall back to login-only contacts.
+// zeroing what the other parts gathered. When every part failed and nothing
+// was gathered, the failure surfaces — an empty list is not a result.
+// Enrichment failures fall back to login-only contacts.
 func (c *GitHubConnector) ListUserContacts(ctx context.Context) ([]kinds.Contact, bool, error) {
 	token := c.host.GetValidToken(GitHubServiceID, slog.Default())
 	if token == "" {
@@ -197,6 +199,7 @@ func (c *GitHubConnector) ListUserContacts(ctx context.Context) ([]kinds.Contact
 	}
 	logger := slog.With("service", GitHubServiceID)
 	truncated := false
+	var lastErr error
 
 	// login -> first org name (fallback organization when profile has none).
 	orgOf := map[string]string{}
@@ -219,11 +222,13 @@ func (c *GitHubConnector) ListUserContacts(ctx context.Context) ([]kinds.Contact
 	// 1. Organization members.
 	orgs, orgsTrunc, err := c.listOrgs(ctx, token)
 	if err != nil {
+		lastErr = err
 		logger.Warn("github orgs list failed; continuing with following only", "error", err)
 	}
 	for _, org := range orgs {
 		members, mTrunc, mErr := c.listOrgMembers(ctx, token, org)
 		if mErr != nil {
+			lastErr = mErr
 			logger.Warn("github org members list failed", "org", org, "error", mErr)
 			continue
 		}
@@ -241,6 +246,7 @@ func (c *GitHubConnector) ListUserContacts(ctx context.Context) ([]kinds.Contact
 	// 2. Followed users.
 	following, fTrunc, err := c.listFollowing(ctx, token)
 	if err != nil {
+		lastErr = err
 		logger.Warn("github following list failed", "error", err)
 	}
 	for _, u := range following {
@@ -251,6 +257,9 @@ func (c *GitHubConnector) ListUserContacts(ctx context.Context) ([]kinds.Contact
 	}
 
 	if len(logins) == 0 {
+		if lastErr != nil {
+			return nil, truncated, lastErr
+		}
 		return nil, truncated, nil
 	}
 

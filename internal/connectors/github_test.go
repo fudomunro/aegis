@@ -220,6 +220,17 @@ func TestGitHubConnector_ListUserContacts_FailOpen(t *testing.T) {
 	}
 }
 
+func TestGitHubConnector_ListUserContacts_AllPartsFailSurfaces(t *testing.T) {
+	mock := &githubMockAPI{failOrgs: true, failFollow: true}
+	upstream := httptest.NewServer(mock.handler())
+	defer upstream.Close()
+
+	conn := NewGitHubConnector(newGitHubTestHost(upstream.URL))
+	if _, _, err := conn.ListUserContacts(context.Background()); err == nil {
+		t.Fatal("want the total failure to surface instead of an empty list")
+	}
+}
+
 func TestGitHubConnector_ListUserContacts_NoToken(t *testing.T) {
 	host := newTestHostWithService(GitHubServiceID, "http://unused", "https://aegis.example.com")
 	conn := NewGitHubConnector(host)

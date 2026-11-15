@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -78,6 +79,34 @@ func decodeGraphDelta[T any](data []byte) (records []T, nextLink, deltaLink stri
 // microsoftGraphURL joins the configured Graph base with a path/query.
 func microsoftGraphURL(base, path string) string {
 	return shared.TrimRightSlash(base) + path
+}
+
+// graphPage fetches and decodes one Graph list page.
+func graphPage[T any](ctx context.Context, token, pageURL string) (graphList[T], error) {
+	data, status, err := microsoftGraphRequest(ctx, token, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return graphList[T]{}, err
+	}
+	if status != http.StatusOK {
+		return graphList[T]{}, fmt.Errorf("microsoft graph list returned %d: %s", status, truncateBytes(data, 200))
+	}
+	var raw graphList[T]
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return graphList[T]{}, err
+	}
+	return raw, nil
+}
+
+// stopGraphWalk is how a failed list page ends the walk (fail-open): one
+// flaky page must not zero the surface, so a partial list is returned as
+// truncated. The failed page's continuation link is unreachable, so the
+// walk cannot skip ahead. With nothing gathered the failure surfaces.
+func stopGraphWalk[T any](partial []T, err error) ([]T, bool, error) {
+	if len(partial) == 0 {
+		return nil, false, err
+	}
+	slog.Warn("microsoft graph list page failed; returning partial list", "error", err)
+	return partial, true, nil
 }
 
 // microsoftGraphRequest performs one authenticated Graph call. Body may be
