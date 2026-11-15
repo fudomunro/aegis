@@ -39,6 +39,7 @@ func ConnectionMaturityCatalog() []ConnectionMaturity {
 		googleCalendarMaturity(),
 		microsoftCalendarMaturity(),
 		microsoftContactsMaturity(),
+		microsoftMailMaturity(),
 		googleDriveMaturity(),
 		immichMaturity(),
 		blueskyMaturity(),
@@ -323,6 +324,23 @@ func microsoftContactsMaturity() ConnectionMaturity {
 		Kinds: []KindMaturity{
 			{Name: "contacts", Description: "Microsoft Graph contacts", Supported: true,
 				Fields: FieldCoverageFor("contacts", "name", "emails", "phones", "organization")},
+		},
+	}
+}
+
+func microsoftMailMaturity() ConnectionMaturity {
+	return ConnectionMaturity{
+		Service:   MicrosoftMailServiceID,
+		Transport: TransportAPI,
+		Start: shared.OwnershipAction{
+			Kind:  shared.OwnershipActionConnect,
+			Label: "Connect Microsoft Mail",
+		},
+		Kinds: []KindMaturity{
+			{Name: "messages", Description: "Outlook mail messages", Supported: true,
+				Fields: FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from", "to", "cc",
+					"sent_at", "received_at", "direction", "read", "thread_id", "entity_id", "labels")},
+			{Name: "drafts", Description: "Unsent draft messages", Supported: false},
 		},
 	}
 }

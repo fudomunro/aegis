@@ -7,6 +7,21 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Microsoft 365 / Outlook mail (issue #399).** A `microsoft-mail` Graph
+  connector — `GET /me/messages` — serving neutral messages that merge with
+  Gmail and the mail archive on RFC Message-ID (`internetMessageId`), with
+  mailbox/direction mapped from the folder list and full bodies behind
+  content transport (`/v1/services/microsoft-mail/messages/{id}`). It is
+  also the third local-mail-archive ingest beside Gmail live paging and the
+  Google Takeout walk: bounded batches over the mailbox with a durable
+  continuation cursor (Graph's `@odata.nextLink` query), fail-open per
+  message, and throttling (429) surfaced as ingest back-off that honors
+  `Retry-After`. One top-level `microsoft` connection again (PKCE +
+  `offline_access`), surface scope `Mail.Read`; tenant admin-consent
+  failures stay fail-open. Guide at `docs/connect/microsoft-mail.md`; Entra
+  app registration in the README setup section. Out of scope: sending,
+  attachments as documents, and Graph `/delta` incremental ingest.
+
 - **Takeout mail attachments are now documents (issue #215).** The mail
   import parses MIME attachment summaries at ingest (they ride
   `sources[].extra.attachments` in the same wire shape live Gmail already

@@ -26,7 +26,8 @@
         "profile",
         "offline_access",
         "Calendars.Read",
-        "Contacts.Read"
+        "Contacts.Read",
+        "Mail.Read"
       ]
     },
     "spotify": {
@@ -276,6 +277,24 @@
       "connection": "microsoft",
       "oauth_scopes": [
         "Contacts.Read"
+      ]
+    },
+    {
+      "id": "microsoft-mail",
+      "name": "Microsoft Mail",
+      "aliases": [
+        "microsoft mail",
+        "outlook mail",
+        "outlook email"
+      ],
+      "action": "inject",
+      "endpoint": "https://graph.microsoft.com/v1.0",
+      "cache_ttl": "5m",
+      "description": "Lists Microsoft 365 / Outlook.com mail as neutral message metadata so /v1/library/messages can answer email questions, and pages the mailbox into the local mail archive. Message bodies stay on Microsoft Graph (non-Aegis canonical). Shares the Microsoft connection.",
+      "canonical_for": [],
+      "connection": "microsoft",
+      "oauth_scopes": [
+        "Mail.Read"
       ]
     },
     {

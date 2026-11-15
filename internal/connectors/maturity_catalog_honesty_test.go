@@ -59,6 +59,7 @@ func maturityTestConnectors() []catalogTestConnector {
 		{id: GitHubServiceID, conn: NewGitHubConnector(host)},
 		{id: MicrosoftCalendarServiceID, conn: NewMicrosoftCalendarConnector(host)},
 		{id: MicrosoftContactsServiceID, conn: NewMicrosoftContactsConnector(host)},
+		{id: MicrosoftMailServiceID, conn: NewMicrosoftMailConnector(host)},
 	}
 	// Local import stores come from the registry (issue #393).
 	for _, spec := range LocalImportStoreSpecs() {

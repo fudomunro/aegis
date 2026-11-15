@@ -35,6 +35,7 @@ var serviceNames = map[string]string{
 	GitHubServiceID:            GitHubServiceName,
 	MicrosoftCalendarServiceID: MicrosoftCalendarServiceName,
 	MicrosoftContactsServiceID: MicrosoftContactsServiceName,
+	MicrosoftMailServiceID:     MicrosoftMailServiceName,
 }
 
 // ServiceTitleAliases maps unambiguous title phrases onto canonical service
@@ -68,6 +69,9 @@ var serviceTitleAliases = map[string]string{
 	"outlook":            MicrosoftCalendarServiceID,
 	"microsoft contacts": MicrosoftContactsServiceID,
 	"outlook contacts":   MicrosoftContactsServiceID,
+	"microsoft mail":     MicrosoftMailServiceID,
+	"outlook mail":       MicrosoftMailServiceID,
+	"outlook email":      MicrosoftMailServiceID,
 	"microsoft 365":      MicrosoftCalendarServiceID,
 	"microsoft graph":    MicrosoftCalendarServiceID,
 }

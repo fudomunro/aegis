@@ -24,6 +24,7 @@ inventory and [`audience-map.md`](audience-map.md) for who each surface talks to
 | **Transport** | How a connection reaches its service: `api` / `protocol` / `reverse-engineered` / `export/archive` | The maturity modifier; not the content-transport APIs |
 | **LinkedIn connections** | 1st-degree connections imported from a LinkedIn data export; the rows behind the `linkedin` source on the contacts kind | Not a **connection** (the OAuth credential); LinkedIn has no public connections API, so these arrive by import |
 | **GitHub contacts** | Organization members and followed users fetched from the GitHub API; the rows behind the `github` source on the contacts kind | Not repos, issues, or activity — those are out of scope; not the OAuth **connection** credential |
+| **Microsoft mail** | Outlook / Microsoft 365 mail fetched over Microsoft Graph; the rows behind the `microsoft-mail` source on the messages kind, live and into the local mail archive | Not a mail **mirror** — nothing copies mail between services; content stays on Microsoft Graph |
 
 Config keys stay `services`, `connections`, `connector` is code-only.
 

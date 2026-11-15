@@ -32,6 +32,9 @@ var mailProviderLiterals = []string{
 	"in:anywhere",
 	"TAKEOUT",
 	"Gmail",
+	"microsoft-mail",
+	"Microsoft Mail",
+	"Outlook",
 }
 
 var mailLiteralAllowances = []struct{ file, want, why string }{
@@ -46,6 +49,8 @@ var mailLiteralAllowances = []struct{ file, want, why string }{
 	{"kinds/librarykinds.go", "Gmail",
 		"the messages kind's agent-facing summary names its declared mail sources (same class as the photos entry naming Google Photos); the scan guards implementation semantics, not product description"},
 	{"kinds/librarykinds.go", "Google Takeout",
+		"the messages kind's agent-facing summary names its declared mail sources (same class as the photos entry naming Google Photos); the scan guards implementation semantics, not product description"},
+	{"kinds/librarykinds.go", "Outlook",
 		"the messages kind's agent-facing summary names its declared mail sources (same class as the photos entry naming Google Photos); the scan guards implementation semantics, not product description"},
 }
 

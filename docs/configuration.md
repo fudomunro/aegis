@@ -423,7 +423,7 @@ Job types today:
 
 | Type | What it does |
 |------|--------------|
-| `ingest` | Live cursor paging into the mail archive (Gmail) |
+| `ingest` | Live cursor paging into the mail archive (Gmail, Microsoft Mail) |
 | `import_snapshot` | Snapshot import of a read-only export (Google Takeout) |
 | `freshness_check` | Observational copy-freshness pass (see below) |
 | `converge` | Fans a kind's data from its canonical home out to the group's other write-capable members, one member (or one item page) per step. The kinds today: playlists, tracks, albums, artists, contacts, and events |
