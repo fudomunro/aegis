@@ -8,7 +8,6 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/syncjobs"
 )
 
 // Sync relationships (issue #365) record which sync-participating kinds a
@@ -365,24 +364,6 @@ func (s *Server) sourceConnected(svc Service) bool {
 		return connID != "" && s.tokens.Get(connID) != nil
 	}
 	return svc.Endpoint != ""
-}
-
-// canarySourceServices names the connected sources the canaried surface can
-// be probed on (issue #243): the same adapter lookup the canary runner
-// performs, so a seeded schedule always has a source to fetch through. The
-// canaried kind comes from the sync domain — the hub does not name it.
-func (s *Server) canarySourceServices() []string {
-	var out []string
-	for _, svc := range s.config.ServiceSnapshots() {
-		if !s.sourceConnected(svc) {
-			continue
-		}
-		if _, err := s.library().MirrorSourceFor(svc.ID, syncjobs.SyncCanaryKind); err != nil {
-			continue
-		}
-		out = append(out, svc.ID)
-	}
-	return out
 }
 
 // providedSyncKinds returns the sync-participating kinds the connector feeds.

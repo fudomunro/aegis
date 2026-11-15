@@ -105,10 +105,16 @@ Two sources, deliberately in this order:
 | Read-only live | Real accounts, read scopes only | When test credentials exist |
 | Write | Mutating calls | **Disposable accounts only**, ever |
 
-Scheduling is landed (issue #243): the sync-schedule store seeds a daily
-`canary` job per connected source that serves the canaried surface
-(liked-tracks today), so probes run without anyone enqueuing anything — the
-tiers above describe what a probe runs against as canary accounts arrive.
+Scheduling is landed (issue #243), outside the application like the rest of
+the loop tooling: `aegis-dashboard canary` is a synthetic regression canary
+that drives the connector against the mock connector (the drift-injection
+harness's saved-tracks shapes) — healthy pages must parse, learned renames
+must keep working, shape drift must be flagged, garbage must error — and
+files a `sync-failure` ticket when the behavior regresses. It runs three
+times a day on a host schedule (a laptop cron, or a scheduled GitHub
+Actions workflow) and never touches a live Aegis instance, a live provider,
+or credentials. The tiers above describe what live-account probes run
+against as canary accounts arrive.
 
 Every observation carries: instance id, Aegis version/commit, timestamp,
 `service`/`kind`, and where possible `job_type`. Without the version stamp,
@@ -310,9 +316,7 @@ instance:
 3. **Enqueue a canary** — the `canary` job type fetches one saved-tracks
    page through the configured endpoint and fails on errors or on the
    silent-drift shape (pagination metadata claims a library, items yield
-   nothing). A genuinely empty library is health. A seeded daily schedule
-   already probes connected tracks sources (issue #243); the manual enqueue
-   is for drills:
+   nothing). A genuinely empty library is health:
 
    ```bash
    curl -X POST -H "Authorization: Bearer $ADMIN_KEY" \
@@ -477,9 +481,10 @@ Prove the loop on one or two connectors before building fleet collection:
 4. One end-to-end fix cycle — ideally a forced contract drift — done
    agent-assisted with a human reviewer, using the ticket schema as-is.
 5. Only then: schedule canaries and automate ticket intake. — landed
-   (issue #243): canary schedules seed per connected source, and
-   `aegis-dashboard intake` is the pickup side. Canary tier escalation
-   (the risk tiers in phase 1) remains the eventual follow-on.
+   (issue #243): `aegis-dashboard canary` is the scheduled synthetic
+   exercise (three times a day, host cron or Actions — never a live
+   instance) and `aegis-dashboard intake` is the pickup side. Canary tier
+   escalation (the risk tiers in phase 1) remains the eventual follow-on.
 
 Done means: a fixture captured at failure time becomes a red test an agent can
 turn green, and a reviewer can judge the PR without re-deriving the bug from

@@ -5,7 +5,7 @@
 // tool nothing beyond artifacts it already produces (signal captures, the
 // ticket contract, the connector metadata catalog).
 //
-// Three subcommands; bare flags mean build, so existing invocations keep
+// Four subcommands; bare flags mean build, so existing invocations keep
 // working:
 //
 //	build  — generate the static dashboard from the repo's GitHub-issue
@@ -20,6 +20,12 @@
 //
 //	go run ./cmd/aegis-dashboard scan -repo owner/name \
 //	  -bundles "$DATA/maintenance"
+//
+//	canary — the scheduled synthetic exercise (issue #243): drive the
+//	         connector against the mock connector and file a sync-failure
+//	         ticket when the behavior regresses:
+//
+//	go run ./cmd/aegis-dashboard canary -repo owner/name
 //
 //	intake — pick up ready tickets as fix-cycle work orders (issue #243):
 //
@@ -42,6 +48,10 @@ func main() {
 		runScan(args[1:])
 		return
 	}
+	if len(args) > 0 && args[0] == "canary" {
+		runCanary(args[1:])
+		return
+	}
 	if len(args) > 0 && args[0] == "intake" {
 		runIntake(args[1:])
 		return
@@ -49,7 +59,7 @@ func main() {
 	if len(args) > 0 && args[0] == "build" {
 		args = args[1:]
 	} else if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		fail("unknown command " + args[0] + " (want build, scan, or intake)")
+		fail("unknown command " + args[0] + " (want build, scan, canary, or intake)")
 	}
 	runBuild(args)
 }

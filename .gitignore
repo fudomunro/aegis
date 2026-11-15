@@ -1,6 +1,8 @@
 # Binaries
 aegis
 /aegis.bak*
+/aegis-dashboard
+/cmd/aegis-dashboard/aegis-dashboard
 *.exe
 
 # Coding-agent session state
