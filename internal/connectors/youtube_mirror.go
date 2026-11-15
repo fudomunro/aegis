@@ -187,8 +187,8 @@ func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlist
 	result.PlaylistID = playlistID
 
 	for _, t := range tracks {
-		videoID, how := c.resolveVideoID(ctx, t, &result.Skips)
-		if videoID == "" {
+		ref, ok := c.resolveVideo(ctx, t, &result.Skips)
+		if !ok {
 			continue
 		}
 		_, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "POST", "/playlistItems",
@@ -198,7 +198,7 @@ func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlist
 					"playlistId": playlistID,
 					"resourceId": map[string]any{
 						"kind":    "youtube#video",
-						"videoId": videoID,
+						"videoId": ref.ID,
 					},
 				},
 			})
@@ -206,11 +206,7 @@ func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlist
 			return result, err
 		}
 		result.Copied++
-		result.Placed = append(result.Placed, kinds.PlaceRecord{
-			Name:       placeTrackDisplay(t),
-			ExternalID: videoID,
-			MatchedBy:  how,
-		})
+		result.Placed = append(result.Placed, ref.Record)
 	}
 	return result, nil
 }
@@ -354,50 +350,96 @@ func youtubePlaylistEntries(ctx context.Context, c *YouTubeMusicConnector, playl
 
 // SaveLikedTracks implements kinds.LikedTrackWriteProvider by rating the
 // resolved videos "like".
-func (c *YouTubeMusicConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
-	var result kinds.SaveLikedTracksResult
-	for _, t := range tracks {
-		videoID, how := c.resolveVideoID(ctx, t, &result.Skips)
-		if videoID == "" {
-			continue
-		}
-		_, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "POST", "/videos/rate",
-			url.Values{"id": []string{videoID}, "rating": []string{"like"}}, nil)
-		if err != nil {
-			return result, err
-		}
-		result.Copied++
-		result.Placed = append(result.Placed, kinds.PlaceRecord{
-			Name:       placeTrackDisplay(t),
-			ExternalID: videoID,
-			MatchedBy:  how,
-		})
+// videoLadder is YouTube Music's track catalog search behind the shared
+// match ladder: name search only (YouTube exposes no ISRC in search and no
+// durations), guarded by the cleaned title so a cover or remix under a
+// different title is not placed (issue #366).
+func (c *YouTubeMusicConnector) videoLadder() SearchLadder[kinds.Track] {
+	return SearchLadder[kinds.Track]{
+		Service:     YouTubeMusicServiceName,
+		Display:     placeTrackDisplay,
+		IdentityKey: kinds.TrackIdentityKey,
+		DurableID:   func(kinds.Track) (string, string) { return "", "" },
+		ByName:      c.searchVideoID,
 	}
-	return result, nil
 }
 
-// resolveVideoID maps one track to a YouTube video ID and the identity it
-// matched on (issue #366): service-local reference first, then name search
-// guarded by the title key. YouTube exposes no ISRC and no durations in
-// search, so the name fallback is title-checked rather than
-// duration-guarded — a cover or remix under a different title is not
-// placed.
-func (c *YouTubeMusicConnector) resolveVideoID(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) (string, string) {
-	id, _ := placeTrackLocalRef(t, YouTubeMusicServiceID)
-	how := "ref"
-	if id == "" {
-		found, err := c.searchVideoID(ctx, t)
-		if err != nil {
-			*skips = append(*skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: err.Error()})
-			return "", ""
-		}
-		id, how = found, kinds.TrackMatchName
+// channelLadder is YouTube Music's artist catalog search behind the shared
+// match ladder: name search guarded by normalized-name equality (the
+// channel title may carry the "- topic" unit, which the normalizer strips).
+func (c *YouTubeMusicConnector) channelLadder() SearchLadder[kinds.Artist] {
+	return SearchLadder[kinds.Artist]{
+		Service:     YouTubeMusicServiceName,
+		Display:     placeArtistDisplay,
+		IdentityKey: kinds.ArtistIdentityKey,
+		DurableID:   func(kinds.Artist) (string, string) { return "", "" },
+		ByName:      c.searchChannelID,
 	}
-	if id == "" {
-		*skips = append(*skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: "no match on YouTube Music"})
-		return "", ""
+}
+
+// resolveVideo maps one track to a placed video: service-local reference
+// first, else the video ladder.
+func (c *YouTubeMusicConnector) resolveVideo(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) (LadderRef, bool) {
+	if id, _ := placeTrackLocalRef(t, YouTubeMusicServiceID); id != "" {
+		return c.videoLadder().Ref(t, id), true
 	}
-	return id, how
+	return c.videoLadder().Resolve(ctx, t, skips)
+}
+
+// resolveChannel maps one artist to a placed channel: service-local
+// reference first, else the channel ladder.
+func (c *YouTubeMusicConnector) resolveChannel(ctx context.Context, a kinds.Artist, skips *[]kinds.PlaceSkip) (LadderRef, bool) {
+	if id := placeArtistLocalRef(a, YouTubeMusicServiceID); id != "" {
+		return c.channelLadder().Ref(a, id), true
+	}
+	return c.channelLadder().Resolve(ctx, a, skips)
+}
+
+// SaveLikedTracks implements kinds.LikedTrackWriteProvider: rate the
+// resolved videos — YouTube's like is the saved-track surface. Saving is
+// create-only — a placement never un-saves (issue #375).
+func (c *YouTubeMusicConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
+	copied, placed, skips, err := SaveOnLadder(ctx, tracks, c.resolveVideo,
+		func(ctx context.Context, ids []string) (int, error) {
+			written := 0
+			for _, id := range ids {
+				if _, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "POST", "/videos/rate",
+					url.Values{"id": []string{id}, "rating": []string{"like"}}, nil); err != nil {
+					return written, err
+				}
+				written++
+			}
+			return written, nil
+		})
+	return kinds.SaveLikedTracksResult{Copied: copied, Placed: placed, Skips: skips}, err
+}
+
+// FollowArtists implements kinds.ArtistWriteProvider by subscribing to the
+// resolved channels — YouTube's follow (issue #375). Following is
+// create-only — a placement never unsubscribes. YouTube exposes no
+// saved-albums library on this API surface, so albums are not placed here.
+func (c *YouTubeMusicConnector) FollowArtists(ctx context.Context, artists []kinds.Artist) (kinds.FollowArtistsResult, error) {
+	copied, placed, skips, err := SaveOnLadder(ctx, artists, c.resolveChannel,
+		func(ctx context.Context, ids []string) (int, error) {
+			written := 0
+			for _, id := range ids {
+				if _, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "POST", "/subscriptions",
+					url.Values{"part": []string{"snippet"}},
+					map[string]any{
+						"snippet": map[string]any{
+							"resourceId": map[string]any{
+								"kind":      "youtube#channel",
+								"channelId": id,
+							},
+						},
+					}); err != nil {
+					return written, err
+				}
+				written++
+			}
+			return written, nil
+		})
+	return kinds.FollowArtistsResult{Copied: copied, Placed: placed, Skips: skips}, err
 }
 
 func (c *YouTubeMusicConnector) searchVideoID(ctx context.Context, t kinds.Track) (string, error) {
@@ -430,62 +472,6 @@ func (c *YouTubeMusicConnector) searchVideoID(ctx context.Context, t kinds.Track
 	id, _ := first["id"].(map[string]any)
 	videoID, _ := id["videoId"].(string)
 	return videoID, nil
-}
-
-// FollowArtists implements kinds.ArtistWriteProvider by subscribing to the
-// resolved channels — YouTube's follow (issue #375). Following is
-// create-only — a placement never unsubscribes. YouTube exposes no
-// saved-albums library on this API surface, so albums are not placed here.
-func (c *YouTubeMusicConnector) FollowArtists(ctx context.Context, artists []kinds.Artist) (kinds.FollowArtistsResult, error) {
-	var result kinds.FollowArtistsResult
-	for _, a := range artists {
-		channelID, how := c.resolveChannelID(ctx, a, &result.Skips)
-		if channelID == "" {
-			continue
-		}
-		_, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "POST", "/subscriptions",
-			url.Values{"part": []string{"snippet"}},
-			map[string]any{
-				"snippet": map[string]any{
-					"resourceId": map[string]any{
-						"kind":      "youtube#channel",
-						"channelId": channelID,
-					},
-				},
-			})
-		if err != nil {
-			return result, err
-		}
-		result.Copied++
-		result.Placed = append(result.Placed, kinds.PlaceRecord{
-			Name:       placeArtistDisplay(a),
-			ExternalID: channelID,
-			MatchedBy:  how,
-		})
-	}
-	return result, nil
-}
-
-// resolveChannelID maps one artist to a YouTube channel ID and the identity
-// it matched on (issue #375): service-local reference first, then name
-// search guarded by normalized-name equality (the channel title may carry
-// the "- topic" unit, which the normalizer strips).
-func (c *YouTubeMusicConnector) resolveChannelID(ctx context.Context, a kinds.Artist, skips *[]kinds.PlaceSkip) (string, string) {
-	id := placeArtistLocalRef(a, YouTubeMusicServiceID)
-	how := "ref"
-	if id == "" {
-		found, err := c.searchChannelID(ctx, a)
-		if err != nil {
-			*skips = append(*skips, kinds.PlaceSkip{Name: placeArtistDisplay(a), Reason: err.Error()})
-			return "", ""
-		}
-		id, how = found, kinds.TrackMatchName
-	}
-	if id == "" {
-		*skips = append(*skips, kinds.PlaceSkip{Name: placeArtistDisplay(a), Reason: "no match on YouTube Music"})
-		return "", ""
-	}
-	return id, how
 }
 
 func (c *YouTubeMusicConnector) searchChannelID(ctx context.Context, a kinds.Artist) (string, error) {

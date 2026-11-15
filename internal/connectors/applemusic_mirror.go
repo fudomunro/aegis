@@ -275,30 +275,15 @@ func (c *AppleMusicConnector) PlacePlaylistItems(ctx context.Context, playlistID
 // SaveLikedTracks and SaveAlbums: resolve each entity through its ladder,
 // dedupe by catalog id, then add the batch to the library. Placed and Skips
 // are returned even when the add fails, so the caller reports partial work.
-func saveAppleMusicLibrary[T any](ctx context.Context, c *AppleMusicConnector, kind string, items []T,
-	resolve func(context.Context, T, *[]kinds.PlaceSkip) (appleMusicPlacement, bool)) (copied int, placed []kinds.PlaceRecord, skips []kinds.PlaceSkip, err error) {
-	var ids []string
-	seen := map[string]bool{}
-	for _, item := range items {
-		placement, ok := resolve(ctx, item, &skips)
-		if !ok {
-			continue
+// addToLibraryBatch is the create-only write behind SaveLikedTracks and
+// SaveAlbums: one batched add-a-resource call for the resolved catalog ids.
+func (c *AppleMusicConnector) addToLibraryBatch(kind string) func(context.Context, []string) (int, error) {
+	return func(ctx context.Context, ids []string) (int, error) {
+		if err := c.addToLibrary(ctx, kind, ids); err != nil {
+			return 0, err
 		}
-		id := placement.catalogID()
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		ids = append(ids, id)
-		placed = append(placed, placement.record)
+		return len(ids), nil
 	}
-	if len(ids) == 0 {
-		return 0, placed, skips, nil
-	}
-	if err := c.addToLibrary(ctx, kind, ids); err != nil {
-		return 0, placed, skips, err
-	}
-	return len(ids), placed, skips, nil
 }
 
 // SaveLikedTracks implements kinds.LikedTrackWriteProvider: add resolved
@@ -306,14 +291,24 @@ func saveAppleMusicLibrary[T any](ctx context.Context, c *AppleMusicConnector, k
 // un-saves (issue #375), and "loved" has no enumerable read surface, so the
 // library is the liked/saved home (docs/connect/apple-music.md).
 func (c *AppleMusicConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
-	copied, placed, skips, err := saveAppleMusicLibrary(ctx, c, "songs", tracks, c.resolveSongPlacement)
+	copied, placed, skips, err := SaveOnLadder(ctx, tracks,
+		func(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) (LadderRef, bool) {
+			p, ok := c.resolveSongPlacement(ctx, t, skips)
+			return p.ladderRef(), ok
+		},
+		c.addToLibraryBatch("songs"))
 	return kinds.SaveLikedTracksResult{Copied: copied, Placed: placed, Skips: skips}, err
 }
 
 // SaveAlbums implements kinds.AlbumWriteProvider: add resolved catalog
 // albums to the library. Create-only, like SaveLikedTracks.
 func (c *AppleMusicConnector) SaveAlbums(ctx context.Context, albums []kinds.Album) (kinds.SaveAlbumsResult, error) {
-	copied, placed, skips, err := saveAppleMusicLibrary(ctx, c, "albums", albums, c.resolveAlbumPlacement)
+	copied, placed, skips, err := SaveOnLadder(ctx, albums,
+		func(ctx context.Context, a kinds.Album, skips *[]kinds.PlaceSkip) (LadderRef, bool) {
+			p, ok := c.resolveAlbumPlacement(ctx, a, skips)
+			return p.ladderRef(), ok
+		},
+		c.addToLibraryBatch("albums"))
 	return kinds.SaveAlbumsResult{Copied: copied, Placed: placed, Skips: skips}, err
 }
 
@@ -334,10 +329,102 @@ func (p appleMusicPlacement) catalogID() string {
 	return p.libraryID
 }
 
-// resolveSongPlacement runs the match ladder for one track: service-local
-// reference, then exact ISRC catalog lookup, then a duration-guarded name
-// search. Skips land on skips when nothing matches.
+// ladderRef collapses the placement onto the shared resolve shape: the
+// write id is the catalog id when one is known, else the library id.
+func (p appleMusicPlacement) ladderRef() LadderRef {
+	return LadderRef{ID: p.catalogID(), Record: p.record}
+}
+
+// songLadder is Apple Music's track catalog search behind the shared match
+// ladder: an exact filter[isrc] lookup (duration-guarded among several
+// releases of one ISRC), then a name search guarded by duration.
+func (c *AppleMusicConnector) songLadder() SearchLadder[kinds.Track] {
+	return SearchLadder[kinds.Track]{
+		Service:     AppleMusicServiceName,
+		Display:     placeTrackDisplay,
+		IdentityKey: kinds.TrackIdentityKey,
+		DurableID: func(t kinds.Track) (string, string) {
+			if _, how := kinds.TrackMatchKey(t); how == kinds.TrackMatchISRC {
+				return kinds.TrackEntityID(t), kinds.TrackMatchISRC
+			}
+			return "", ""
+		},
+		ByDurableID: func(ctx context.Context, t kinds.Track, isrc string) (string, bool, error) {
+			hits, err := c.catalogByISRC(ctx, isrc)
+			if err != nil {
+				return "", false, err
+			}
+			hit, ok := appleMusicDurationGuard(t, hits, true)
+			return hit.ID, ok, nil
+		},
+		ByName: func(ctx context.Context, t kinds.Track) (string, error) {
+			hits, err := c.catalogSearch(ctx, placeTrackQuery(t), 5)
+			if err != nil {
+				return "", err
+			}
+			hit, ok := appleMusicDurationGuard(t, hits, false)
+			if !ok {
+				return "", nil
+			}
+			return hit.ID, nil
+		},
+	}
+}
+
+// albumLadder is Apple Music's album catalog search behind the shared
+// match ladder: an exact filter[upc] lookup, then a name search guarded by
+// title + primary artist.
+func (c *AppleMusicConnector) albumLadder() SearchLadder[kinds.Album] {
+	return SearchLadder[kinds.Album]{
+		Service:     AppleMusicServiceName,
+		Display:     placeAlbumDisplay,
+		IdentityKey: kinds.AlbumIdentityKey,
+		DurableID: func(a kinds.Album) (string, string) {
+			if _, how := kinds.AlbumMatchKey(a); how == kinds.AlbumMatchUPC {
+				return kinds.AlbumEntityID(a), kinds.AlbumMatchUPC
+			}
+			return "", ""
+		},
+		ByDurableID: func(ctx context.Context, _ kinds.Album, upc string) (string, bool, error) {
+			q := url.Values{"filter[upc]": []string{upc}}
+			raw, _, err := c.apiJSON(ctx, "GET", "/catalog/"+url.PathEscape(c.storefront(ctx))+"/albums", q, nil)
+			if err != nil {
+				return "", false, err
+			}
+			id := ""
+			if hit := firstResource(raw); hit != nil {
+				id, _ = hit["id"].(string)
+			}
+			return id, id != "", nil
+		},
+		ByName: func(ctx context.Context, a kinds.Album) (string, error) {
+			q := url.Values{"term": []string{placeAlbumQuery(a)}, "types": []string{"albums"}, "limit": []string{"3"}}
+			raw, _, err := c.apiJSON(ctx, "GET", "/catalog/"+url.PathEscape(c.storefront(ctx))+"/albums", q, nil)
+			if err != nil {
+				return "", err
+			}
+			// Name-rung guard: only an album whose title and primary artist
+			// agree with the wanted one may stand in — the first hit alone
+			// may be a different record of the same name.
+			for _, item := range appleMusicData(raw) {
+				obj, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if id, _ := obj["id"].(string); id != "" && albumTitleArtistCompatible(neutralAppleMusicAlbum(obj), a) {
+					return id, nil
+				}
+			}
+			return "", nil
+		},
+	}
+}
+
+// resolveSongPlacement runs the match ladder for one track: the
+// service-local reference rung (whose write id may be a catalog id behind a
+// library id), then the shared search rungs.
 func (c *AppleMusicConnector) resolveSongPlacement(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) (appleMusicPlacement, bool) {
+	ladder := c.songLadder()
 	id, _ := placeTrackLocalRef(t, AppleMusicServiceID)
 	if id != "" {
 		placement := appleMusicPlacement{libraryID: id}
@@ -347,64 +434,20 @@ func (c *AppleMusicConnector) resolveSongPlacement(ctx context.Context, t kinds.
 			// A bare id in an Apple source is already a catalog id.
 			placement.catalog = id
 		}
-		placement.record = kinds.PlaceRecord{
-			Name:       placeTrackDisplay(t),
-			ExternalID: id,
-			MatchedBy:  "ref",
-			EntityName: kinds.TrackIdentityKey(t),
-		}
+		placement.record = ladder.Ref(t, id).Record
 		return placement, true
 	}
-	return c.searchSongPlacement(ctx, t, skips)
-}
-
-// searchSongPlacement is the catalog ladder: ISRC first (exact, high
-// confidence), then name guarded by duration. Apple Music's ISRC filter is
-// the reliable identity lookup the issue asks for — it is what keeps skips
-// low when the source is Spotify or another ISRC-bearing service.
-func (c *AppleMusicConnector) searchSongPlacement(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) (appleMusicPlacement, bool) {
-	if _, how := kinds.TrackMatchKey(t); how == kinds.TrackMatchISRC {
-		hits, err := c.catalogByISRC(ctx, kinds.TrackEntityID(t))
-		if err != nil {
-			*skips = append(*skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: err.Error()})
-			return appleMusicPlacement{}, false
-		}
-		if hit, ok := appleMusicDurationGuard(t, hits, true); ok {
-			return appleMusicPlacement{
-				catalog: hit.ID,
-				record: kinds.PlaceRecord{
-					Name:       placeTrackDisplay(t),
-					ExternalID: hit.ID,
-					MatchedBy:  kinds.TrackMatchISRC,
-					EntityName: kinds.TrackIdentityKey(t),
-				},
-			}, true
-		}
-	}
-	hits, err := c.catalogSearch(ctx, placeTrackQuery(t), 5)
-	if err != nil {
-		*skips = append(*skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: err.Error()})
+	ref, ok := ladder.Resolve(ctx, t, skips)
+	if !ok {
 		return appleMusicPlacement{}, false
 	}
-	if hit, ok := appleMusicDurationGuard(t, hits, false); ok {
-		return appleMusicPlacement{
-			catalog: hit.ID,
-			record: kinds.PlaceRecord{
-				Name:       placeTrackDisplay(t),
-				ExternalID: hit.ID,
-				MatchedBy:  kinds.TrackMatchName,
-				EntityName: kinds.TrackIdentityKey(t),
-			},
-		}, true
-	}
-	*skips = append(*skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: "no match on Apple Music"})
-	return appleMusicPlacement{}, false
+	return appleMusicPlacement{catalog: ref.ID, record: ref.Record}, true
 }
 
-// resolveAlbumPlacement matches an album: service-local reference, then an
-// exact UPC catalog lookup, then a name search guarded by artist name.
+// resolveAlbumPlacement matches an album: the service-local reference rung,
+// then the shared search rungs.
 func (c *AppleMusicConnector) resolveAlbumPlacement(ctx context.Context, a kinds.Album, skips *[]kinds.PlaceSkip) (appleMusicPlacement, bool) {
-	name := placeAlbumDisplay(a)
+	ladder := c.albumLadder()
 	for _, src := range a.Sources {
 		if src.Service != AppleMusicServiceID {
 			continue
@@ -416,56 +459,13 @@ func (c *AppleMusicConnector) resolveAlbumPlacement(ctx context.Context, a kinds
 		if id == "" {
 			continue
 		}
-		return appleMusicPlacement{
-			catalog: id,
-			record: kinds.PlaceRecord{
-				Name:       name,
-				ExternalID: id,
-				MatchedBy:  "ref",
-				EntityName: kinds.AlbumIdentityKey(a),
-			},
-		}, true
+		return appleMusicPlacement{catalog: id, record: ladder.Ref(a, id).Record}, true
 	}
-	if _, how := kinds.AlbumMatchKey(a); how == kinds.AlbumMatchUPC {
-		q := url.Values{"filter[upc]": []string{kinds.AlbumEntityID(a)}}
-		raw, _, err := c.apiJSON(ctx, "GET", "/catalog/"+url.PathEscape(c.storefront(ctx))+"/albums", q, nil)
-		if err == nil {
-			if hit := firstResource(raw); hit != nil {
-				if id, _ := hit["id"].(string); id != "" {
-					return appleMusicPlacement{
-						catalog: id,
-						record: kinds.PlaceRecord{
-							Name:       name,
-							ExternalID: id,
-							MatchedBy:  kinds.AlbumMatchUPC,
-							EntityName: kinds.AlbumIdentityKey(a),
-						},
-					}, true
-				}
-			}
-		}
-	}
-	q := url.Values{"term": []string{placeAlbumQuery(a)}, "types": []string{"albums"}, "limit": []string{"3"}}
-	raw, _, err := c.apiJSON(ctx, "GET", "/catalog/"+url.PathEscape(c.storefront(ctx))+"/albums", q, nil)
-	if err != nil {
-		*skips = append(*skips, kinds.PlaceSkip{Name: name, Reason: err.Error()})
+	ref, ok := ladder.Resolve(ctx, a, skips)
+	if !ok {
 		return appleMusicPlacement{}, false
 	}
-	if hit := firstResource(raw); hit != nil {
-		if id, _ := hit["id"].(string); id != "" {
-			return appleMusicPlacement{
-				catalog: id,
-				record: kinds.PlaceRecord{
-					Name:       name,
-					ExternalID: id,
-					MatchedBy:  kinds.TrackMatchName,
-					EntityName: kinds.AlbumIdentityKey(a),
-				},
-			}, true
-		}
-	}
-	*skips = append(*skips, kinds.PlaceSkip{Name: name, Reason: "no match on Apple Music"})
-	return appleMusicPlacement{}, false
+	return appleMusicPlacement{catalog: ref.ID, record: ref.Record}, true
 }
 
 // --- write verbs ---

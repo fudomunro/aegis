@@ -521,7 +521,7 @@ func TestSpotifySaveLikedTracks_PutError(t *testing.T) {
 	}
 }
 
-func TestSpotifySearchTrackURI_EdgeCases(t *testing.T) {
+func TestSpotifyTrackLadder_EdgeCases(t *testing.T) {
 	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
 		switch {
@@ -538,22 +538,21 @@ func TestSpotifySearchTrackURI_EdgeCases(t *testing.T) {
 		}
 	}))
 	ctx := context.Background()
+	ladder := c.trackLadder()
 
-	uri, _, err := c.searchTrackURI(ctx, kinds.Track{Name: "Nope", Artists: []kinds.Artist{{Name: "X"}}})
-	if err != nil || uri != "" {
-		t.Fatalf("empty result = %q %v", uri, err)
-	}
-	uri, _, err = c.searchTrackURI(ctx, kinds.Track{Name: "BadItem"})
-	if err != nil || uri != "" {
-		t.Fatalf("bad item = %q %v", uri, err)
-	}
-	uri, _, err = c.searchTrackURI(ctx, kinds.Track{Name: "EmptyURI"})
-	if err != nil || uri != "" {
-		t.Fatalf("empty uri = %q %v", uri, err)
+	for _, track := range []kinds.Track{
+		{Name: "Nope", Artists: []kinds.Artist{{Name: "X"}}},
+		{Name: "BadItem"},
+		{Name: "EmptyURI"},
+	} {
+		var skips []kinds.PlaceSkip
+		if _, ok := ladder.Resolve(ctx, track, &skips); ok {
+			t.Fatalf("resolve(%q) matched, want no match", track.Name)
+		}
 	}
 }
 
-func TestSpotifySearchTrackURI_MatchLadder(t *testing.T) {
+func TestSpotifyTrackLadder_MatchOrder(t *testing.T) {
 	var queries []string
 	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
@@ -581,27 +580,27 @@ func TestSpotifySearchTrackURI_MatchLadder(t *testing.T) {
 	}))
 	ctx := context.Background()
 	artist := []kinds.Artist{{Name: "Artist"}}
+	ladder := c.trackLadder()
 
 	// ISRC beats name search when the track carries one.
-	uri, how, err := c.searchTrackURI(ctx, kinds.Track{Name: "Song", Artists: artist, EntityID: "USRC12345678", DurationMs: 200000})
-	if err != nil || uri != "spotify:track:by-isrc" || how != kinds.TrackMatchISRC {
-		t.Fatalf("isrc ladder = (%q,%q,%v)", uri, how, err)
+	ref, ok := ladder.Resolve(ctx, kinds.Track{Name: "Song", Artists: artist, EntityID: "USRC12345678", DurationMs: 200000}, &[]kinds.PlaceSkip{})
+	if !ok || ref.ID != "by-isrc" || ref.Record.MatchedBy != kinds.TrackMatchISRC {
+		t.Fatalf("isrc ladder = (%+v,%v)", ref, ok)
 	}
 
 	// ISRC miss falls through to duration-guarded name.
 	queries = nil
-	uri, how, err = c.searchTrackURI(ctx, kinds.Track{Name: "Song", Artists: artist, EntityID: "USRC00000000", DurationMs: 200000})
-	if err != nil || uri != "spotify:track:by-name" || how != kinds.TrackMatchName {
-		t.Fatalf("name ladder = (%q,%q,%v)", uri, how, err)
+	ref, ok = ladder.Resolve(ctx, kinds.Track{Name: "Song", Artists: artist, EntityID: "USRC00000000", DurationMs: 200000}, &[]kinds.PlaceSkip{})
+	if !ok || ref.ID != "by-name" || ref.Record.MatchedBy != kinds.TrackMatchName {
+		t.Fatalf("name ladder = (%+v,%v)", ref, ok)
 	}
 	if len(queries) != 2 || !strings.HasPrefix(queries[0], "isrc:") {
 		t.Fatalf("queries = %v, want the isrc lookup first", queries)
 	}
 
 	// A name hit of a wildly different length is not the same recording.
-	uri, _, err = c.searchTrackURI(ctx, kinds.Track{Name: "Long Song", Artists: artist, DurationMs: 200000})
-	if err != nil || uri != "" {
-		t.Fatalf("duration guard = (%q,%v), want no match", uri, err)
+	if _, ok = ladder.Resolve(ctx, kinds.Track{Name: "Long Song", Artists: artist, DurationMs: 200000}, &[]kinds.PlaceSkip{}); ok {
+		t.Fatal("duration guard matched, want no match")
 	}
 }
 
@@ -845,7 +844,7 @@ func TestSpotifyFollowArtists_NameGuard(t *testing.T) {
 	}
 }
 
-func TestSpotifySearchAlbumID_MatchLadder(t *testing.T) {
+func TestSpotifyAlbumLadder_MatchOrder(t *testing.T) {
 	var queries []string
 	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
@@ -870,18 +869,19 @@ func TestSpotifySearchAlbumID_MatchLadder(t *testing.T) {
 	}))
 	ctx := context.Background()
 	artist := []kinds.Artist{{Name: "Artist"}}
+	ladder := c.albumLadder()
 
 	// UPC beats name search when the album carries one.
-	id, how, err := c.searchAlbumID(ctx, kinds.Album{Name: "Album", Artists: artist, EntityID: "012345678901"})
-	if err != nil || id != "by-upc" || how != kinds.AlbumMatchUPC {
-		t.Fatalf("upc ladder = (%q,%q,%v)", id, how, err)
+	ref, ok := ladder.Resolve(ctx, kinds.Album{Name: "Album", Artists: artist, EntityID: "012345678901"}, &[]kinds.PlaceSkip{})
+	if !ok || ref.ID != "by-upc" || ref.Record.MatchedBy != kinds.AlbumMatchUPC {
+		t.Fatalf("upc ladder = (%+v,%v)", ref, ok)
 	}
 
 	// UPC miss falls through to the title + primary artist name query.
 	queries = nil
-	id, how, err = c.searchAlbumID(ctx, kinds.Album{Name: "Album", Artists: artist, EntityID: "012345678902"})
-	if err != nil || id != "by-name" || how != kinds.TrackMatchName {
-		t.Fatalf("name ladder = (%q,%q,%v)", id, how, err)
+	ref, ok = ladder.Resolve(ctx, kinds.Album{Name: "Album", Artists: artist, EntityID: "012345678902"}, &[]kinds.PlaceSkip{})
+	if !ok || ref.ID != "by-name" || ref.Record.MatchedBy != kinds.TrackMatchName {
+		t.Fatalf("name ladder = (%+v,%v)", ref, ok)
 	}
 	if len(queries) != 2 || !strings.HasPrefix(queries[0], "upc:") {
 		t.Fatalf("queries = %v, want the upc lookup first", queries)

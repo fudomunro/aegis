@@ -329,3 +329,122 @@ func parseRFC3339(s string) (time.Time, bool) {
 	}
 	return parsed, true
 }
+
+// --- match ladder ---
+//
+// The match ladder is the resolve order a write-side connector walks to map
+// a neutral entity onto one provider id (issue #366): the service-local
+// reference rung first (reference shapes are provider-specific and stay
+// beside each connector), then the catalog-search rungs driven here — the
+// durable entity id (ISRC/UPC) when the provider exposes an exact lookup,
+// then a guarded name search. A search error skips the entity; an exhausted
+// ladder skips with "no match on <service>". Core plans, connectors operate
+// (issue #254).
+
+// LadderRef is one resolved placement: the provider id to write plus the
+// record the copy ledger stamps from (the two differ when a provider's ref
+// rung carries a library id and a catalog id).
+type LadderRef struct {
+	ID     string
+	Record kinds.PlaceRecord
+}
+
+// SearchLadder is the catalog-search half of the match ladder for one
+// entity kind. A provider declares its API calls and guards; the rung
+// order, skip policy, and record shape live here.
+type SearchLadder[T any] struct {
+	// Service names the provider in skip copy ("no match on Spotify").
+	Service string
+	// Display names an entity in skip reports and place records.
+	Display func(T) string
+	// IdentityKey is the entity's copy-watermark key (issue #384).
+	IdentityKey func(T) string
+	// DurableID returns the entity's durable id (ISRC/UPC) and the
+	// MatchedBy token proving it, or ("", "") when it carries none.
+	DurableID func(T) (string, string)
+	// ByDurableID is the exact catalog lookup: ok=false means no hit and
+	// the ladder falls through to the name rung. nil means the provider
+	// exposes no exact lookup (YouTube Music) and the name rung is the
+	// only search.
+	ByDurableID func(ctx context.Context, entity T, durableID string) (id string, ok bool, err error)
+	// ByName is the guarded name search. "" means no acceptable hit — the
+	// guard (duration, title, artist) rejected whatever the search found.
+	ByName func(ctx context.Context, entity T) (string, error)
+}
+
+// Ref wraps a service-local reference rung hit into the shared record shape
+// ("ref"). The provider may adjust ID when its write id differs from the
+// reference it stamps.
+func (l SearchLadder[T]) Ref(entity T, id string) LadderRef {
+	return LadderRef{ID: id, Record: kinds.PlaceRecord{
+		Name:       l.Display(entity),
+		ExternalID: id,
+		MatchedBy:  "ref",
+		EntityName: l.IdentityKey(entity),
+	}}
+}
+
+// Resolve walks the search rungs for one entity, appending a PlaceSkip
+// when it cannot be placed.
+func (l SearchLadder[T]) Resolve(ctx context.Context, entity T, skips *[]kinds.PlaceSkip) (LadderRef, bool) {
+	display, identity := l.Display(entity), l.IdentityKey(entity)
+	if l.ByDurableID != nil {
+		if durable, token := l.DurableID(entity); durable != "" {
+			id, hit, err := l.ByDurableID(ctx, entity, durable)
+			if err != nil {
+				*skips = append(*skips, kinds.PlaceSkip{Name: display, Reason: err.Error()})
+				return LadderRef{}, false
+			}
+			if hit {
+				return LadderRef{ID: id, Record: kinds.PlaceRecord{
+					Name: display, ExternalID: id, MatchedBy: token, EntityName: identity,
+				}}, true
+			}
+		}
+	}
+	id, err := l.ByName(ctx, entity)
+	if err != nil {
+		*skips = append(*skips, kinds.PlaceSkip{Name: display, Reason: err.Error()})
+		return LadderRef{}, false
+	}
+	if id == "" {
+		*skips = append(*skips, kinds.PlaceSkip{Name: display, Reason: "no match on " + l.Service})
+		return LadderRef{}, false
+	}
+	return LadderRef{ID: id, Record: kinds.PlaceRecord{
+		Name: display, ExternalID: id, MatchedBy: kinds.TrackMatchName, EntityName: identity,
+	}}, true
+}
+
+// SaveOnLadder is the create-only save shape (SaveLikedTracks, SaveAlbums,
+// FollowArtists): resolve each entity through its ladder, dedupe by
+// provider id, hand the batch to write, and report what landed. write takes
+// ids in order and returns how many landed, so a half-done batch reports
+// only its prefix.
+func SaveOnLadder[T any](ctx context.Context, entities []T,
+	resolve func(context.Context, T, *[]kinds.PlaceSkip) (LadderRef, bool),
+	write func(ctx context.Context, ids []string) (written int, err error),
+) (copied int, placed []kinds.PlaceRecord, skips []kinds.PlaceSkip, err error) {
+	var refs []LadderRef
+	seen := map[string]bool{}
+	for _, entity := range entities {
+		ref, ok := resolve(ctx, entity, &skips)
+		if !ok || ref.ID == "" || seen[ref.ID] {
+			continue
+		}
+		seen[ref.ID] = true
+		refs = append(refs, ref)
+	}
+	if len(refs) == 0 {
+		return 0, nil, skips, nil
+	}
+	ids := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		ids = append(ids, ref.ID)
+	}
+	written, err := write(ctx, ids)
+	for _, ref := range refs[:written] {
+		placed = append(placed, ref.Record)
+	}
+	return written, placed, skips, err
+}
