@@ -72,13 +72,7 @@ func (c *GoogleContactsConnector) CreateGoogleContact(ctx context.Context, conta
 	body := googlePeopleCreate{}
 	name := strings.TrimSpace(contact.Name)
 	if name != "" {
-		given, family := "", name
-		if i := strings.LastIndex(name, " "); i >= 0 {
-			given, family = name[:i], name[i+1:]
-		} else {
-			given = name
-			family = ""
-		}
+		given, family := splitContactName(name)
 		body.Names = []struct {
 			GivenName   string `json:"givenName,omitempty"`
 			FamilyName  string `json:"familyName,omitempty"`

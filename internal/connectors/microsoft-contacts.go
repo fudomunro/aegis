@@ -34,10 +34,6 @@ const MicrosoftContactsServiceID = "microsoft-contacts"
 
 const MicrosoftContactsServiceName = "Microsoft Contacts"
 
-// MicrosoftGraphDefaultBase is the Graph v1.0 base used when config does not
-// override the endpoint.
-const MicrosoftGraphDefaultBase = "https://graph.microsoft.com/v1.0"
-
 // microsoftContactsSelect is the Graph projection needed for neutral contacts.
 const microsoftContactsSelect = "id,displayName,givenName,surname,emailAddresses,businessPhones,homePhones,mobilePhone,companyName"
 

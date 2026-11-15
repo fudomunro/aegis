@@ -17,6 +17,10 @@ import (
 // and contacts surfaces share one top-level "microsoft" connection and one
 // Graph endpoint.
 
+// MicrosoftGraphDefaultBase is the Graph v1.0 base used when config does not
+// override the endpoint.
+const MicrosoftGraphDefaultBase = "https://graph.microsoft.com/v1.0"
+
 // graphList is the Graph collection envelope: `value` plus `@odata.nextLink`
 // for paging and `@odata.deltaLink` for delta queries (issue #145).
 type graphList[T any] struct {
@@ -73,7 +77,7 @@ func decodeGraphDelta[T any](data []byte) (records []T, nextLink, deltaLink stri
 
 // microsoftGraphURL joins the configured Graph base with a path/query.
 func microsoftGraphURL(base, path string) string {
-	return strings.TrimRight(base, "/") + path
+	return shared.TrimRightSlash(base) + path
 }
 
 // microsoftGraphRequest performs one authenticated Graph call. Body may be
@@ -86,17 +90,26 @@ func microsoftGraphRequest(ctx context.Context, token, method, url string, body 
 // microsoftGraphRequestIfMatch is microsoftGraphRequest with optimistic
 // concurrency: a non-empty etag is sent as If-Match on the write.
 func microsoftGraphRequestIfMatch(ctx context.Context, token, method, url, etag string, body any) ([]byte, int, error) {
+	data, _, status, err := microsoftGraphDo(ctx, token, method, url, etag, body, 1<<20)
+	return data, status, err
+}
+
+// microsoftGraphDo is the one Graph request pipeline every surface rides:
+// bearer + UTC Prefer + optional If-Match, capped response read. Headers are
+// returned so callers can honor throttle hints; limit is the body cap (mail
+// bodies are wider than the default).
+func microsoftGraphDo(ctx context.Context, token, method, url, etag string, body any, limit int64) ([]byte, http.Header, int, error) {
 	var payload []byte
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
 		payload = data
 	}
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(payload))
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -106,14 +119,14 @@ func microsoftGraphRequestIfMatch(ctx context.Context, token, method, url, etag 
 	}
 	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 	defer resp.Body.Close()
-	data, err := readAllLimit(resp.Body, 1<<20)
+	data, err := readAllLimit(resp.Body, limit)
 	if err != nil {
-		return nil, resp.StatusCode, err
+		return nil, resp.Header, resp.StatusCode, err
 	}
-	return data, resp.StatusCode, nil
+	return data, resp.Header, resp.StatusCode, nil
 }
 
 // graphWriteError renders a failed Graph write response body for skip reports.
@@ -127,25 +140,31 @@ type microsoftTime struct {
 	TimeZone string `json:"timeZone"`
 }
 
-// microsoftTimeToRFC3339 maps a Graph time to RFC3339 UTC. With the UTC
-// Prefer header Graph sends zoneless "2006-01-02T15:04:05.0000000"; offset
-// and date-only forms are accepted too. All-day-ness is the event's own
-// isAllDay flag, not a property of the time.
-func microsoftTimeToRFC3339(t microsoftTime) string {
-	raw := strings.TrimSpace(t.DateTime)
+// microsoftInstantToRFC3339 maps a Graph instant string to RFC3339 UTC. With
+// the UTC Prefer header Graph sends zoneless "2006-01-02T15:04:05.0000000";
+// offset, whole-second, and date-only forms are accepted too. All-day-ness is
+// the event's own isAllDay flag, not a property of the time.
+func microsoftInstantToRFC3339(raw string) string {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
 	}
-	if parsed, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-		return parsed.UTC().Format(time.RFC3339)
-	}
-	if parsed, err := time.Parse("2006-01-02T15:04:05.999999999", raw); err == nil {
-		return parsed.UTC().Format(time.RFC3339)
-	}
-	if parsed, err := time.Parse("2006-01-02", raw); err == nil {
-		return parsed.UTC().Format(time.RFC3339)
+	for _, layout := range []string{
+		time.RFC3339Nano,
+		"2006-01-02T15:04:05.999999999",
+		"2006-01-02T15:04:05",
+		"2006-01-02",
+	} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return parsed.UTC().Format(time.RFC3339)
+		}
 	}
 	return raw
+}
+
+// microsoftTimeToRFC3339 maps a Graph dateTime/timeZone pair to RFC3339 UTC.
+func microsoftTimeToRFC3339(t microsoftTime) string {
+	return microsoftInstantToRFC3339(t.DateTime)
 }
 
 // rfc3339ToMicrosoftTime formats a neutral RFC3339 timestamp as a Graph
