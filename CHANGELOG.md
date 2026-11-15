@@ -7,6 +7,25 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Apple Music (issue #144).** An `apple-music` connector over the MusicKit
+  API — library playlists, tracks (liked/saved), albums, and artists into
+  `/v1/library/*`, playlist contents behind content transport, and full
+  mirror participation in both directions (playlist + liked-track placement,
+  copy-ledger stamps). Placement matches **ISRC-first** (`filter[isrc]`
+  catalog lookup, then a duration-guarded name search), and Apple-sourced
+  library songs batch-resolve their catalog ids to ISRCs so the other side
+  matches durably instead of by name. Apple Music is not OAuth: Aegis signs
+  the developer token itself (ES256 from the operator's MusicKit key) and
+  sends the user's Music User Token beside it — both stored as static
+  service credentials through the generic setup flow (never agent-visible).
+  An Apple Developer Program membership is required to self-host. Liked
+  tracks map to the library both ways (favorites are writable but not
+  enumerable, so they cannot support read-your-write mirroring). Guide at
+  `docs/connect/apple-music.md`. Out of scope: artist follow writes (Apple
+  Music has no follow graph), catalog search as agent API, and an in-page
+  MusicKit JS authorize button (the setup guide carries a copyable snippet
+  instead).
+
 - **Microsoft 365 / Outlook mail (issue #399).** A `microsoft-mail` Graph
   connector — `GET /me/messages` — serving neutral messages that merge with
   Gmail and the mail archive on RFC Message-ID (`internetMessageId`), with

@@ -31,6 +31,9 @@ type fixtureService struct {
 	Name     string
 	Action   string
 	Endpoint string
+	// Headers carry static credentials for connectors that read them
+	// (Apple Music's MusicKit key material and Music User Token).
+	Headers map[string]string
 }
 
 type fixtureHost struct {
@@ -84,6 +87,7 @@ func (h *fixtureHost) ServiceConfig(serviceID string) *connectors.ServiceInfo {
 		ID:       serviceID,
 		Action:   svc.Action,
 		Endpoint: svc.Endpoint,
+		Headers:  svc.Headers,
 	}
 }
 

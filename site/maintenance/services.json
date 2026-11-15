@@ -2,6 +2,7 @@
   {"id": "spotify", "name": "Spotify"},
   {"id": "youtube-music", "name": "YouTube Music"},
   {"id": "amazon-music", "name": "Amazon Music"},
+  {"id": "apple-music", "name": "Apple Music"},
   {"id": "google-gmail", "name": "Google Gmail"},
   {"id": "google-photos", "name": "Google Photos"},
   {"id": "google-calendar", "name": "Google Calendar"},

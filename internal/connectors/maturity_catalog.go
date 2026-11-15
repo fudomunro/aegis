@@ -33,6 +33,7 @@ func ConnectionMaturityCatalog() []ConnectionMaturity {
 		spotifyMaturity(),
 		youtubeMusicMaturity(),
 		amazonMusicMaturity(),
+		appleMusicMaturity(),
 		googleGmailMaturity(),
 		googlePhotosMaturity(),
 		googleContactsMaturity(),
@@ -204,6 +205,28 @@ func amazonMusicMaturity() ConnectionMaturity {
 			{Name: "search", Description: "Catalog search", Supported: true},
 			{Name: "library", Description: "Saved music collection", Supported: true},
 			{Name: "recommendations", Description: "Personalized suggestions", Supported: true},
+			{Name: "shows", Description: "Podcasts and stations", Supported: false},
+		},
+	}
+}
+
+func appleMusicMaturity() ConnectionMaturity {
+	return ConnectionMaturity{
+		Service:   AppleMusicServiceID,
+		Transport: TransportAPI,
+		Start: shared.OwnershipAction{
+			Kind:  shared.OwnershipActionSetup,
+			Label: "Set up Apple Music",
+		},
+		Kinds: []KindMaturity{
+			{Name: "tracks", Description: "Library songs (liked/saved tracks)", Supported: true,
+				Fields: FieldCoverageFor("tracks", "name", "artists", "album", "duration_ms", "entity_id")},
+			{Name: "albums", Description: "Library albums", Supported: true,
+				Fields: FieldCoverageFor("albums", "name", "artists", "entity_id")},
+			{Name: "artists", Description: "Library artists", Supported: true,
+				Fields: FieldCoverageFor("artists", "name")},
+			{Name: "playlists", Description: "Library playlists", Supported: true,
+				Fields: FieldCoverageFor("playlists", "name", "description")},
 			{Name: "shows", Description: "Podcasts and stations", Supported: false},
 		},
 	}

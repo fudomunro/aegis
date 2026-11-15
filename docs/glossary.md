@@ -19,7 +19,9 @@ inventory and [`audience-map.md`](audience-map.md) for who each surface talks to
 |--------|-------|------------------------|
 | **Service** | Named upstream brand and its `services[]` config row (Spotify, Gmail, Immich, …) | The Go adapter; the OAuth credential |
 | **Connector** | The Go adapter implementing `ServiceConnector` (`internal/connectors`) | The named brand in product prose |
-| **Connection** | OAuth credential entry in top-level `connections{}` (`connection` + `oauth_scopes`) | The service itself |
+| **Connection** | OAuth credential entry in top-level `connections{}` (`connection` + `oauth_scopes`) | The service itself; a non-OAuth credential (API key, MusicKit key) is a **static service credential** on the service surface, not a connection |
+| **Developer token** | The MusicKit JWT Aegis signs from the operator's key to call the Apple Music API | Not a user credential and never agent-visible; the **Music User Token** rides beside it |
+| **Music User Token** | The user's Apple Music authorization, issued in a browser through MusicKit JS and stored encrypted on the `apple-music` service | Not OAuth and not the **developer token**; long-lived, revocable from the user's Apple ID |
 | **Connection maturity** | Coverage of one connection: of the kinds the service offers, how many Aegis serves through it, and how completely it fills their fields | Not an operational score — the sync dashboard's success / stability / confidence are separate; prefer **maturity** alone once the page is in view |
 | **Transport** | How a connection reaches its service: `api` / `protocol` / `reverse-engineered` / `export/archive` | The maturity modifier; not the content-transport APIs |
 | **LinkedIn connections** | 1st-degree connections imported from a LinkedIn data export; the rows behind the `linkedin` source on the contacts kind | Not a **connection** (the OAuth credential); LinkedIn has no public connections API, so these arrive by import |
