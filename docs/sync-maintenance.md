@@ -105,6 +105,11 @@ Two sources, deliberately in this order:
 | Read-only live | Real accounts, read scopes only | When test credentials exist |
 | Write | Mutating calls | **Disposable accounts only**, ever |
 
+Scheduling is landed (issue #243): the sync-schedule store seeds a daily
+`canary` job per connected source that serves the canaried surface
+(liked-tracks today), so probes run without anyone enqueuing anything — the
+tiers above describe what a probe runs against as canary accounts arrive.
+
 Every observation carries: instance id, Aegis version/commit, timestamp,
 `service`/`kind`, and where possible `job_type`. Without the version stamp,
 phase 2 cannot tell which code a failure refers to.
@@ -137,8 +142,13 @@ phase 2 cannot tell which code a failure refers to.
 ### Phase 3 — Fix PR
 
 The agent's job: turn the ticket's red test green without changing product
-semantics. Pickup is label-filtered — `gh issue list --label sync-failure
---label ready` — so `needs-fixture` tickets wait at triage. Sequence:
+semantics. Pickup is label-filtered and automated (issue #243):
+`aegis-dashboard intake -repo owner/name` lists open `sync-failure`/`ready`
+tickets whose repro bundle is attached — oldest first, as fix-cycle work
+orders — so `needs-fixture` tickets wait at triage and a scheduled driver
+can start the cycle without a human initiating each one. Tickets missing
+half their bundle are reported as incomplete, never silently dropped.
+Sequence:
 
 1. Reproduce: add the repro test from the bundle. **It must be red on main.**
 2. Fix the connector (or, rarely, core dispatch) behind that test.
@@ -300,7 +310,9 @@ instance:
 3. **Enqueue a canary** — the `canary` job type fetches one saved-tracks
    page through the configured endpoint and fails on errors or on the
    silent-drift shape (pagination metadata claims a library, items yield
-   nothing). A genuinely empty library is health:
+   nothing). A genuinely empty library is health. A seeded daily schedule
+   already probes connected tracks sources (issue #243); the manual enqueue
+   is for drills:
 
    ```bash
    curl -X POST -H "Authorization: Bearer $ADMIN_KEY" \
@@ -464,7 +476,10 @@ Prove the loop on one or two connectors before building fleet collection:
    (a local scheduled job; manual trigger is fine to start).
 4. One end-to-end fix cycle — ideally a forced contract drift — done
    agent-assisted with a human reviewer, using the ticket schema as-is.
-5. Only then: schedule canaries and automate ticket intake.
+5. Only then: schedule canaries and automate ticket intake. — landed
+   (issue #243): canary schedules seed per connected source, and
+   `aegis-dashboard intake` is the pickup side. Canary tier escalation
+   (the risk tiers in phase 1) remains the eventual follow-on.
 
 Done means: a fixture captured at failure time becomes a red test an agent can
 turn green, and a reviewer can judge the PR without re-deriving the bug from

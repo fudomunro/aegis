@@ -67,6 +67,19 @@ func (*contactsAlbumsStub) ListUserSavedAlbums(context.Context) ([]kinds.Album, 
 	return nil, false, nil
 }
 
+// mirrorStub serves the full mirror-source seam a canary fetches through.
+type mirrorStub struct{ syncStub }
+
+func (*mirrorStub) ListPlaylistItems(context.Context, string, string, int) (kinds.Playlist, kinds.TrackPage, error) {
+	return kinds.Playlist{}, kinds.TrackPage{}, nil
+}
+func (*mirrorStub) ListUserLikedTracks(context.Context) ([]kinds.Track, bool, error) {
+	return nil, false, nil
+}
+func (*mirrorStub) ListUserLikedTracksPage(context.Context, string, int) (kinds.TrackPage, error) {
+	return kinds.TrackPage{}, nil
+}
+
 // syncTestServer builds a server over cfg with the given connectors and a
 // throwaway overlay path so relationship writes persist only to the test.
 func syncTestServer(t *testing.T, cfg *Config, conns map[string]connectors.ServiceConnector) *Server {
@@ -171,6 +184,28 @@ func TestEstablishSyncRelationships_SkipsSampleAndUnconnected(t *testing.T) {
 	}
 	if rows := syncRows(t, srv, "waiting"); len(rows) != 0 {
 		t.Fatalf("a source awaiting OAuth is not connected yet: %v", rows)
+	}
+}
+
+func TestCanarySourceServices(t *testing.T) {
+	cfg := &Config{Services: []Service{
+		{ID: "music", Name: "Music", Action: "inject", Endpoint: "https://music.example.com"},
+		{ID: "notes", Name: "Notes", Action: "inject", Endpoint: "https://notes.example.com"},
+		{ID: "waiting", Name: "Waiting", Action: "inject", Connection: "google",
+			Endpoint: "https://music.example.com"},
+		{ID: "sample", Name: "Sample", Action: "inject", Endpoint: "sample://library"},
+	}}
+	cfg.Connections = map[string]Connection{}
+	srv := syncTestServer(t, cfg, map[string]connectors.ServiceConnector{
+		"music":   &mirrorStub{},
+		"notes":   &contactsStub{},
+		"waiting": &mirrorStub{},
+		"sample":  &mirrorStub{},
+	})
+
+	got := srv.canarySourceServices()
+	if len(got) != 1 || got[0] != "music" {
+		t.Fatalf("canary sources = %v, want [music]: connected sources that resolve the canaried surface only", got)
 	}
 }
 

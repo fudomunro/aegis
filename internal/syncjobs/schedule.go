@@ -344,6 +344,29 @@ func defaultConvergeSchedules(kinds []string) []SyncSchedule {
 	return out
 }
 
+// defaultCanarySchedules are the recurring canary probes seeded on first
+// start (issue #243): one daily job per named service, so provider drift
+// reaches the maintenance loop without anyone enqueuing anything. The
+// cadence matches the other seeded families — one cheap page fetch per
+// service per day is polite to provider APIs, and provider contracts drift
+// on a days scale; the capture/scan cron then tickets the evidence in its
+// next window. The caller names the services (connected sources that serve
+// the canaried surface) — the store does not know them.
+func defaultCanarySchedules(services []string) []SyncSchedule {
+	out := make([]SyncSchedule, 0, len(services))
+	for _, service := range services {
+		out = append(out, SyncSchedule{
+			Name:         "Daily canary",
+			Kind:         SyncCanaryKind,
+			JobType:      SyncJobTypeCanary,
+			Service:      service,
+			EverySeconds: 24 * 60 * 60,
+			Enabled:      true,
+		})
+	}
+	return out
+}
+
 // SeedDefaults inserts any missing default schedules for the given kinds.
 // Existing rows are left exactly as the operator left them.
 func (s *ScheduleStore) SeedDefaults(kinds []string) (int, error) {
@@ -354,6 +377,13 @@ func (s *ScheduleStore) SeedDefaults(kinds []string) (int, error) {
 // (issue #365). Existing rows are left exactly as the operator left them.
 func (s *ScheduleStore) SeedConvergeDefaults(kinds []string) (int, error) {
 	return s.seedMissing(defaultConvergeSchedules(kinds))
+}
+
+// SeedCanaryDefaults inserts any missing default canary schedules (issue
+// #243) for the given services. Existing rows are left exactly as the
+// operator left them.
+func (s *ScheduleStore) SeedCanaryDefaults(services []string) (int, error) {
+	return s.seedMissing(defaultCanarySchedules(services))
 }
 
 // seedMissing inserts schedules that have no (kind, job type, service,

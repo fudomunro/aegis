@@ -352,7 +352,9 @@ func Run() {
 	}
 
 	// Recurring sync templates live beside the jobs they feed, so a schedule
-	// and its job share one handle and one backup.
+	// and its job share one handle and one backup. They seed after the
+	// connectors are registered — the canary defaults name the connected
+	// sources that serve the canaried surface.
 	scheduleStore, err := syncjobs.OpenScheduleStore(syncStore.DB(), paths.SyncJobs)
 	if err != nil {
 		slog.Error("failed to open sync schedule store", "path", paths.SyncJobs, "error", err)
@@ -360,15 +362,6 @@ func Run() {
 	}
 	if scheduleStore != nil {
 		defer scheduleStore.Close()
-		if scheduleStore.Enabled() {
-			if added, err := scheduleStore.SeedDefaults(syncjobs.SyncFreshnessKinds); err == nil && added > 0 {
-				slog.Info("seeded default sync schedules", "count", added)
-			}
-			if added, err := scheduleStore.SeedConvergeDefaults(syncjobs.SyncConvergeKinds()); err == nil && added > 0 {
-				slog.Info("seeded converge sync schedules", "count", added)
-			}
-			slog.Info("sync schedule store ready", "count", len(scheduleStore.List()))
-		}
 	}
 
 	// Conflicts share the same handle: a detection, its jobs, and its copy
@@ -576,6 +569,23 @@ func Run() {
 	// connected source provides. Idempotent — this pass is the migration over
 	// existing connections and canonical_for.
 	srv.EstablishSyncRelationships()
+
+	// Recurring job templates seed here, once the connectors are registered
+	// (issue #243): the canary defaults name the connected sources that
+	// serve the canaried surface. Fill-missing only — existing rows stay
+	// exactly as the operator left them.
+	if scheduleStore.Enabled() {
+		if added, err := scheduleStore.SeedDefaults(syncjobs.SyncFreshnessKinds); err == nil && added > 0 {
+			slog.Info("seeded default sync schedules", "count", added)
+		}
+		if added, err := scheduleStore.SeedConvergeDefaults(syncjobs.SyncConvergeKinds()); err == nil && added > 0 {
+			slog.Info("seeded converge sync schedules", "count", added)
+		}
+		if added, err := scheduleStore.SeedCanaryDefaults(srv.canarySourceServices()); err == nil && added > 0 {
+			slog.Info("seeded canary sync schedules", "count", added)
+		}
+		slog.Info("sync schedule store ready", "count", len(scheduleStore.List()))
+	}
 
 	// Sync worker (issue #227): drains the job queue in-process. Runners
 	// need the connector map above, so this starts after registration. The

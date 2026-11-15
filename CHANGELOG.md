@@ -7,6 +7,23 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Sync maintenance loop on rails (issue #243).** The loop's last manual
+  halves are now scheduled. Canary scheduling lives with the sync job queue:
+  the schedule store seeds one daily `canary` probe per connected source
+  that serves the canaried surface (liked-tracks today), so provider drift
+  reaches the maintenance loop without anyone enqueuing anything — same
+  fill-missing seeding as the freshness/converge defaults, and operators
+  disable a schedule from the admin surface. Ticket intake is the pickup
+  side and lives in the maintenance tool (`aegis-dashboard intake`, beside
+  the scanner per the #335/#344 split): open `sync-failure`/`ready` tickets
+  whose repro bundle is attached come back as fix-cycle work orders, oldest
+  first, with the fixture/repro-test paths and expected/actual shape a fix
+  PR turns green; ready-labeled tickets missing half the bundle are
+  reported as incomplete rather than dropped. A scheduled driver consumes
+  the queue and starts fix cycles without a human initiating each one.
+  Out of scope here: canary tier escalation (synthetic → anonymous →
+  read-only live accounts), which stays the phase-1 "eventually" follow-on.
+
 - **Apple Music (issue #144).** An `apple-music` connector over the MusicKit
   API — library playlists, tracks (liked/saved), albums, and artists into
   `/v1/library/*`, playlist contents behind content transport, and full

@@ -553,8 +553,11 @@ canonical home to the group's other write-capable members. Convergence only
 creates and updates on a member; it never deletes there — converged playlists
 keep the canonical item order for what they place, gain only what is missing
 on a re-run, and rename the member copy when the canonical title changes,
-and a converged liked list only ever gains likes, never loses them. The
-seed only fills in what is missing: a paused or edited schedule is left as the
+and a converged liked list only ever gains likes, never loses them. A
+**Daily canary** template is seeded per connected source that serves the
+canaried surface (liked-tracks today) — the sync-maintenance loop's
+scheduled probe (`docs/sync-maintenance.md`). The seed only fills in what
+is missing: a paused or edited schedule is left as the
 operator set it. Pause and resume from the panel or the
 `/v1/admin/sync/schedules/{id}/enable|disable` routes.
 

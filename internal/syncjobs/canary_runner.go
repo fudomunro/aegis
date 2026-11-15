@@ -22,6 +22,10 @@ import (
 // broken shape; no need to walk the whole library.
 const canaryPageLimit = 50
 
+// SyncCanaryKind is the library kind the canary probes (liked-tracks). The
+// schedule seed and the runner share it so the two cannot drift apart.
+const SyncCanaryKind = "tracks"
+
 type canaryRunner struct {
 	run *Runners
 }
@@ -30,7 +34,7 @@ type canaryRunner struct {
 func (r *canaryRunner) JobTypes() []string { return []string{SyncJobTypeCanary} }
 
 // Kind implements SyncRunner. Liked-tracks is the canaried surface for now.
-func (r *canaryRunner) Kind() string { return "tracks" }
+func (r *canaryRunner) Kind() string { return SyncCanaryKind }
 
 // Run implements SyncRunner: fetch one page and judge it.
 func (r *canaryRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {

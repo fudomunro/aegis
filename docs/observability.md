@@ -87,7 +87,15 @@ intended trigger:
 ```cron
 0 * * * * curl -sS -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/signals" >/dev/null
 7 * * * * aegis-dashboard scan -repo owner/name -bundles "$DATA/maintenance" >/dev/null
+17 * * * * aegis-dashboard intake -repo owner/name > "$DATA/maintenance/intake.json"
 ```
+
+Ticket intake (phase 3 pickup) is the same tool: `aegis-dashboard intake`
+lists open `sync-failure` tickets the `ready` label says carry a complete
+repro bundle and prints them as fix-cycle work orders, oldest first —
+including the fixture/repro-test paths and the expected/actual shape that
+defines "fixed". Its stdout is the work-order feed a scheduled agent driver
+consumes to start fix cycles without a human initiating each one.
 
 The maintenance dashboard makes this work visible — as a separate tool, not
 an application surface. The published dashboard regenerates at

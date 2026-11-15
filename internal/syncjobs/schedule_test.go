@@ -192,6 +192,44 @@ func TestScheduleStore_SeedConvergeDefaults(t *testing.T) {
 	}
 }
 
+func TestScheduleStore_SeedCanaryDefaults(t *testing.T) {
+	services := []string{"spotify", "youtube-music"}
+	s := testScheduleStore(t)
+	added, err := s.SeedCanaryDefaults(services)
+	if err != nil {
+		t.Fatalf("SeedCanaryDefaults: %v", err)
+	}
+	if added != len(services) {
+		t.Fatalf("added = %d, want %d", added, len(services))
+	}
+	for _, sc := range s.List() {
+		if sc.JobType != SyncJobTypeCanary {
+			t.Fatalf("schedule %q carries job type %q, want canary", sc.Name, sc.JobType)
+		}
+		if sc.Kind != SyncCanaryKind {
+			t.Fatalf("schedule kind = %q, want %q", sc.Kind, SyncCanaryKind)
+		}
+		if sc.Service == "" {
+			t.Fatal("canary schedule must name the service it probes")
+		}
+		if sc.EverySeconds != 24*60*60 {
+			t.Fatalf("canary cadence = %ds, want daily", sc.EverySeconds)
+		}
+	}
+	// Re-seeding is a no-op; the operator's rows are preserved.
+	if _, ok, err := s.SetEnabled(s.List()[0].ID, false); !ok || err != nil {
+		t.Fatalf("toggle = (%v,%v), want success", ok, err)
+	}
+	added, err = s.SeedCanaryDefaults(services)
+	if err != nil || added != 0 {
+		t.Fatalf("re-seed = (%d,%v), want (0,nil)", added, err)
+	}
+	var nilStore *ScheduleStore
+	if _, err := nilStore.SeedCanaryDefaults(services); err != nil {
+		t.Fatalf("nil SeedCanaryDefaults: %v", err)
+	}
+}
+
 func TestScheduleStore_DisabledIsNoop(t *testing.T) {
 	s, err := OpenScheduleStore(nil, "")
 	if err != nil {
