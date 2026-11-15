@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -64,7 +65,7 @@ type googleCalendarEventID struct {
 // CreateGoogleContact creates a person on Google Contacts and returns the
 // resource name and etag.
 func (c *GoogleContactsConnector) CreateGoogleContact(ctx context.Context, contact kinds.Contact) (resourceName, etag string, err error) {
-	token := c.host.GetValidToken(GoogleContactsServiceID, nil)
+	token := c.host.GetValidToken(GoogleContactsServiceID, slog.Default())
 	if token == "" {
 		return "", "", kinds.ErrUnauthorized
 	}
@@ -115,7 +116,7 @@ func (c *GoogleContactsConnector) CreateGoogleContact(ctx context.Context, conta
 // UpdateGoogleContact updates a person. When etag is non-empty it is sent for
 // optimistic concurrency; a 409 returns ErrConflict.
 func (c *GoogleContactsConnector) UpdateGoogleContact(ctx context.Context, resourceName, etag string, contact kinds.Contact) (newETag string, err error) {
-	token := c.host.GetValidToken(GoogleContactsServiceID, nil)
+	token := c.host.GetValidToken(GoogleContactsServiceID, slog.Default())
 	if token == "" {
 		return "", kinds.ErrUnauthorized
 	}
@@ -191,7 +192,7 @@ func (c *GoogleContactsConnector) UpdateGoogleContact(ctx context.Context, resou
 // CreateGoogleEvent inserts an event on the given calendar (or "primary").
 // Returns the event id, htmlLink, and etag.
 func (c *GoogleCalendarConnector) CreateGoogleEvent(ctx context.Context, calendarID string, ev kinds.CalendarEvent) (id, htmlLink, etag string, err error) {
-	token := c.host.GetValidToken(GoogleCalendarServiceID, nil)
+	token := c.host.GetValidToken(GoogleCalendarServiceID, slog.Default())
 	if token == "" {
 		return "", "", "", kinds.ErrUnauthorized
 	}
@@ -243,7 +244,7 @@ func (c *GoogleCalendarConnector) CreateGoogleEvent(ctx context.Context, calenda
 // UpdateGoogleEvent replaces one event. When etag is non-empty it is sent as
 // If-Match; 409/412 map to ErrConflict.
 func (c *GoogleCalendarConnector) UpdateGoogleEvent(ctx context.Context, calendarID, eventID, etag string, ev kinds.CalendarEvent) (newETag string, err error) {
-	token := c.host.GetValidToken(GoogleCalendarServiceID, nil)
+	token := c.host.GetValidToken(GoogleCalendarServiceID, slog.Default())
 	if token == "" {
 		return "", kinds.ErrUnauthorized
 	}

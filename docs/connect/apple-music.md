@@ -21,8 +21,32 @@ cannot be created on a free account.
    JS — there is no redirect-code flow. The admin setup panel
    (`/v1/admin/setup/apple-music`) carries a copyable MusicKit JS snippet:
    save it as a local HTML page, replace `PASTE_DEVELOPER_TOKEN` with a
-   developer token, sign in with the user's Apple ID, and copy the token it
-   prints.
+   developer token minted from the same MusicKit key (below), sign in with
+   the user's Apple ID, and copy the token it prints.
+
+   Aegis never displays the developer token it mints, so mint a short-lived
+   one locally for this step from your `.p8`, **Key ID**, and **Issuer ID**
+   — with Node's built-in crypto (no packages):
+
+   ```js
+   // mint-dev-token.mjs — run: node mint-dev-token.mjs AuthKey_XXXXXXXXXX.p8 KEYID ISSUERID
+   import { readFileSync } from "node:fs";
+   import { createSign } from "node:crypto";
+   const [keyPath, keyId, issuerId] = process.argv.slice(2);
+   const b64 = (s) => Buffer.from(s).toString("base64url");
+   const now = Math.floor(Date.now() / 1000);
+   const signing = b64(JSON.stringify({ alg: "ES256", kid: keyId })) + "." +
+     b64(JSON.stringify({ iss: issuerId, iat: now, exp: now + 3600 }));
+   const signer = createSign("SHA256").update(signing);
+   signer.end();
+   // ieee-p1363 yields the raw R||S signature JWS expects (not DER).
+   const sig = signer.sign({ key: readFileSync(keyPath), dsaEncoding: "ieee-p1363" });
+   console.log(signing + "." + sig.toString("base64url"));
+   ```
+
+   The developer token is only a bearer credential for this browser step;
+   it expires in an hour. Any JWT tool that signs ES256 with `iss`, `iat`,
+   `exp`, and a `kid` header works the same way.
 3. **Save both halves** in the admin setup panel (or the service headers
    below). Aegis mints the developer token itself (ES256, one-hour
    lifetime, cached) from the `.p8`; nothing is pasted per request.

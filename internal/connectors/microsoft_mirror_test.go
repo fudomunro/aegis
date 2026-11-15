@@ -175,3 +175,39 @@ func TestGoogleCalendarPlaceEvents_ForeignCalendarFallsBackToPrimary(t *testing.
 		t.Fatalf("path = %q, want /calendars/primary/events", lastPath)
 	}
 }
+
+func TestMicrosoftMirrorWritePaths_EscapeIDs(t *testing.T) {
+	var requestURIs []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestURIs = append(requestURIs, r.RequestURI)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"x","@odata.etag":"W/\"e1\""}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftContactsServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftContactsServiceID, "tok")
+	if _, err := NewMicrosoftContactsConnector(th).PlaceContacts(context.Background(), []kinds.Contact{
+		refContact(MicrosoftContactsServiceID, "Ada", "c/1", `W/"e0"`, "ada@example.com"),
+	}); err != nil {
+		t.Fatalf("PlaceContacts: %v", err)
+	}
+
+	thCal := newTestHostWithService(MicrosoftCalendarServiceID, ts.URL, "https://aegis.example.com")
+	thCal.setToken(MicrosoftCalendarServiceID, "tok")
+	ev := refEvent(MicrosoftCalendarServiceID, "Standup", "", "", "ical-1", "2026-01-05T09:00:00Z", "2026-01-05T10:00:00Z")
+	ev.Sources[0].CalendarID = "cal/1"
+	if _, err := NewMicrosoftCalendarConnector(thCal).PlaceEvents(context.Background(), []kinds.CalendarEvent{ev}); err != nil {
+		t.Fatalf("PlaceEvents: %v", err)
+	}
+
+	if len(requestURIs) != 2 {
+		t.Fatalf("request URIs = %q", requestURIs)
+	}
+	if !strings.Contains(requestURIs[0], "/me/contacts/c%2F1") {
+		t.Fatalf("contact write URI %q does not carry the escaped id", requestURIs[0])
+	}
+	if !strings.Contains(requestURIs[1], "/me/calendars/cal%2F1/events") {
+		t.Fatalf("event write URI %q does not carry the escaped calendar id", requestURIs[1])
+	}
+}

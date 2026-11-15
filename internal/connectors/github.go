@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -397,7 +396,7 @@ func (c *GitHubConnector) getJSON(ctx context.Context, token, path string, out a
 		return false, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
+	data, err := readAllLimit(resp.Body, 1<<20)
 	if err != nil {
 		return false, err
 	}

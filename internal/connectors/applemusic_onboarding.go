@@ -103,7 +103,7 @@ func (c *AppleMusicConnector) Onboarding() shared.OnboardingSpec {
 				ID:    appleMusicGuideUserToken,
 				Title: "Get a Music User Token",
 				Body: "Apple issues the Music User Token in a browser through MusicKit JS — there is no redirect-code flow. " +
-					"Open a local HTML page with the snippet below (signed with the same MusicKit key), sign in with the user's Apple ID, and copy the token it prints into the form. " +
+					"Open a local HTML page with the snippet below (embedding a developer token minted from your MusicKit key), sign in with the user's Apple ID, and copy the token it prints into the form. " +
 					"The token is long-lived and can be revoked from the user's Apple ID; when Apple revokes it, the surface reports `unauthorized` until a new one is saved.",
 				Command: `<!doctype html>
 <html><head><meta charset="utf-8"><title>Music User Token</title>
@@ -123,7 +123,7 @@ func (c *AppleMusicConnector) Onboarding() shared.OnboardingSpec {
     };
   });
 </script></body></html>`,
-				Label:  "Save as musickit-token.html, replace PASTE_DEVELOPER_TOKEN with the JWT Aegis logs at debug level (or one you mint), open in a browser",
+				Label:  "Save as musickit-token.html, replace PASTE_DEVELOPER_TOKEN with a developer token you mint from your MusicKit key (see docs/connect/apple-music.md), open in a browser",
 				Button: "Copy snippet",
 			},
 		},

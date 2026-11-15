@@ -3,7 +3,9 @@ package connectors
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -56,7 +58,7 @@ type microsoftEntityRef struct {
 
 // PlaceContacts implements kinds.ContactWriteProvider over Microsoft Graph.
 func (c *MicrosoftContactsConnector) PlaceContacts(ctx context.Context, contacts []kinds.Contact) (kinds.PlaceEntitiesResult, error) {
-	token := c.host.GetValidToken(MicrosoftContactsServiceID, nil)
+	token := c.host.GetValidToken(MicrosoftContactsServiceID, slog.Default())
 	if token == "" {
 		return kinds.PlaceEntitiesResult{}, kinds.ErrUnauthorized
 	}
@@ -67,7 +69,7 @@ func (c *MicrosoftContactsConnector) PlaceContacts(ctx context.Context, contacts
 		body := microsoftContactFromBody(ct)
 
 		if id != "" {
-			newETag, err := microsoftPatchEntity(ctx, c.MicrosoftContactsUpstreamBase(), token, "/me/contacts/"+id, etag, body)
+			newETag, err := microsoftPatchEntity(ctx, c.MicrosoftContactsUpstreamBase(), token, "/me/contacts/"+url.PathEscape(id), etag, body)
 			if err == ErrConflict {
 				result.Conflicts = append(result.Conflicts, kinds.PlaceConflict{
 					Name: name, Service: MicrosoftContactsServiceID, ID: id,
@@ -109,7 +111,7 @@ func (c *MicrosoftContactsConnector) PlaceContacts(ctx context.Context, contacts
 // carries for this service, else the user's default calendar — a foreign
 // service's calendar id is never trusted here.
 func (c *MicrosoftCalendarConnector) PlaceEvents(ctx context.Context, events []kinds.CalendarEvent) (kinds.PlaceEntitiesResult, error) {
-	token := c.host.GetValidToken(MicrosoftCalendarServiceID, nil)
+	token := c.host.GetValidToken(MicrosoftCalendarServiceID, slog.Default())
 	if token == "" {
 		return kinds.PlaceEntitiesResult{}, kinds.ErrUnauthorized
 	}
@@ -120,7 +122,7 @@ func (c *MicrosoftCalendarConnector) PlaceEvents(ctx context.Context, events []k
 		body := microsoftEventFromBody(ev)
 
 		if id != "" {
-			newETag, err := microsoftPatchEntity(ctx, c.MicrosoftCalendarUpstreamBase(), token, "/me/events/"+id, etag, body)
+			newETag, err := microsoftPatchEntity(ctx, c.MicrosoftCalendarUpstreamBase(), token, "/me/events/"+url.PathEscape(id), etag, body)
 			if err == ErrConflict {
 				result.Conflicts = append(result.Conflicts, kinds.PlaceConflict{
 					Name: name, Service: MicrosoftCalendarServiceID, ID: id,
@@ -140,7 +142,7 @@ func (c *MicrosoftCalendarConnector) PlaceEvents(ctx context.Context, events []k
 
 		path := "/me/events"
 		if calID := placeEventCalendar(ev, MicrosoftCalendarServiceID); calID != "" {
-			path = "/me/calendars/" + calID + "/events"
+			path = "/me/calendars/" + url.PathEscape(calID) + "/events"
 		}
 		ref, err := microsoftPostEntity(ctx, c.MicrosoftCalendarUpstreamBase(), token, path, body)
 		if err == ErrConflict {
