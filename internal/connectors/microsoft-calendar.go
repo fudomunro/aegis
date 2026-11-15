@@ -305,9 +305,9 @@ func (c *MicrosoftCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *ht
 		return
 	}
 	if status != http.StatusOK {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		w.Write(data)
+		// Sanitized: the upstream error body is for logs, never the agent.
+		slog.Warn("microsoft event request failed", "status", status, "body", truncateBytes(data, 200))
+		shared.WriteJSONError(w, http.StatusBadGateway, "Microsoft Graph request failed")
 		return
 	}
 	var raw microsoftEvent
@@ -448,7 +448,7 @@ func (c *MicrosoftCalendarConnector) ListEventsForCalendar(ctx context.Context, 
 	for page := 0; page < shared.LibraryPageCap && next != ""; page++ {
 		events, nextLink, tr, err := c.fetchEventPage(ctx, token, next, calendarID)
 		if err != nil {
-			return nil, false, err
+			return stopGraphWalk(all, err)
 		}
 		all = append(all, events...)
 		if tr {
@@ -512,16 +512,9 @@ func (c *MicrosoftCalendarConnector) ListCalendars(ctx context.Context, token st
 	var all []microsoftCalendarItem
 	truncated := false
 	for page := 0; page < shared.LibraryPageCap && next != ""; page++ {
-		data, status, err := microsoftGraphRequest(ctx, token, http.MethodGet, next, nil)
+		raw, err := graphPage[microsoftCalendarItem](ctx, token, next)
 		if err != nil {
-			return nil, false, err
-		}
-		if status != http.StatusOK {
-			return nil, false, fmt.Errorf("microsoft calendars list returned %d", status)
-		}
-		var raw graphList[microsoftCalendarItem]
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, false, err
+			return stopGraphWalk(all, err)
 		}
 		all = append(all, raw.Value...)
 		next = raw.NextLink

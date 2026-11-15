@@ -263,3 +263,70 @@ func TestMicrosoftContacts_HandleProxy_GetByIDEscapesID(t *testing.T) {
 		t.Fatalf("upstream request URI %q forwards the id as extra path segments", gotRequestURI)
 	}
 }
+
+func TestMicrosoftContacts_ListUserContacts_FailOpenPartial(t *testing.T) {
+	page := 0
+	failFirst := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if failFirst {
+			http.Error(w, "graph exploded", http.StatusInternalServerError)
+			return
+		}
+		page++
+		if page == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			next := "http://" + r.Host + "/me/contacts?$skiptoken=2"
+			_, _ = w.Write([]byte(`{"value":[
+				{"id":"c1","displayName":"Ada Lovelace","emailAddresses":[{"address":"ada@example.com"}]}
+			],"@odata.nextLink":"` + next + `"}`))
+			return
+		}
+		http.Error(w, "graph exploded", http.StatusInternalServerError)
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftContactsServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftContactsServiceID, "tok")
+	c := NewMicrosoftContactsConnector(th)
+
+	contacts, truncated, err := c.ListUserContacts(context.Background())
+	if err != nil {
+		t.Fatalf("ListUserContacts: %v", err)
+	}
+	if len(contacts) != 1 || contacts[0].Name != "Ada Lovelace" {
+		t.Fatalf("contacts = %+v, want the gathered page", contacts)
+	}
+	if !truncated {
+		t.Fatal("want truncated when the walk stopped on a failed page")
+	}
+
+	// Nothing gathered yet: the failure surfaces instead of an empty list.
+	failFirst = true
+	if _, _, err := c.ListUserContacts(context.Background()); err == nil {
+		t.Fatal("want the first-page failure to surface")
+	}
+}
+
+func TestMicrosoftContacts_HandleProxy_GetByIDUpstreamErrorIsSanitized(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":"ItemNotFound","message":"secret internal detail"}}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftContactsServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftContactsServiceID, "tok")
+	c := NewMicrosoftContactsConnector(th)
+
+	req := httptest.NewRequest("GET", "/v1/services/microsoft-contacts/contacts/missing", nil)
+	w := httptest.NewRecorder()
+	c.HandleProxy(w, req, "/contacts/missing")
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "secret internal detail") {
+		t.Fatalf("upstream error body leaked to the agent: %s", w.Body.String())
+	}
+}
