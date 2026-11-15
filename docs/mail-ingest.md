@@ -8,6 +8,10 @@ Scope (as designed): the Google Takeout / mail-archive pipeline that lived
 in `internal/core` (`mail_takeout.go`, `mail_archive_sync.go`,
 `syncrunner_mail.go`, and the service-ID branches formerly in
 `librarykind.go` / `syncfreshness.go` / `mail_archive_http.go`).
+A third implementation joined the same seam later: the Microsoft Graph mail
+walk (`microsoft-mail`, #399) — live paging with a durable continuation
+cursor and Graph throttle back-off, declared as its own canonical
+`MailSource` beside the Gmail one.
 
 Related issues: **#286** (this note), **#266** (local import stores; the
 carve-out this resolves), **#265** (onboarding seam pattern), **#264**

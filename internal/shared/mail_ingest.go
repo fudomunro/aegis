@@ -7,8 +7,9 @@ import (
 
 // Mail ingest contract (issue #286; docs/mail-ingest.md): pure shapes for
 // feeding the local mail archive from a connector-owned ingest — Gmail live
-// paging or a Google Takeout export walk. Core owns the archive and the
-// sync runner; connectors own the walk and the provider semantics.
+// paging, a Google Takeout export walk, or the Microsoft Graph mail walk.
+// Core owns the archive and the sync runner; connectors own the walk and
+// the provider semantics.
 
 // ErrMailConfig reports a mail ingest whose configured location is missing
 // or was rejected. The HTTP surface maps it to a client error; the sync

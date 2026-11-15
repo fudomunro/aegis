@@ -7,12 +7,13 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// Mail ingest seam (issue #286; docs/mail-ingest.md): one contract, two
-// implementations — the Gmail connector's live paging and the Google
-// Takeout export walk — writing through a core-owned sink. Optional
-// capability beside ServiceConnector and Onboarder: looked up by service
-// id, never assumed. The Gmail+Takeout pair lives beside each other here so
-// it never splits across a package wall (issue #266).
+// Mail ingest seam (issue #286; docs/mail-ingest.md): one contract, three
+// implementations — the Gmail connector's live paging, the Google Takeout
+// export walk, and the Microsoft Graph mail walk — writing through a
+// core-owned sink. Optional capability beside ServiceConnector and
+// Onboarder: looked up by service id, never assumed. The Gmail+Takeout
+// pair lives beside each other here so it never splits across a package
+// wall (issue #266).
 
 // MailIngest feeds the local mail archive one bounded batch at a time.
 // Callers repeat until Result.Done.
@@ -41,7 +42,7 @@ type MailSource struct {
 }
 
 // mailSources lists the declarations beside each ingest.
-var mailSources = []MailSource{GmailMailSource, TakeoutMailSource}
+var mailSources = []MailSource{GmailMailSource, TakeoutMailSource, MicrosoftMailSource}
 
 // MailSources returns every declared ingest source (issue #286).
 func MailSources() []MailSource {

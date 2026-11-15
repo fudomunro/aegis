@@ -519,10 +519,11 @@ func Run() {
 	srv.connectors[connectors.GoogleCalendarServiceID] = gCalendarConn
 	gGmailConn := connectors.NewGoogleGmailConnector(srv)
 	srv.connectors[connectors.GoogleGmailServiceID] = gGmailConn
-	// Microsoft 365 / Outlook calendar and contacts (issue #145): Graph API
-	// over the shared "microsoft" connection.
+	// Microsoft 365 / Outlook calendar, contacts, and mail (issues #145,
+	// #399): Graph API over the shared "microsoft" connection.
 	srv.connectors[connectors.MicrosoftCalendarServiceID] = connectors.NewMicrosoftCalendarConnector(srv)
 	srv.connectors[connectors.MicrosoftContactsServiceID] = connectors.NewMicrosoftContactsConnector(srv)
+	srv.connectors[connectors.MicrosoftMailServiceID] = connectors.NewMicrosoftMailConnector(srv)
 	// Financial transactions (issue #141): YNAB live API + local Quicken import.
 	srv.connectors[connectors.YNABServiceID] = connectors.NewYNABConnector(srv)
 	// Location history (issue #142): OwnTracks live + local Google Timeline import.
