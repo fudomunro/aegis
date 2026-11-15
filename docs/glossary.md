@@ -44,6 +44,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Canonical home** (or **canonical**) | Non-Aegis authoritative home for a kind (`canonical_for`) | Avoid “home copy”, “foreign canonical” in product prose |
 | **Entity merge** | Folding music/photo/event rows into one item (ISRC/UPC/MBID/…) | Not for contacts |
 | **Identity matching** | Folding contacts/people on vCard UID / email → phone → handle → name | Not for playlists/tracks |
+| **Match ladder** | The resolve order a write-side connector walks to turn one neutral entity into a provider id: service-local reference → exact entity id (ISRC/UPC) → guarded name search. No hit is reported as a skip and not placed | Per-service placement matching. Not **entity merge** (catalog-level identity) or **identity matching** (contacts); not the **converge plan**, which decides *what* to place — the ladder decides *which provider id* an entity becomes |
 | **Entity link** | User-confirmed cross-service identity (`entity_links.json`) | |
 | **Copy ledger** | Durable record of mirrored/backup copies | |
 | **Delta token** | The change-feed resume marker (e.g. Graph `/delta`) recorded as the collection copy row's **watermark**, so each source+member pair's next converge resumes instead of re-reading the whole collection | Not a page cursor (chained within one job) or an etag watermark (per-item) |

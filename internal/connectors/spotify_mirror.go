@@ -177,16 +177,12 @@ func (c *SpotifyConnector) PlacePlaylistItems(ctx context.Context, playlistID, n
 	var uris []string
 	var recs []kinds.PlaceRecord
 	for _, t := range tracks {
-		uri, how := c.resolveTrackURI(ctx, t, &result)
-		if uri == "" {
+		ref, ok := c.resolvePlaylistTrack(ctx, t, &result.Skips)
+		if !ok {
 			continue
 		}
-		uris = append(uris, uri)
-		recs = append(recs, kinds.PlaceRecord{
-			Name:       placeTrackDisplay(t),
-			ExternalID: strings.TrimPrefix(uri, "spotify:track:"),
-			MatchedBy:  how,
-		})
+		uris = append(uris, ref.ID)
+		recs = append(recs, ref.Record)
 	}
 
 	const chunk = 100
@@ -301,106 +297,99 @@ func orderEntryIndexes(orderedIDs, current []string) []int {
 }
 
 // SaveLikedTracks implements kinds.LikedTrackWriteProvider.
-func (c *SpotifyConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
-	var result kinds.SaveLikedTracksResult
-	var ids []string
-	var recs []kinds.PlaceRecord
-	for _, t := range tracks {
-		how := "ref"
-		id, uri := placeTrackLocalRef(t, SpotifyServiceID)
-		if id == "" && strings.HasPrefix(uri, "spotify:track:") {
-			id = strings.TrimPrefix(uri, "spotify:track:")
-		}
-		if id == "" {
-			how = ""
-			found, matched, err := c.searchTrackURI(ctx, t)
-			if err != nil {
-				result.Skips = append(result.Skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: err.Error()})
-				continue
+// trackLadder is Spotify's track catalog search behind the shared match
+// ladder: an exact ISRC query (no duration guard — the ISRC proves
+// identity), then a name query guarded by duration.
+func (c *SpotifyConnector) trackLadder() SearchLadder[kinds.Track] {
+	return SearchLadder[kinds.Track]{
+		Service:     SpotifyServiceName,
+		Display:     placeTrackDisplay,
+		IdentityKey: kinds.TrackIdentityKey,
+		DurableID: func(t kinds.Track) (string, string) {
+			if _, how := kinds.TrackMatchKey(t); how == kinds.TrackMatchISRC {
+				return kinds.TrackEntityID(t), kinds.TrackMatchISRC
 			}
-			if strings.HasPrefix(found, "spotify:track:") {
-				id = strings.TrimPrefix(found, "spotify:track:")
-				how = matched
+			return "", ""
+		},
+		ByDurableID: func(ctx context.Context, _ kinds.Track, isrc string) (string, bool, error) {
+			id, _, err := c.searchTrackFirst(ctx, "isrc:"+isrc)
+			return id, id != "", err
+		},
+		ByName: func(ctx context.Context, t kinds.Track) (string, error) {
+			id, durationMs, err := c.searchTrackFirst(ctx, placeTrackQuery(t))
+			if err != nil || id == "" {
+				return "", err
 			}
-		}
-		if id == "" {
-			result.Skips = append(result.Skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: "no match on Spotify"})
-			continue
-		}
-		ids = append(ids, id)
-		recs = append(recs, kinds.PlaceRecord{
-			Name:       placeTrackDisplay(t),
-			ExternalID: id,
-			MatchedBy:  how,
-		})
+			if !kinds.DurationCompatible(t, kinds.Track{DurationMs: durationMs}) {
+				return "", nil
+			}
+			return id, nil
+		},
 	}
-
-	const chunk = 50
-	for i := 0; i < len(ids); i += chunk {
-		end := i + chunk
-		if end > len(ids) {
-			end = len(ids)
-		}
-		q := url.Values{"ids": []string{strings.Join(ids[i:end], ",")}}
-		_, _, err := apiJSON(ctx, c.host, SpotifyServiceID, "PUT", "/me/tracks", q, nil)
-		if err != nil {
-			return result, err
-		}
-		result.Copied += end - i
-		result.Placed = append(result.Placed, recs[i:end]...)
-	}
-	return result, nil
 }
 
-// resolveTrackURI maps one track to a Spotify URI and the identity it
-// matched on (issue #366): service-local reference first, then a direct
-// ISRC lookup, then duration-guarded name search. A skip is appended when
-// nothing usable is found.
-func (c *SpotifyConnector) resolveTrackURI(ctx context.Context, t kinds.Track, result *kinds.PlacePlaylistItemsResult) (string, string) {
+// resolveSavedTrack is the save-side resolve: the bare-id ref rung, else
+// the track ladder.
+func (c *SpotifyConnector) resolveSavedTrack(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) (LadderRef, bool) {
+	id, uri := placeTrackLocalRef(t, SpotifyServiceID)
+	if id == "" && strings.HasPrefix(uri, "spotify:track:") {
+		id = strings.TrimPrefix(uri, "spotify:track:")
+	}
+	if id != "" {
+		return c.trackLadder().Ref(t, id), true
+	}
+	return c.trackLadder().Resolve(ctx, t, skips)
+}
+
+// resolvePlaylistTrack is the playlist-write resolve: the write id is the
+// Spotify URI form, while the record stamps the bare id.
+func (c *SpotifyConnector) resolvePlaylistTrack(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) (LadderRef, bool) {
 	id, uri := placeTrackLocalRef(t, SpotifyServiceID)
 	if uri == "" && id != "" {
 		uri = "spotify:track:" + id
 	}
 	if uri != "" {
-		return uri, "ref"
+		ref := c.trackLadder().Ref(t, strings.TrimPrefix(uri, "spotify:track:"))
+		ref.ID = uri
+		return ref, true
 	}
-	found, how, err := c.searchTrackURI(ctx, t)
-	if err != nil {
-		result.Skips = append(result.Skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: err.Error()})
-		return "", ""
+	ref, ok := c.trackLadder().Resolve(ctx, t, skips)
+	if !ok {
+		return LadderRef{}, false
 	}
-	if found == "" {
-		result.Skips = append(result.Skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: "no match on Spotify"})
-		return "", ""
-	}
-	return found, how
+	ref.ID = "spotify:track:" + ref.ID
+	return ref, true
 }
 
-// searchTrackURI looks the track up in the Spotify catalog: an exact ISRC
-// query first when the track carries one, else a name query guarded by
-// duration — a name hit of a wildly different length is a different
-// recording and is not placed (issue #366).
-func (c *SpotifyConnector) searchTrackURI(ctx context.Context, t kinds.Track) (string, string, error) {
-	if _, how := kinds.TrackMatchKey(t); how == kinds.TrackMatchISRC {
-		uri, _, err := c.searchTrackFirst(ctx, "isrc:"+kinds.TrackEntityID(t))
-		if err != nil {
-			return "", "", err
+// spotifySaveChunks PUTs the id batch to a library endpoint in chunks of
+// 50, reporting how many landed before any failure.
+func spotifySaveChunks(ctx context.Context, host Host, path string, extra url.Values, ids []string) (int, error) {
+	const chunk = 50
+	written := 0
+	for i := 0; i < len(ids); i += chunk {
+		end := min(i+chunk, len(ids))
+		q := url.Values{"ids": []string{strings.Join(ids[i:end], ",")}}
+		for k, vs := range extra {
+			q[k] = vs
 		}
-		if uri != "" {
-			return uri, kinds.TrackMatchISRC, nil
+		if _, _, err := apiJSON(ctx, host, SpotifyServiceID, "PUT", path, q, nil); err != nil {
+			return written, err
 		}
+		written += end - i
 	}
-	uri, durationMs, err := c.searchTrackFirst(ctx, placeTrackQuery(t))
-	if err != nil || uri == "" {
-		return "", "", err
-	}
-	if !kinds.DurationCompatible(t, kinds.Track{DurationMs: durationMs}) {
-		return "", "", nil
-	}
-	return uri, kinds.TrackMatchName, nil
+	return written, nil
 }
 
-// searchTrackFirst returns the first catalog hit's URI and duration.
+func (c *SpotifyConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
+	copied, placed, skips, err := SaveOnLadder(ctx, tracks, c.resolveSavedTrack,
+		func(ctx context.Context, ids []string) (int, error) {
+			return spotifySaveChunks(ctx, c.host, "/me/tracks", nil, ids)
+		})
+	return kinds.SaveLikedTracksResult{Copied: copied, Placed: placed, Skips: skips}, err
+}
+
+// searchTrackFirst returns the first catalog hit's bare track id and
+// duration.
 func (c *SpotifyConnector) searchTrackFirst(ctx context.Context, query string) (string, int, error) {
 	q := url.Values{
 		"q":     []string{query},
@@ -422,132 +411,92 @@ func (c *SpotifyConnector) searchTrackFirst(ctx context.Context, query string) (
 	}
 	uri, _ := first["uri"].(string)
 	durationMs, _ := shared.AsInt(first["duration_ms"])
-	return uri, durationMs, nil
+	return strings.TrimPrefix(uri, "spotify:track:"), durationMs, nil
+}
+
+// albumLadder is Spotify's album catalog search behind the shared match
+// ladder: an exact UPC query, then a title + primary artist query guarded
+// by that fallback's identity.
+func (c *SpotifyConnector) albumLadder() SearchLadder[kinds.Album] {
+	return SearchLadder[kinds.Album]{
+		Service:     SpotifyServiceName,
+		Display:     placeAlbumDisplay,
+		IdentityKey: kinds.AlbumIdentityKey,
+		DurableID: func(a kinds.Album) (string, string) {
+			if _, how := kinds.AlbumMatchKey(a); how == kinds.AlbumMatchUPC {
+				return kinds.AlbumEntityID(a), kinds.AlbumMatchUPC
+			}
+			return "", ""
+		},
+		ByDurableID: func(ctx context.Context, _ kinds.Album, upc string) (string, bool, error) {
+			hit, err := c.searchAlbumHit(ctx, "upc:"+upc)
+			if err != nil {
+				return "", false, err
+			}
+			id := placeAlbumLocalRef(hit, SpotifyServiceID)
+			return id, id != "", nil
+		},
+		ByName: func(ctx context.Context, a kinds.Album) (string, error) {
+			hit, err := c.searchAlbumHit(ctx, placeAlbumQuery(a))
+			if err != nil {
+				return "", err
+			}
+			if !albumTitleArtistCompatible(hit, a) {
+				return "", nil
+			}
+			return placeAlbumLocalRef(hit, SpotifyServiceID), nil
+		},
+	}
+}
+
+// artistLadder is Spotify's artist catalog search behind the shared match
+// ladder — name search guarded by normalized-name equality (the MBID path
+// is cover-letter only: Spotify search exposes no MBID query).
+func (c *SpotifyConnector) artistLadder() SearchLadder[kinds.Artist] {
+	return SearchLadder[kinds.Artist]{
+		Service:     SpotifyServiceName,
+		Display:     placeArtistDisplay,
+		IdentityKey: kinds.ArtistIdentityKey,
+		DurableID:   func(kinds.Artist) (string, string) { return "", "" },
+		ByName: func(ctx context.Context, a kinds.Artist) (string, error) {
+			return c.searchArtistID(ctx, a)
+		},
+	}
 }
 
 // SaveAlbums implements kinds.AlbumWriteProvider over Spotify's saved-albums
 // library. Saving is create-only — a placement never un-saves (issue #375).
 func (c *SpotifyConnector) SaveAlbums(ctx context.Context, albums []kinds.Album) (kinds.SaveAlbumsResult, error) {
-	var result kinds.SaveAlbumsResult
-	var ids []string
-	var recs []kinds.PlaceRecord
-	for _, a := range albums {
-		how := "ref"
-		id := placeAlbumLocalRef(a, SpotifyServiceID)
-		if id == "" {
-			how = ""
-			found, matched, err := c.searchAlbumID(ctx, a)
-			if err != nil {
-				result.Skips = append(result.Skips, kinds.PlaceSkip{Name: placeAlbumDisplay(a), Reason: err.Error()})
-				continue
+	ladder := c.albumLadder()
+	copied, placed, skips, err := SaveOnLadder(ctx, albums,
+		func(ctx context.Context, a kinds.Album, skips *[]kinds.PlaceSkip) (LadderRef, bool) {
+			if id := placeAlbumLocalRef(a, SpotifyServiceID); id != "" {
+				return ladder.Ref(a, id), true
 			}
-			id, how = found, matched
-		}
-		if id == "" {
-			result.Skips = append(result.Skips, kinds.PlaceSkip{Name: placeAlbumDisplay(a), Reason: "no match on Spotify"})
-			continue
-		}
-		ids = append(ids, id)
-		recs = append(recs, kinds.PlaceRecord{
-			Name:       placeAlbumDisplay(a),
-			ExternalID: id,
-			MatchedBy:  how,
+			return ladder.Resolve(ctx, a, skips)
+		},
+		func(ctx context.Context, ids []string) (int, error) {
+			return spotifySaveChunks(ctx, c.host, "/me/albums", nil, ids)
 		})
-	}
-
-	const chunk = 50
-	for i := 0; i < len(ids); i += chunk {
-		end := i + chunk
-		if end > len(ids) {
-			end = len(ids)
-		}
-		q := url.Values{"ids": []string{strings.Join(ids[i:end], ",")}}
-		_, _, err := apiJSON(ctx, c.host, SpotifyServiceID, "PUT", "/me/albums", q, nil)
-		if err != nil {
-			return result, err
-		}
-		result.Copied += end - i
-		result.Placed = append(result.Placed, recs[i:end]...)
-	}
-	return result, nil
+	return kinds.SaveAlbumsResult{Copied: copied, Placed: placed, Skips: skips}, err
 }
 
 // FollowArtists implements kinds.ArtistWriteProvider over Spotify's
 // following list. Following is create-only — a placement never unfollows
 // (issue #375).
 func (c *SpotifyConnector) FollowArtists(ctx context.Context, artists []kinds.Artist) (kinds.FollowArtistsResult, error) {
-	var result kinds.FollowArtistsResult
-	var ids []string
-	var recs []kinds.PlaceRecord
-	for _, a := range artists {
-		how := "ref"
-		id := placeArtistLocalRef(a, SpotifyServiceID)
-		if id == "" {
-			how = ""
-			found, matched, err := c.searchArtistID(ctx, a)
-			if err != nil {
-				result.Skips = append(result.Skips, kinds.PlaceSkip{Name: placeArtistDisplay(a), Reason: err.Error()})
-				continue
+	ladder := c.artistLadder()
+	copied, placed, skips, err := SaveOnLadder(ctx, artists,
+		func(ctx context.Context, a kinds.Artist, skips *[]kinds.PlaceSkip) (LadderRef, bool) {
+			if id := placeArtistLocalRef(a, SpotifyServiceID); id != "" {
+				return ladder.Ref(a, id), true
 			}
-			id, how = found, matched
-		}
-		if id == "" {
-			result.Skips = append(result.Skips, kinds.PlaceSkip{Name: placeArtistDisplay(a), Reason: "no match on Spotify"})
-			continue
-		}
-		ids = append(ids, id)
-		recs = append(recs, kinds.PlaceRecord{
-			Name:       placeArtistDisplay(a),
-			ExternalID: id,
-			MatchedBy:  how,
+			return ladder.Resolve(ctx, a, skips)
+		},
+		func(ctx context.Context, ids []string) (int, error) {
+			return spotifySaveChunks(ctx, c.host, "/me/following", url.Values{"type": []string{"artist"}}, ids)
 		})
-	}
-
-	const chunk = 50
-	for i := 0; i < len(ids); i += chunk {
-		end := i + chunk
-		if end > len(ids) {
-			end = len(ids)
-		}
-		q := url.Values{
-			"type": []string{"artist"},
-			"ids":  []string{strings.Join(ids[i:end], ",")},
-		}
-		_, _, err := apiJSON(ctx, c.host, SpotifyServiceID, "PUT", "/me/following", q, nil)
-		if err != nil {
-			return result, err
-		}
-		result.Copied += end - i
-		result.Placed = append(result.Placed, recs[i:end]...)
-	}
-	return result, nil
-}
-
-// searchAlbumID maps one album to a Spotify catalog id and the identity it
-// matched on (issue #366's ladder, issue #375): an exact UPC query first
-// when the album carries one, else a title + primary artist name query
-// guarded by that fallback's identity.
-func (c *SpotifyConnector) searchAlbumID(ctx context.Context, a kinds.Album) (string, string, error) {
-	if _, how := kinds.AlbumMatchKey(a); how == kinds.AlbumMatchUPC {
-		hit, err := c.searchAlbumHit(ctx, "upc:"+kinds.AlbumEntityID(a))
-		if err != nil {
-			return "", "", err
-		}
-		if id := placeAlbumLocalRef(hit, SpotifyServiceID); id != "" {
-			return id, kinds.AlbumMatchUPC, nil
-		}
-	}
-	hit, err := c.searchAlbumHit(ctx, placeAlbumQuery(a))
-	if err != nil {
-		return "", "", err
-	}
-	if !albumTitleArtistCompatible(hit, a) {
-		return "", "", nil
-	}
-	if id := placeAlbumLocalRef(hit, SpotifyServiceID); id != "" {
-		return id, kinds.TrackMatchName, nil
-	}
-	return "", "", nil
+	return kinds.FollowArtistsResult{Copied: copied, Placed: placed, Skips: skips}, err
 }
 
 // searchAlbumHit returns the first catalog hit as a neutral album (empty
@@ -575,10 +524,9 @@ func (c *SpotifyConnector) searchAlbumHit(ctx context.Context, query string) (ki
 	return NeutralSpotifyAlbum(first), nil
 }
 
-// searchArtistID maps one artist to a Spotify catalog id and the identity it
-// matched on: name search guarded by normalized-name equality (the MBID
-// path is cover-letter only — Spotify search exposes no MBID query).
-func (c *SpotifyConnector) searchArtistID(ctx context.Context, a kinds.Artist) (string, string, error) {
+// searchArtistID maps one artist to a Spotify catalog id: name search
+// guarded by normalized-name equality. "" means the guard rejected the hit.
+func (c *SpotifyConnector) searchArtistID(ctx context.Context, a kinds.Artist) (string, error) {
 	q := url.Values{
 		"q":     []string{placeArtistDisplay(a)},
 		"type":  []string{"artist"},
@@ -586,23 +534,20 @@ func (c *SpotifyConnector) searchArtistID(ctx context.Context, a kinds.Artist) (
 	}
 	raw, _, err := apiJSON(ctx, c.host, SpotifyServiceID, "GET", "/search", q, nil)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	artists, _ := raw["artists"].(map[string]any)
 	items, _ := artists["items"].([]any)
 	if len(items) == 0 {
-		return "", "", nil
+		return "", nil
 	}
 	first, ok := items[0].(map[string]any)
 	if !ok {
-		return "", "", nil
+		return "", nil
 	}
 	hit := SpotifyNeutralArtist(first)
 	if !artistNameCompatible(hit, a) {
-		return "", "", nil
+		return "", nil
 	}
-	if id := placeArtistLocalRef(hit, SpotifyServiceID); id != "" {
-		return id, kinds.TrackMatchName, nil
-	}
-	return "", "", nil
+	return placeArtistLocalRef(hit, SpotifyServiceID), nil
 }

@@ -469,6 +469,23 @@ func AlbumIdentityKey(a Album) string {
 	return title + "|" + artist
 }
 
+// ArtistIdentityKey produces the merge/watermark key for a followed artist:
+// the normalized name (artists merge on name; the MBID path is cover-letter
+// only on the provider search paths).
+func ArtistIdentityKey(a Artist) string {
+	name := NormalizeIdentityKey(a.Name)
+	if name == "" && len(a.Sources) > 0 {
+		name = NormalizeIdentityKey(a.Sources[0].Name)
+	}
+	if name == "" {
+		if len(a.Sources) > 0 {
+			return "\x00" + a.Sources[0].Service + ":" + a.Sources[0].ID
+		}
+		return "\x00"
+	}
+	return name
+}
+
 // AlbumEntityID returns a normalized durable catalog ID (UPC) when present.
 func AlbumEntityID(a Album) string {
 	return strings.ToUpper(strings.TrimSpace(a.EntityID))
