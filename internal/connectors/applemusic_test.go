@@ -159,13 +159,35 @@ func TestAppleMusicCredentials_RequireAllHalves(t *testing.T) {
 	if creds.UserToken != "" {
 		t.Fatal("user token should be optional to parse but empty")
 	}
-	tok, err := c.developerToken()
+	tok, err := c.developerToken(creds)
 	if err != nil || tok == "" {
 		t.Fatalf("developer token: %v %q", err, tok)
 	}
 	// Cached: a second mint returns the same token.
-	if again, _ := c.developerToken(); again != tok {
+	if again, _ := c.developerToken(creds); again != tok {
 		t.Fatal("developer token was re-minted")
+	}
+}
+
+func TestAppleMusicCredentials_CachesParsedKey(t *testing.T) {
+	th := newTestHostWithService(AppleMusicServiceID, "http://127.0.0.1:0", "https://aegis.example.com")
+	_, pemText := testAppleMusicKey(t)
+	th.services[AppleMusicServiceID].Headers = map[string]string{
+		appleMusicKeyIDHeader:      "K",
+		appleMusicIssuerIDHeader:   "I",
+		appleMusicPrivateKeyHeader: pemText,
+	}
+	c := NewAppleMusicConnector(th)
+	first, err := c.credentials()
+	if err != nil {
+		t.Fatalf("credentials: %v", err)
+	}
+	again, err := c.credentials()
+	if err != nil {
+		t.Fatalf("credentials: %v", err)
+	}
+	if first.PrivateKey != again.PrivateKey {
+		t.Fatal("parsed key was re-parsed instead of cached")
 	}
 }
 

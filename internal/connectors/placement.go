@@ -21,6 +21,22 @@ import (
 // reads reconciliation uses. Mirroring is reconciliation over kinds
 // (issue #254): core plans, connectors operate.
 
+// serviceHeader reads one configured static credential header (case-
+// insensitive name match, trimmed) off a service's connection. "" when the
+// service or the header is unset.
+func serviceHeader(host Host, serviceID, name string) string {
+	svc := host.ServiceConfig(serviceID)
+	if svc == nil {
+		return ""
+	}
+	for k, v := range svc.Headers {
+		if strings.EqualFold(k, name) {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
 // apiJSON performs a raw JSON call to a service's configured endpoint using
 // the stored OAuth token. Unlike the proxy path it runs no response
 // transforms, so callers can use native API shapes. It errors (rather than

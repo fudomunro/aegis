@@ -20,10 +20,9 @@ import (
 // credential to agents.
 
 const (
-	appleMusicDefaultEndpoint = "https://api.music.apple.com/v1"
-	appleMusicGuideIntro      = "intro"
-	appleMusicGuideKey        = "key"
-	appleMusicGuideUserToken  = "user-token"
+	appleMusicGuideIntro     = "intro"
+	appleMusicGuideKey       = "key"
+	appleMusicGuideUserToken = "user-token"
 )
 
 // Onboarding returns Apple Music's declared setup contract.
@@ -50,7 +49,7 @@ func (c *AppleMusicConnector) Onboarding() shared.OnboardingSpec {
 				ID:          "endpoint",
 				Label:       "API endpoint",
 				Kind:        "url",
-				Placeholder: appleMusicDefaultEndpoint,
+				Placeholder: appleMusicAPIBase,
 			},
 			{
 				ID:          "key_id",
@@ -166,7 +165,7 @@ func (c *AppleMusicConnector) OnboardingStatus(ctx context.Context) shared.Onboa
 
 	status := shared.OnboardingStatus{
 		Fields: map[string]shared.OnboardingFieldState{
-			"endpoint":         {ID: "endpoint", Value: c.host.UpstreamBaseFor(AppleMusicServiceID, appleMusicDefaultEndpoint), Valid: true},
+			"endpoint":         {ID: "endpoint", Value: c.host.UpstreamBaseFor(AppleMusicServiceID, appleMusicAPIBase), Valid: true},
 			"key_id":           {ID: "key_id", Value: c.headerValue(appleMusicKeyIDHeader), Valid: true},
 			"issuer_id":        {ID: "issuer_id", Value: c.headerValue(appleMusicIssuerIDHeader), Valid: true},
 			"private_key":      {ID: "private_key", Set: c.headerValue(appleMusicPrivateKeyHeader) != "", Valid: true},
@@ -261,7 +260,7 @@ func (c *AppleMusicConnector) hasAppleMusicCreds() bool {
 func appleMusicConnectionUpdate(in shared.OnboardingInput) (shared.ConnectionUpdate, error) {
 	endpoint := strings.TrimSpace(in.Values["endpoint"])
 	if endpoint == "" {
-		endpoint = appleMusicDefaultEndpoint
+		endpoint = appleMusicAPIBase
 	}
 	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
 		return shared.ConnectionUpdate{}, fmt.Errorf("endpoint must be an http(s) URL")

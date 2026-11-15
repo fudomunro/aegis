@@ -149,19 +149,14 @@ func (c *YNABConnector) TransformProxyResponse(method, path string, data []byte,
 
 // YnabToken resolves the Authorization token from static headers or OAuth.
 func (c *YNABConnector) YnabToken(logger *slog.Logger) string {
-	if svc := c.host.ServiceConfig(YNABServiceID); svc != nil {
-		for k, v := range svc.Headers {
-			if strings.EqualFold(k, "Authorization") && strings.TrimSpace(v) != "" {
-				v = strings.TrimSpace(v)
-				if strings.HasPrefix(strings.ToLower(v), "bearer ") {
-					return strings.TrimSpace(v[len("bearer "):])
-				}
-				return v
-			}
-			if strings.EqualFold(k, "X-YNAB-Token") && strings.TrimSpace(v) != "" {
-				return strings.TrimSpace(v)
-			}
+	if v := serviceHeader(c.host, YNABServiceID, "Authorization"); v != "" {
+		if strings.HasPrefix(strings.ToLower(v), "bearer ") {
+			return strings.TrimSpace(v[len("bearer "):])
 		}
+		return v
+	}
+	if v := serviceHeader(c.host, YNABServiceID, "X-YNAB-Token"); v != "" {
+		return v
 	}
 	return c.host.GetValidToken(YNABServiceID, logger)
 }
