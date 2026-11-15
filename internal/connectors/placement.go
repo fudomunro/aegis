@@ -28,6 +28,17 @@ import (
 // endpoint, so a misconfigured instance fails loudly instead of calling the
 // public provider.
 func apiJSON(ctx context.Context, host Host, serviceID, method, path string, query url.Values, body any) (map[string]any, int, error) {
+	return apiJSONAuth(ctx, host, serviceID, method, path, query, body,
+		func(logger *slog.Logger) (string, http.Header) {
+			return host.GetValidToken(serviceID, logger), nil
+		})
+}
+
+// apiJSONAuth is apiJSON for connectors whose upstream credential is more
+// than one bearer token: auth resolves the bearer value and any extra
+// headers (Apple Music's developer token + Music User Token).
+func apiJSONAuth(ctx context.Context, host Host, serviceID, method, path string, query url.Values, body any,
+	auth func(logger *slog.Logger) (string, http.Header)) (map[string]any, int, error) {
 	svc := host.ServiceConfig(serviceID)
 	if svc == nil {
 		return nil, 0, fmt.Errorf("service %q not configured", serviceID)
@@ -35,7 +46,7 @@ func apiJSON(ctx context.Context, host Host, serviceID, method, path string, que
 	if svc.Endpoint == "" {
 		return nil, 0, fmt.Errorf("service %q has no upstream endpoint", serviceID)
 	}
-	token := host.GetValidToken(serviceID, slog.Default())
+	token, extra := auth(slog.Default())
 	if token == "" {
 		return nil, 0, kinds.ErrUnauthorized
 	}
@@ -54,7 +65,7 @@ func apiJSON(ctx context.Context, host Host, serviceID, method, path string, que
 		bodyReader = bytes.NewReader(buf)
 	}
 
-	data, status, err := DoUpstreamRequest(ctx, method, u, bodyReader, token)
+	data, status, err := DoUpstreamRequestHeaders(ctx, method, u, bodyReader, token, extra)
 	if err != nil {
 		return nil, status, err
 	}

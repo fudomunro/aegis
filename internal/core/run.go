@@ -509,6 +509,9 @@ func Run() {
 	srv.connectors["youtube-music"] = ytMusicConn
 	amzMusicConn := connectors.NewAmazonMusicConnector(srv)
 	srv.connectors["amazon-music"] = amzMusicConn
+	// Apple Music (issue #144): MusicKit developer token + Music User Token,
+	// static credentials via the admin setup flow (not OAuth).
+	srv.connectors[connectors.AppleMusicServiceID] = connectors.NewAppleMusicConnector(srv)
 	gPhotosConn := connectors.NewGooglePhotosConnector(srv)
 	srv.connectors[connectors.GooglePhotosServiceID] = gPhotosConn
 	gContactsConn := connectors.NewGoogleContactsConnector(srv)

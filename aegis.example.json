@@ -155,6 +155,24 @@
       "connection": "amazon"
     },
     {
+      "id": "apple-music",
+      "name": "Apple Music",
+      "aliases": [
+        "musickit",
+        "itunes"
+      ],
+      "action": "inject",
+      "endpoint": "https://api.music.apple.com/v1",
+      "cache_ttl": "10m",
+      "description": "Lists Apple Music library playlists, tracks, albums, and artists into /v1/library/*. Full playlist items via content transport. Mirror placement matches on ISRC.",
+      "headers": {
+        "X-Apple-Music-Key-Id": "$ENV:APPLE_MUSIC_KEY_ID",
+        "X-Apple-Music-Issuer-Id": "$ENV:APPLE_MUSIC_ISSUER_ID",
+        "X-Apple-Music-Private-Key": "$ENV:APPLE_MUSIC_PRIVATE_KEY",
+        "Music-User-Token": "$ENV:APPLE_MUSIC_USER_TOKEN"
+      }
+    },
+    {
       "id": "tidal",
       "name": "Tidal",
       "action": "block",

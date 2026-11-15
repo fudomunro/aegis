@@ -44,6 +44,7 @@ func maturityTestConnectors() []catalogTestConnector {
 		{id: "spotify", conn: NewSpotifyConnector(host)},
 		{id: "youtube-music", conn: NewYouTubeMusicConnector(host)},
 		{id: "amazon-music", conn: NewAmazonMusicConnector(host)},
+		{id: AppleMusicServiceID, conn: NewAppleMusicConnector(host)},
 		{id: GoogleGmailServiceID, conn: NewGoogleGmailConnector(host)},
 		{id: GooglePhotosServiceID, conn: NewGooglePhotosConnector(host)},
 		{id: GoogleContactsServiceID, conn: NewGoogleContactsConnector(host)},

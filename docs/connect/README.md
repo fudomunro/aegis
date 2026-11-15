@@ -8,6 +8,7 @@ service, call `GET /v1/library/playlists` to confirm the library is live.
 | Spotify | [spotify.md](spotify.md) |
 | YouTube Music | [youtube-music.md](youtube-music.md) |
 | Amazon Music | [amazon-music.md](amazon-music.md) |
+| Apple Music | [apple-music.md](apple-music.md) |
 | Google (Photos, Contacts, Calendar, Gmail, Drive) | [google-contacts.md](google-contacts.md), [google-photos.md](google-photos.md), [google-calendar.md](google-calendar.md), [gmail.md](gmail.md), [google-drive.md](google-drive.md) |
 | Microsoft 365 / Outlook (Calendar, Contacts, Mail) | [microsoft-calendar.md](microsoft-calendar.md), [microsoft-contacts.md](microsoft-contacts.md), [microsoft-mail.md](microsoft-mail.md) |
 | Immich | [immich.md](immich.md) |

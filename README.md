@@ -1,6 +1,6 @@
 # Aegis
 
-A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music, Google Photos/Contacts/Calendar/Gmail/Drive, Immich, Paperless-ngx, YNAB, Quicken, OwnTracks, Signal, LinkedIn, Timeline, Bluesky, CalDAV/CardDAV, GitHub), serves the user's data from a kind-centric library, and enforces **data grants** with OAuth-based authentication.
+A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music, Apple Music, Google Photos/Contacts/Calendar/Gmail/Drive, Immich, Paperless-ngx, YNAB, Quicken, OwnTracks, Signal, LinkedIn, Timeline, Bluesky, CalDAV/CardDAV, GitHub), serves the user's data from a kind-centric library, and enforces **data grants** with OAuth-based authentication.
 
 > Looking for the pitch rather than the manual? The marketing site is at <https://fudomunro.github.io/aegis/> ([`site/`](site/)).
 
@@ -71,6 +71,17 @@ directions, and the free/busy projection are in
 [`docs/connect/microsoft-calendar.md`](docs/connect/microsoft-calendar.md),
 [`docs/connect/microsoft-contacts.md`](docs/connect/microsoft-contacts.md),
 and [`docs/connect/microsoft-mail.md`](docs/connect/microsoft-mail.md).
+
+### Setup: connecting Apple Music
+
+Apple Music needs an [Apple Developer Program](https://developer.apple.com/programs/)
+membership for the MusicKit key (App Store Connect → Users and Access →
+Integrations → MusicKit) and a Music User Token issued in a browser through
+MusicKit JS. Aegis signs the developer token itself and stores both
+credentials encrypted; the admin setup panel walks through each step. Apple
+Music joins the mirror/backup surface in both directions, matching on ISRC.
+Full steps and the known limits (library vs "loved" tracks) are in
+[`docs/connect/apple-music.md`](docs/connect/apple-music.md).
 
 ## Documentation
 

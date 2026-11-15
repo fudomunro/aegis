@@ -21,6 +21,10 @@ type ProxyOpts struct {
 	// token resolves the upstream credential — static headers or an API key,
 	// not only OAuth. Nil means Host.GetValidToken(serviceID).
 	token func(logger *slog.Logger) string
+	// extraHeaders supplies upstream headers beside the bearer token for
+	// multi-header credentials (Apple Music's Music User Token). Nil means
+	// none.
+	extraHeaders func(logger *slog.Logger) http.Header
 	// missingToken is the client copy when no credential resolves. Empty
 	// means the OAuth authorize hint.
 	missingToken string
@@ -102,7 +106,11 @@ func RunProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath stri
 	}
 
 	upstreamStart := time.Now()
-	data, status, err := DoUpstreamRequest(r.Context(), r.Method, upstreamURL, r.Body, cred)
+	var extra http.Header
+	if opts.extraHeaders != nil {
+		extra = opts.extraHeaders(logger)
+	}
+	data, status, err := DoUpstreamRequestHeaders(r.Context(), r.Method, upstreamURL, r.Body, cred, extra)
 	upstreamElapsed := time.Since(upstreamStart)
 	s.ObserveUpstream(opts.serviceID, upstreamElapsed, StatusOrZero(status, err))
 	if err != nil {
