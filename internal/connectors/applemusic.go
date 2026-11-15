@@ -62,6 +62,8 @@ type AppleMusicConnector struct {
 	mu           sync.Mutex
 	devToken     string
 	devTokenTime time.Time
+	parsedPEM    string
+	parsedKey    *ecdsa.PrivateKey
 }
 
 // NewAppleMusicConnector creates a connector wired to the given Host (issue #15 seam).
@@ -80,21 +82,12 @@ type appleMusicCreds struct {
 }
 
 func (c *AppleMusicConnector) headerValue(name string) string {
-	svc := c.host.ServiceConfig(AppleMusicServiceID)
-	if svc == nil {
-		return ""
-	}
-	for k, v := range svc.Headers {
-		if strings.EqualFold(k, name) {
-			return strings.TrimSpace(v)
-		}
-	}
-	return ""
+	return serviceHeader(c.host, AppleMusicServiceID, name)
 }
 
 // credentials resolves the stored MusicKit key material and Music User
-// Token. The parsed key is cached inside the returned value only; the raw
-// PEM never leaves the connector.
+// Token. The parsed key is cached (keyed by the PEM text, so a rotated key
+// re-parses once); the raw PEM never leaves the connector.
 func (c *AppleMusicConnector) credentials() (appleMusicCreds, error) {
 	creds := appleMusicCreds{
 		KeyID:     c.headerValue(appleMusicKeyIDHeader),
@@ -105,12 +98,29 @@ func (c *AppleMusicConnector) credentials() (appleMusicCreds, error) {
 	if creds.KeyID == "" || creds.IssuerID == "" || pemText == "" {
 		return appleMusicCreds{}, fmt.Errorf("apple music key material missing (key id, issuer id, private key)")
 	}
-	key, err := parseAppleMusicPrivateKey(pemText)
+	key, err := c.privateKey(pemText)
 	if err != nil {
 		return appleMusicCreds{}, err
 	}
 	creds.PrivateKey = key
 	return creds, nil
+}
+
+// privateKey parses (and caches) the MusicKit .p8 so the per-request auth
+// path does not re-run x509 parsing on every call.
+func (c *AppleMusicConnector) privateKey(pemText string) (*ecdsa.PrivateKey, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.parsedKey != nil && c.parsedPEM == pemText {
+		return c.parsedKey, nil
+	}
+	key, err := parseAppleMusicPrivateKey(pemText)
+	if err != nil {
+		return nil, err
+	}
+	c.parsedPEM = pemText
+	c.parsedKey = key
+	return key, nil
 }
 
 // parseAppleMusicPrivateKey reads a MusicKit .p8 (PKCS#8 EC key); SEC1 EC
@@ -144,11 +154,7 @@ func parseAppleMusicPrivateKey(pemText string) (*ecdsa.PrivateKey, error) {
 // developerToken returns the cached MusicKit developer token, minting a new
 // ES256 JWT when the cached one is near expiry. The token authorizes Aegis
 // against the Apple Music API; it is not a user credential.
-func (c *AppleMusicConnector) developerToken() (string, error) {
-	creds, err := c.credentials()
-	if err != nil {
-		return "", err
-	}
+func (c *AppleMusicConnector) developerToken(creds appleMusicCreds) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.devToken != "" && time.Since(c.devTokenTime) < appleMusicTokenTTL-5*time.Minute {
@@ -204,7 +210,7 @@ func (c *AppleMusicConnector) authHeaders(logger *slog.Logger) (string, http.Hea
 		logger.Debug("apple music credentials missing", "error", err)
 		return "", nil
 	}
-	tok, err := c.developerToken()
+	tok, err := c.developerToken(creds)
 	if err != nil {
 		logger.Error("apple music developer token", "error", err)
 		return "", nil
@@ -336,13 +342,22 @@ Aegis does not expose catalog search, playback control, or other Apple Music acc
 // Agent-facing shorthand paths map onto the MusicKit library API; the
 // developer token and Music User Token are attached on the way out.
 func (c *AppleMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
+	// RunProxy asks for the bearer and the extra headers separately; resolve
+	// the credential pair once per request and hand both out of the memo.
+	var once sync.Once
+	var tok string
+	var extra http.Header
+	resolve := func(logger *slog.Logger) (string, http.Header) {
+		once.Do(func() { tok, extra = c.authHeaders(logger) })
+		return tok, extra
+	}
 	RunProxy(c.host, w, r, remainingPath, ProxyOpts{
 		serviceID:    AppleMusicServiceID,
 		displayName:  AppleMusicServiceName,
 		defaultBase:  appleMusicAPIBase,
 		defaultTTL:   60 * time.Second,
-		token:        func(logger *slog.Logger) string { tok, _ := c.authHeaders(logger); return tok },
-		extraHeaders: func(logger *slog.Logger) http.Header { _, h := c.authHeaders(logger); return h },
+		token:        func(logger *slog.Logger) string { tok, _ := resolve(logger); return tok },
+		extraHeaders: func(logger *slog.Logger) http.Header { _, h := resolve(logger); return h },
 		missingToken: "no Apple Music credentials — add a MusicKit key and Music User Token in the admin setup",
 		rejectToken:  "Apple Music rejected the credentials — check the MusicKit key and Music User Token in the admin setup",
 		mapUpstream:  mapAppleMusicUpstreamPath,
@@ -352,19 +367,16 @@ func (c *AppleMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Request
 }
 
 // mapAppleMusicUpstreamPath rewrites agent shorthand onto MusicKit paths.
+// Anything else passes through unchanged.
 func mapAppleMusicUpstreamPath(path string, query url.Values) (string, url.Values, error) {
-	switch {
-	case strings.HasPrefix(path, "/playlists/"):
+	if strings.HasPrefix(path, "/playlists/") {
 		id := strings.TrimPrefix(path, "/playlists/")
 		if id == "" || strings.Contains(id, "/") {
 			return "", nil, fmt.Errorf("invalid apple music playlist path")
 		}
 		return "/me/library/playlists/" + url.PathEscape(id), query, nil
-	case path == "/me" || strings.HasPrefix(path, "/me/") || strings.HasPrefix(path, "/catalog/"):
-		return path, query, nil
-	default:
-		return path, query, nil
 	}
+	return path, query, nil
 }
 
 // expandPlaylistDetail pulls a library playlist's tracks into the raw
@@ -377,6 +389,8 @@ func (c *AppleMusicConnector) expandPlaylistDetail(ctx context.Context, path str
 	if id == "" || strings.Contains(id, "/") {
 		return raw
 	}
+	// An item cap on this convenience view — deliberately not
+	// shared.LibraryPageCap, which bounds pages on sync-path walks.
 	const trackCap = 200
 	var items []any
 	offset := 0
@@ -465,7 +479,8 @@ func (c *AppleMusicConnector) neutralPlaylistDetail(raw map[string]any) kinds.Pl
 	if res == nil {
 		return kinds.PlaylistDetail{}
 	}
-	if total, ok := shared.AsInt(raw["tracks_total"]); ok {
+	total, hasTotal := shared.AsInt(raw["tracks_total"])
+	if hasTotal {
 		res["tracks_total"] = total
 	}
 	base := neutralAppleMusicPlaylist(res)
@@ -477,7 +492,7 @@ func (c *AppleMusicConnector) neutralPlaylistDetail(raw map[string]any) kinds.Pl
 		}
 		detail.Tracks = append(detail.Tracks, neutralAppleMusicSong(obj))
 	}
-	if total, ok := shared.AsInt(raw["tracks_total"]); ok {
+	if hasTotal {
 		detail.TotalTracks = total
 	}
 	return detail
@@ -656,11 +671,7 @@ func neutralAppleMusicPlaylist(res map[string]any) kinds.Playlist {
 	if d, ok := attrs["description"].(map[string]any); ok {
 		desc, _ = d["standard"].(string)
 	}
-	owner := ""
 	trackCount := 0
-	if meta, ok := res["tracks_meta"].(map[string]any); ok {
-		trackCount, _ = shared.AsInt(meta["total"])
-	}
 	if total, ok := shared.AsInt(res["tracks_total"]); ok {
 		trackCount = total
 	}
@@ -673,17 +684,10 @@ func neutralAppleMusicPlaylist(res map[string]any) kinds.Playlist {
 			extra["version_hash"] = hash
 		}
 	}
-	urlStr := ""
-	if id != "" {
-		urlStr = "https://music.apple.com/" + "playlist/" + id
-	}
-	if u, _ := attrs["url"].(string); u != "" {
-		urlStr = u
-	}
+	urlStr, _ := attrs["url"].(string)
 	return kinds.Playlist{
 		Name:        name,
 		Description: desc,
-		Owner:       owner,
 		TrackCount:  trackCount,
 		Sources: []kinds.PlaylistSource{
 			kinds.PrimaryPlaylistSource(AppleMusicServiceID, AppleMusicServiceName, id, urlStr, extra),
@@ -735,12 +739,13 @@ func (c *AppleMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]ki
 }
 
 // listAppleMusicPaged walks a MusicKit list endpoint under the shared page
-// cap. map returns the neutral value and whether it is worth keeping.
+// cap. map returns the neutral value and whether it is worth keeping;
+// truncated reports pages remained at the cap.
 func listAppleMusicPaged[T any](ctx context.Context, c *AppleMusicConnector, path string, pageSize int,
 	mapFn func(res map[string]any) (T, bool)) ([]T, bool, error) {
 	var out []T
 	offset := 0
-	for {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		q := url.Values{"limit": []string{strconv.Itoa(pageSize)}, "offset": []string{strconv.Itoa(offset)}}
 		raw, _, err := c.apiJSON(ctx, "GET", path, q, nil)
 		if err != nil {
@@ -761,10 +766,8 @@ func listAppleMusicPaged[T any](ctx context.Context, c *AppleMusicConnector, pat
 			return out, false, nil
 		}
 		offset += len(data)
-		if len(out) >= shared.LibraryPageCap {
-			return out[:shared.LibraryPageCap], true, nil
-		}
 	}
+	return out, true, nil
 }
 
 // --- catalog helpers ---
@@ -818,15 +821,8 @@ func catalogSongFrom(res map[string]any) catalogSong {
 	}
 }
 
-// catalogByISRC looks songs up by ISRC — the reliable identity lookup that
-// makes Apple Music a high-fidelity mirror target. Returns every hit so the
-// caller can duration-guard the pick (the same ISRC can appear on several
-// album releases).
-func (c *AppleMusicConnector) catalogByISRC(ctx context.Context, isrc string) ([]catalogSong, error) {
-	if isrc == "" {
-		return nil, nil
-	}
-	q := url.Values{"filter[isrc]": []string{isrc}}
+// catalogSongs runs one catalog songs query and maps the hits.
+func (c *AppleMusicConnector) catalogSongs(ctx context.Context, q url.Values) ([]catalogSong, error) {
 	raw, _, err := c.apiJSON(ctx, "GET", "/catalog/"+url.PathEscape(c.storefront(ctx))+"/songs", q, nil)
 	if err != nil {
 		return nil, err
@@ -842,6 +838,17 @@ func (c *AppleMusicConnector) catalogByISRC(ctx context.Context, isrc string) ([
 		}
 	}
 	return out, nil
+}
+
+// catalogByISRC looks songs up by ISRC — the reliable identity lookup that
+// makes Apple Music a high-fidelity mirror target. Returns every hit so the
+// caller can duration-guard the pick (the same ISRC can appear on several
+// album releases).
+func (c *AppleMusicConnector) catalogByISRC(ctx context.Context, isrc string) ([]catalogSong, error) {
+	if isrc == "" {
+		return nil, nil
+	}
+	return c.catalogSongs(ctx, url.Values{"filter[isrc]": []string{isrc}})
 }
 
 // catalogSearch runs a name query against the catalog songs search.
@@ -852,22 +859,7 @@ func (c *AppleMusicConnector) catalogSearch(ctx context.Context, term string, li
 	if limit <= 0 || limit > 25 {
 		limit = 5
 	}
-	q := url.Values{"term": []string{term}, "types": []string{"songs"}, "limit": []string{strconv.Itoa(limit)}}
-	raw, _, err := c.apiJSON(ctx, "GET", "/catalog/"+url.PathEscape(c.storefront(ctx))+"/songs", q, nil)
-	if err != nil {
-		return nil, err
-	}
-	var out []catalogSong
-	for _, item := range appleMusicData(raw) {
-		obj, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if s := catalogSongFrom(obj); s.ID != "" {
-			out = append(out, s)
-		}
-	}
-	return out, nil
+	return c.catalogSongs(ctx, url.Values{"term": []string{term}, "types": []string{"songs"}, "limit": []string{strconv.Itoa(limit)}})
 }
 
 // catalogByIDs fetches catalog songs by id in one call (ISRC enrichment).
@@ -875,22 +867,7 @@ func (c *AppleMusicConnector) catalogByIDs(ctx context.Context, ids []string) ([
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	q := url.Values{"ids": []string{strings.Join(ids, ",")}}
-	raw, _, err := c.apiJSON(ctx, "GET", "/catalog/"+url.PathEscape(c.storefront(ctx))+"/songs", q, nil)
-	if err != nil {
-		return nil, err
-	}
-	var out []catalogSong
-	for _, item := range appleMusicData(raw) {
-		obj, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if s := catalogSongFrom(obj); s.ID != "" {
-			out = append(out, s)
-		}
-	}
-	return out, nil
+	return c.catalogSongs(ctx, url.Values{"ids": []string{strings.Join(ids, ",")}})
 }
 
 // --- misc helpers ---

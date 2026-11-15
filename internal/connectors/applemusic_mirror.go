@@ -20,12 +20,9 @@ import (
 
 // --- reads ---
 
-// ListPlaylistItems implements kinds.PlaylistItemsProvider. One page of a
-// library playlist's tracks starting at the offset named by cursor. Only the
-// first page also fetches the playlist object, so the caller gets the ref
-// name/URL without paying for it on every step.
-func (c *AppleMusicConnector) ListPlaylistItems(ctx context.Context, playlistID, cursor string, limit int) (kinds.Playlist, kinds.TrackPage, error) {
-	ref := kinds.Playlist{Sources: []kinds.PlaylistSource{{Service: AppleMusicServiceID, ID: playlistID}}}
+// appleMusicPage parses a page cursor and clamps the limit: the cursor is a
+// plain offset so the caller's paging stays provider-free.
+func appleMusicPage(cursor string, limit int) (int, int, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
@@ -34,8 +31,21 @@ func (c *AppleMusicConnector) ListPlaylistItems(ctx context.Context, playlistID,
 		var err error
 		offset, err = strconv.Atoi(cursor)
 		if err != nil || offset < 0 {
-			return ref, kinds.TrackPage{}, errAppleMusicCursor(cursor)
+			return 0, 0, errAppleMusicCursor(cursor)
 		}
+	}
+	return offset, limit, nil
+}
+
+// ListPlaylistItems implements kinds.PlaylistItemsProvider. One page of a
+// library playlist's tracks starting at the offset named by cursor. Only the
+// first page also fetches the playlist object, so the caller gets the ref
+// name/URL without paying for it on every step.
+func (c *AppleMusicConnector) ListPlaylistItems(ctx context.Context, playlistID, cursor string, limit int) (kinds.Playlist, kinds.TrackPage, error) {
+	ref := kinds.Playlist{Sources: []kinds.PlaylistSource{{Service: AppleMusicServiceID, ID: playlistID}}}
+	offset, limit, err := appleMusicPage(cursor, limit)
+	if err != nil {
+		return ref, kinds.TrackPage{}, err
 	}
 	if offset == 0 {
 		raw, _, err := c.apiJSON(ctx, "GET", "/me/library/playlists/"+url.PathEscape(playlistID), nil, nil)
@@ -59,16 +69,9 @@ func (c *AppleMusicConnector) ListPlaylistItems(ctx context.Context, playlistID,
 // ListUserLikedTracksPage implements kinds.LikedTrackPageProvider: one page
 // of library songs. Chained sync jobs step one upstream page at a time.
 func (c *AppleMusicConnector) ListUserLikedTracksPage(ctx context.Context, cursor string, limit int) (kinds.TrackPage, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 100
-	}
-	offset := 0
-	if cursor != "" {
-		var err error
-		offset, err = strconv.Atoi(cursor)
-		if err != nil || offset < 0 {
-			return kinds.TrackPage{}, errAppleMusicCursor(cursor)
-		}
+	offset, limit, err := appleMusicPage(cursor, limit)
+	if err != nil {
+		return kinds.TrackPage{}, err
 	}
 	q := url.Values{"limit": []string{strconv.Itoa(limit)}, "offset": []string{strconv.Itoa(offset)}}
 	raw, _, err := c.apiJSON(ctx, "GET", "/me/library/songs", q, nil)
@@ -268,45 +271,16 @@ func (c *AppleMusicConnector) PlacePlaylistItems(ctx context.Context, playlistID
 	return result, nil
 }
 
-// SaveLikedTracks implements kinds.LikedTrackWriteProvider: add resolved
-// catalog songs to the library. Saving is create-only — a placement never
-// un-saves (issue #375), and "loved" has no enumerable read surface, so the
-// library is the liked/saved home (docs/connect/apple-music.md).
-func (c *AppleMusicConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
-	result := kinds.SaveLikedTracksResult{}
-	var catalogIDs []string
-	seen := map[string]bool{}
-	for _, t := range tracks {
-		placement, ok := c.resolveSongPlacement(ctx, t, &result.Skips)
-		if !ok {
-			continue
-		}
-		id := placement.catalogID()
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-		catalogIDs = append(catalogIDs, id)
-		result.Placed = append(result.Placed, placement.record)
-	}
-	if len(catalogIDs) == 0 {
-		return result, nil
-	}
-	if err := c.addToLibrary(ctx, "songs", catalogIDs); err != nil {
-		return result, err
-	}
-	result.Copied = len(catalogIDs)
-	return result, nil
-}
-
-// SaveAlbums implements kinds.AlbumWriteProvider: add resolved catalog
-// albums to the library. Create-only, like SaveLikedTracks.
-func (c *AppleMusicConnector) SaveAlbums(ctx context.Context, albums []kinds.Album) (kinds.SaveAlbumsResult, error) {
-	result := kinds.SaveAlbumsResult{}
+// saveAppleMusicLibrary is the create-only save shape shared by
+// SaveLikedTracks and SaveAlbums: resolve each entity through its ladder,
+// dedupe by catalog id, then add the batch to the library. Placed and Skips
+// are returned even when the add fails, so the caller reports partial work.
+func saveAppleMusicLibrary[T any](ctx context.Context, c *AppleMusicConnector, kind string, items []T,
+	resolve func(context.Context, T, *[]kinds.PlaceSkip) (appleMusicPlacement, bool)) (copied int, placed []kinds.PlaceRecord, skips []kinds.PlaceSkip, err error) {
 	var ids []string
 	seen := map[string]bool{}
-	for _, a := range albums {
-		placement, ok := c.resolveAlbumPlacement(ctx, a, &result.Skips)
+	for _, item := range items {
+		placement, ok := resolve(ctx, item, &skips)
 		if !ok {
 			continue
 		}
@@ -316,16 +290,31 @@ func (c *AppleMusicConnector) SaveAlbums(ctx context.Context, albums []kinds.Alb
 		}
 		seen[id] = true
 		ids = append(ids, id)
-		result.Placed = append(result.Placed, placement.record)
+		placed = append(placed, placement.record)
 	}
 	if len(ids) == 0 {
-		return result, nil
+		return 0, placed, skips, nil
 	}
-	if err := c.addToLibrary(ctx, "albums", ids); err != nil {
-		return result, err
+	if err := c.addToLibrary(ctx, kind, ids); err != nil {
+		return 0, placed, skips, err
 	}
-	result.Copied = len(ids)
-	return result, nil
+	return len(ids), placed, skips, nil
+}
+
+// SaveLikedTracks implements kinds.LikedTrackWriteProvider: add resolved
+// catalog songs to the library. Saving is create-only — a placement never
+// un-saves (issue #375), and "loved" has no enumerable read surface, so the
+// library is the liked/saved home (docs/connect/apple-music.md).
+func (c *AppleMusicConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
+	copied, placed, skips, err := saveAppleMusicLibrary(ctx, c, "songs", tracks, c.resolveSongPlacement)
+	return kinds.SaveLikedTracksResult{Copied: copied, Placed: placed, Skips: skips}, err
+}
+
+// SaveAlbums implements kinds.AlbumWriteProvider: add resolved catalog
+// albums to the library. Create-only, like SaveLikedTracks.
+func (c *AppleMusicConnector) SaveAlbums(ctx context.Context, albums []kinds.Album) (kinds.SaveAlbumsResult, error) {
+	copied, placed, skips, err := saveAppleMusicLibrary(ctx, c, "albums", albums, c.resolveAlbumPlacement)
+	return kinds.SaveAlbumsResult{Copied: copied, Placed: placed, Skips: skips}, err
 }
 
 // --- placement matching ---
@@ -415,6 +404,7 @@ func (c *AppleMusicConnector) searchSongPlacement(ctx context.Context, t kinds.T
 // resolveAlbumPlacement matches an album: service-local reference, then an
 // exact UPC catalog lookup, then a name search guarded by artist name.
 func (c *AppleMusicConnector) resolveAlbumPlacement(ctx context.Context, a kinds.Album, skips *[]kinds.PlaceSkip) (appleMusicPlacement, bool) {
+	name := placeAlbumDisplay(a)
 	for _, src := range a.Sources {
 		if src.Service != AppleMusicServiceID {
 			continue
@@ -429,7 +419,7 @@ func (c *AppleMusicConnector) resolveAlbumPlacement(ctx context.Context, a kinds
 		return appleMusicPlacement{
 			catalog: id,
 			record: kinds.PlaceRecord{
-				Name:       a.Name,
+				Name:       name,
 				ExternalID: id,
 				MatchedBy:  "ref",
 				EntityName: kinds.AlbumIdentityKey(a),
@@ -445,7 +435,7 @@ func (c *AppleMusicConnector) resolveAlbumPlacement(ctx context.Context, a kinds
 					return appleMusicPlacement{
 						catalog: id,
 						record: kinds.PlaceRecord{
-							Name:       a.Name,
+							Name:       name,
 							ExternalID: id,
 							MatchedBy:  kinds.AlbumMatchUPC,
 							EntityName: kinds.AlbumIdentityKey(a),
@@ -455,14 +445,10 @@ func (c *AppleMusicConnector) resolveAlbumPlacement(ctx context.Context, a kinds
 			}
 		}
 	}
-	term := a.Name
-	if len(a.Artists) > 0 {
-		term = a.Name + " " + a.Artists[0].Name
-	}
-	q := url.Values{"term": []string{term}, "types": []string{"albums"}, "limit": []string{"3"}}
+	q := url.Values{"term": []string{placeAlbumQuery(a)}, "types": []string{"albums"}, "limit": []string{"3"}}
 	raw, _, err := c.apiJSON(ctx, "GET", "/catalog/"+url.PathEscape(c.storefront(ctx))+"/albums", q, nil)
 	if err != nil {
-		*skips = append(*skips, kinds.PlaceSkip{Name: a.Name, Reason: err.Error()})
+		*skips = append(*skips, kinds.PlaceSkip{Name: name, Reason: err.Error()})
 		return appleMusicPlacement{}, false
 	}
 	if hit := firstResource(raw); hit != nil {
@@ -470,7 +456,7 @@ func (c *AppleMusicConnector) resolveAlbumPlacement(ctx context.Context, a kinds
 			return appleMusicPlacement{
 				catalog: id,
 				record: kinds.PlaceRecord{
-					Name:       a.Name,
+					Name:       name,
 					ExternalID: id,
 					MatchedBy:  kinds.TrackMatchName,
 					EntityName: kinds.AlbumIdentityKey(a),
@@ -478,7 +464,7 @@ func (c *AppleMusicConnector) resolveAlbumPlacement(ctx context.Context, a kinds
 			}, true
 		}
 	}
-	*skips = append(*skips, kinds.PlaceSkip{Name: a.Name, Reason: "no match on Apple Music"})
+	*skips = append(*skips, kinds.PlaceSkip{Name: name, Reason: "no match on Apple Music"})
 	return appleMusicPlacement{}, false
 }
 
@@ -550,6 +536,11 @@ func (c *AppleMusicConnector) addToLibrary(ctx context.Context, kind string, ids
 	return err
 }
 
+// appleMusicLibrarySongPrefix marks a MusicKit library-song id ("a." + the
+// song id). A source id carrying it is a library resource, so playlist
+// writes send it as a library-songs ref rather than a catalog song.
+const appleMusicLibrarySongPrefix = "a."
+
 // appleMusicTrackRefs maps placements onto the resource-identifier shapes
 // the playlist write takes: library songs keep their library id, everything
 // else is a catalog song id.
@@ -557,7 +548,7 @@ func appleMusicTrackRefs(tracks []appleMusicPlacement) []map[string]string {
 	refs := make([]map[string]string, 0, len(tracks))
 	for _, t := range tracks {
 		switch {
-		case t.libraryID != "" && strings.HasPrefix(t.libraryID, "a."):
+		case t.libraryID != "" && strings.HasPrefix(t.libraryID, appleMusicLibrarySongPrefix):
 			refs = append(refs, map[string]string{"id": t.libraryID, "type": "library-songs"})
 		case t.catalog != "":
 			refs = append(refs, map[string]string{"id": t.catalog, "type": "songs"})
