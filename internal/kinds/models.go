@@ -555,6 +555,25 @@ type DocumentSource struct {
 	Extra map[string]any `json:"extra,omitempty"`
 }
 
+// EmailAttachmentDocumentType classifies a Document that is one MIME
+// attachment of an email message.
+const EmailAttachmentDocumentType = "email-attachment"
+
+// AttachmentRef is one MIME attachment summary on a message. It is the
+// shape of MessageSource.Extra["attachments"] entries and of the archive
+// row's stored summaries — the same wire shape on every ingest source.
+type AttachmentRef struct {
+	// ID is the service-local attachment id (Gmail attachment id, or the
+	// MIME part path like "1.2" for raw RFC822 copies).
+	ID string `json:"id"`
+	// Filename is the attachment's file name when the part declares one.
+	Filename string `json:"filename,omitempty"`
+	// MimeType is the part's media type.
+	MimeType string `json:"mime_type,omitempty"`
+	// Size is the decoded payload size in bytes.
+	Size int `json:"size,omitempty"`
+}
+
 // DocumentList is the neutral response for listing documents — either for a
 // single service or aggregated across document-capable services.
 type DocumentList struct {

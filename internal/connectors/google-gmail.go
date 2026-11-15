@@ -1283,37 +1283,26 @@ func (c *GoogleGmailConnector) NeutralAttachmentDocument(raw GoogleGmailMessage,
 		Canonical:   true,
 		BlobURL:     proxyRoot + "/messages/" + url.PathEscape(raw.ID) + "/attachments/" + url.PathEscape(att.ID),
 	}
-	title := att.Filename
-	if title == "" {
-		title = strings.TrimSpace(GmailHeaderValue(raw, "Subject"))
-	}
-	if title == "" {
-		title = att.ID
-	}
 	sentAt := GmailInternalDateRFC3339(raw.InternalDate)
 	if sentAt == "" {
 		sentAt = GmailHeaderDateRFC3339(GmailHeaderValue(raw, "Date"))
 	}
-	d := kinds.Document{
-		Title:        title,
-		MimeType:     att.MimeType,
-		CreatedAt:    sentAt,
-		DocumentType: "email-attachment",
-		Excerpt:      strings.TrimSpace(raw.Snippet),
-		EntityID:     docID,
-		Sources:      []kinds.DocumentSource{src},
+	msg := kinds.Message{
+		Subject:  strings.TrimSpace(GmailHeaderValue(raw, "Subject")),
+		Snippet:  raw.Snippet,
+		SentAt:   sentAt,
+		EntityID: GmailHeaderValue(raw, "Message-ID"),
 	}
-	fromList := MapGmailAddressHeader(GmailHeaderValue(raw, "From"))
-	if len(fromList) > 0 {
+	if fromList := MapGmailAddressHeader(GmailHeaderValue(raw, "From")); len(fromList) > 0 {
 		f := fromList[0]
-		if f.Name != "" {
-			d.Correspondent = f.Name
-		} else if len(f.Emails) > 0 {
-			d.Correspondent = f.Emails[0]
-		}
-		d.People = []kinds.Contact{f}
+		msg.From = &f
 	}
-	return d
+	return kinds.EmailAttachmentDocument(msg, kinds.AttachmentRef{
+		ID:       att.ID,
+		Filename: att.Filename,
+		MimeType: att.MimeType,
+		Size:     att.Size,
+	}, src)
 }
 
 // MapGoogleGmailMessage converts a Gmail message into the neutral shape.

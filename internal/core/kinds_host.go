@@ -239,6 +239,39 @@ func (a mailArchive) Parent(id string) string {
 	return connectors.MailSourceFor(id).Parent
 }
 
+// ListAttachments implements kinds.MailArchive (issue #215): attachment
+// documents of archived export copies, blob_urls at the library byte route.
+func (a mailArchive) ListAttachments(_ context.Context, q kinds.MailAttachmentQuery) ([]kinds.Document, bool, error) {
+	if a.s.mail == nil {
+		return nil, false, nil
+	}
+	return a.s.mail.AttachmentDocuments(a.s.baseURL, mail.AttachmentQuery{
+		Dataset: q.Dataset,
+		Q:       q.Q,
+		After:   q.After,
+		Before:  q.Before,
+		Cap:     q.Cap,
+	})
+}
+
+// AttachmentText implements kinds.MailArchive: the decoded text of one
+// archived attachment (issue #215).
+func (a mailArchive) AttachmentText(dataset, service, id string) (string, bool) {
+	if a.s.mail == nil {
+		return "", false
+	}
+	return a.s.mail.AttachmentText(dataset, service, id)
+}
+
+// AttachmentBytes implements kinds.MailArchive: one archived attachment's
+// bytes (issue #215).
+func (a mailArchive) AttachmentBytes(dataset, service, id string) ([]byte, string, string, bool) {
+	if a.s.mail == nil {
+		return nil, "", "", false
+	}
+	return a.s.mail.AttachmentBytes(dataset, service, id)
+}
+
 // library returns the agent data plane, built lazily so &Server{} fixtures
 // fail open. Production wires it at startup (after user-defined kinds load)
 // so the UDK registry is captured.

@@ -101,3 +101,66 @@ func TestMergeDocuments_Empty(t *testing.T) {
 		t.Fatal("MergeDocuments(nil) should be nil")
 	}
 }
+
+func TestEmailAttachmentIdentity_MergesAcrossSources(t *testing.T) {
+	// The same attachment known to a live provider and an archived export
+	// copy of one message joins on Message-ID + content markers even though
+	// the service-local ids differ (issue #215).
+	live := EmailAttachmentDocument(
+		Message{EntityID: "cert-1@example.com", Subject: "Certificate", SentAt: "2024-06-01T09:00:00Z"},
+		AttachmentRef{ID: "0.1", Filename: "cert.pdf", MimeType: "application/pdf", Size: 9},
+		DocumentSource{Service: "google-gmail", ID: "m1~0.1", Canonical: true},
+	)
+	archive := EmailAttachmentDocument(
+		Message{EntityID: "CERT-1@EXAMPLE.COM", Subject: "Certificate", SentAt: "2024-06-01T09:00:00Z"},
+		AttachmentRef{ID: "2", Filename: "Cert.PDF", MimeType: "application/pdf", Size: 9},
+		DocumentSource{Service: "google-takeout", ID: "msgid:cert-1@example.com~2"},
+	)
+	if DocumentIdentityKey(live) != DocumentIdentityKey(archive) {
+		t.Fatalf("copies of one attachment must share a key: %q vs %q",
+			DocumentIdentityKey(live), DocumentIdentityKey(archive))
+	}
+
+	merged := MergeDocuments([]Document{live, archive})
+	if len(merged) != 1 {
+		t.Fatalf("merged = %d documents, want 1: %+v", len(merged), merged)
+	}
+	if len(merged[0].Sources) != 2 {
+		t.Fatalf("sources = %+v, want 2", merged[0].Sources)
+	}
+	if merged[0].Match == "" {
+		t.Fatal("multi-source merge must record how identity was established")
+	}
+
+	// A different attachment of the same message stays distinct.
+	other := EmailAttachmentDocument(
+		Message{EntityID: "cert-1@example.com", Subject: "Certificate", SentAt: "2024-06-01T09:00:00Z"},
+		AttachmentRef{ID: "3", Filename: "scan.png", MimeType: "image/png", Size: 5},
+		DocumentSource{Service: "google-takeout", ID: "msgid:cert-1@example.com~3"},
+	)
+	if DocumentIdentityKey(live) == DocumentIdentityKey(other) {
+		t.Fatal("different attachments of one message must not merge")
+	}
+
+	// Same filename, different size: distinct content, distinct identity.
+	twin := EmailAttachmentDocument(
+		Message{EntityID: "cert-1@example.com", Subject: "Certificate", SentAt: "2024-06-01T09:00:00Z"},
+		AttachmentRef{ID: "4", Filename: "cert.pdf", MimeType: "application/pdf", Size: 128},
+		DocumentSource{Service: "google-takeout", ID: "msgid:cert-1@example.com~4"},
+	)
+	if DocumentIdentityKey(live) == DocumentIdentityKey(twin) {
+		t.Fatal("same name with different size must not merge")
+	}
+}
+
+func TestEmailAttachmentIdentity_MissingMessageIDFallsBack(t *testing.T) {
+	d := EmailAttachmentDocument(
+		Message{Subject: "No id", SentAt: "2024-06-01T09:00:00Z"},
+		AttachmentRef{ID: "1", Filename: "a.pdf"},
+		DocumentSource{Service: "google-takeout", ID: "blob:deadbeef~1"},
+	)
+	// Without a parent Message-ID the provider-local entity id keys it.
+	if DocumentIdentityKey(d) != "entity:blob:deadbeef~1" {
+		t.Fatalf("key = %q", DocumentIdentityKey(d))
+	}
+}

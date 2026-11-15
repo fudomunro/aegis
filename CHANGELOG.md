@@ -7,6 +7,21 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Takeout mail attachments are now documents (issue #215).** The mail
+  import parses MIME attachment summaries at ingest (they ride
+  `sources[].extra.attachments` in the same wire shape live Gmail already
+  used) and the archive persists them on the row. Attachments of read-only
+  export sources surface in `GET /v1/library/documents` as
+  `email-attachment` documents, and their bytes are fetchable at
+  `GET /v1/library/documents/{service}/{id}/bytes` — the `blob_url` those
+  copies carry — so historical mail that exists only in a Takeout export can
+  contribute paperwork without paging live Gmail. Canonical (live) sources
+  keep their own attachment surface; when both sides know one attachment of
+  a message, the listing merges them into a single document with one source
+  per copy (identity: Message-ID + filename + type + size). Rows imported
+  before this change are examined lazily on first listing. Parse failures
+  stay fail-open: a bad part is skipped, the message is kept.
+
 - **Microsoft 365 / Outlook calendar and contacts (issue #145).** Two
   Graph connectors — `microsoft-calendar` (`/me/calendarView`, free/busy
   view included) and `microsoft-contacts` (`/me/contacts`) — serving

@@ -43,6 +43,11 @@ type MailSource struct {
 // mailSources lists the declarations beside each ingest.
 var mailSources = []MailSource{GmailMailSource, TakeoutMailSource}
 
+// MailSources returns every declared ingest source (issue #286).
+func MailSources() []MailSource {
+	return append([]MailSource(nil), mailSources...)
+}
+
 // MailSourceFor returns the declaration for an ingest source — the zero
 // value (no parent, non-canonical) when the source is undeclared.
 func MailSourceFor(service string) MailSource {

@@ -313,6 +313,8 @@ jobs:
             FuzzWalkMboxFrom
             FuzzIsMboxFromLine
             FuzzTakeoutMessageID
+            FuzzRFC822Attachments
+            FuzzRFC822AttachmentPart
           )
           for t in "${connectors_targets[@]}"; do
             echo "==> ${t}"

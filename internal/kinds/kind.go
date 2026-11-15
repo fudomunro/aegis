@@ -67,8 +67,8 @@ type Deps struct {
 	// local-source shape, not a pipeline branch (issue #312). Kinds pass
 	// their own permission key; the hub never names a kind (issue #393).
 	LocalSource func(kind string) bool
-	// MailArchive is the messages kind's declared local collection source
-	// (issue #139). Nil disables it.
+	// MailArchive is the messages and documents kinds' declared local
+	// collection source (issue #139/#215). Nil disables it.
 	MailArchive MailArchive
 }
 

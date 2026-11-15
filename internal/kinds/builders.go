@@ -2,6 +2,7 @@ package kinds
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -263,4 +264,63 @@ func CloneTransaction(t Transaction) Transaction {
 		}
 	}
 	return cp
+}
+
+// EmailAttachmentDocument builds the neutral email-attachment document for
+// one MIME attachment of msg (issue #215): the shared shape live Gmail and
+// archived export copies both use, so copies of one attachment merge.
+// src carries the service-local copy identity and its blob_url.
+func EmailAttachmentDocument(msg Message, att AttachmentRef, src DocumentSource) Document {
+	title := att.Filename
+	if title == "" {
+		title = strings.TrimSpace(msg.Subject)
+	}
+	if title == "" {
+		title = att.ID
+	}
+	d := Document{
+		Title:        title,
+		MimeType:     att.MimeType,
+		CreatedAt:    msg.SentAt,
+		DocumentType: EmailAttachmentDocumentType,
+		Excerpt:      strings.TrimSpace(msg.Snippet),
+		EntityID:     src.ID,
+		Sources:      []DocumentSource{src},
+		Extra:        EmailAttachmentIdentityExtra(msg.EntityID, att),
+	}
+	if msg.From != nil {
+		f := *msg.From
+		if f.Name != "" {
+			d.Correspondent = f.Name
+		} else if len(f.Emails) > 0 {
+			d.Correspondent = f.Emails[0]
+		}
+		d.People = []Contact{f}
+	}
+	return d
+}
+
+// EmailAttachmentIdentityExtra is the source-independent identity of one
+// email attachment: the parent RFC Message-ID plus the attachment's content
+// markers. The document merge prefers it so copies of one attachment from
+// different ingest sources join (issue #215).
+func EmailAttachmentIdentityExtra(messageID string, att AttachmentRef) map[string]any {
+	msgID := NormalizeMessageID(messageID)
+	if msgID == "" {
+		return nil
+	}
+	return map[string]any{
+		"message_id": msgID,
+		"filename":   att.Filename,
+		"mime_type":  att.MimeType,
+		"size":       att.Size,
+	}
+}
+
+// DocumentBytesURL is the library byte-read URL for one document copy
+// (issue #215) — the blob_url export copies point at. Live providers keep
+// their own content-transport URLs.
+func DocumentBytesURL(baseURL, service, id string) string {
+	return strings.TrimRight(baseURL, "/") + "/v1/library/documents/" +
+		url.PathEscape(service) + "/" + url.PathEscape(id) + "/bytes"
 }
