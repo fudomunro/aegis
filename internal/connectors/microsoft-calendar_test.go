@@ -2,6 +2,7 @@ package connectors
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -199,5 +200,120 @@ func TestMicrosoftCalendar_ListCalendarEventsDelta(t *testing.T) {
 	}
 	if len(events) != 0 || next != "DELTA2" {
 		t.Fatalf("resumed events=%+v next=%q", events, next)
+	}
+}
+
+func TestMicrosoftCalendar_HandleProxy_GetEvent(t *testing.T) {
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"ev1","iCalUId":"ical-1","subject":"Design review",
+			"start":{"dateTime":"2026-01-05T09:00:00.0000000","timeZone":"UTC"},
+			"end":{"dateTime":"2026-01-05T10:00:00.0000000","timeZone":"UTC"}}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftCalendarServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftCalendarServiceID, "tok")
+	c := NewMicrosoftCalendarConnector(th)
+
+	req := httptest.NewRequest("GET", "/v1/services/microsoft-calendar/events/ev1", nil)
+	w := httptest.NewRecorder()
+	c.HandleProxy(w, req, "/events/ev1")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if gotPath != "/me/events/ev1" {
+		t.Fatalf("upstream path = %q, want /me/events/ev1", gotPath)
+	}
+	var ev kinds.CalendarEvent
+	if err := json.Unmarshal(w.Body.Bytes(), &ev); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if ev.Title != "Design review" || ev.EntityID != "ical-1" {
+		t.Fatalf("event = %+v", ev)
+	}
+}
+
+func TestMicrosoftCalendar_HandleProxy_ListCalendars(t *testing.T) {
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"value":[
+			{"id":"cal1","name":"Work","isDefaultCalendar":true},
+			{"id":"cal2","name":"Personal","isDefaultCalendar":false}
+		]}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftCalendarServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftCalendarServiceID, "tok")
+	c := NewMicrosoftCalendarConnector(th)
+
+	req := httptest.NewRequest("GET", "/v1/services/microsoft-calendar/calendars", nil)
+	w := httptest.NewRecorder()
+	c.HandleProxy(w, req, "/calendars")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if gotPath != "/me/calendars" {
+		t.Fatalf("upstream path = %q, want /me/calendars", gotPath)
+	}
+	var out struct {
+		Calendars []struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Default bool   `json:"is_default"`
+		} `json:"calendars"`
+		Total int `json:"total"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if out.Total != 2 || len(out.Calendars) != 2 || !out.Calendars[0].Default || out.Calendars[0].Name != "Work" {
+		t.Fatalf("calendars = %+v", out)
+	}
+}
+
+func TestMicrosoftCalendar_HandleProxy_ListCalendarEvents(t *testing.T) {
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"value":[
+			{"id":"ev1","iCalUId":"ical-1","subject":"Design review",
+			 "start":{"dateTime":"2026-01-05T09:00:00.0000000","timeZone":"UTC"},
+			 "end":{"dateTime":"2026-01-05T10:00:00.0000000","timeZone":"UTC"}}
+		]}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	th := newTestHostWithService(MicrosoftCalendarServiceID, ts.URL, "https://aegis.example.com")
+	th.setToken(MicrosoftCalendarServiceID, "tok")
+	c := NewMicrosoftCalendarConnector(th)
+
+	req := httptest.NewRequest("GET", "/v1/services/microsoft-calendar/calendars/cal1/events", nil)
+	w := httptest.NewRecorder()
+	c.HandleProxy(w, req, "/calendars/cal1/events")
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if gotPath != "/me/calendars/cal1/calendarView" {
+		t.Fatalf("upstream path = %q, want /me/calendars/cal1/calendarView", gotPath)
+	}
+	var list kinds.CalendarEventList
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if list.Total != 1 || list.Events[0].Title != "Design review" {
+		t.Fatalf("list = %+v", list)
+	}
+	if !list.Synced || list.Truncated {
+		t.Fatalf("envelope = %+v", list)
 	}
 }

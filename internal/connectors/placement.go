@@ -229,6 +229,18 @@ func artistNameCompatible(hit, want kinds.Artist) bool {
 	return got != "" && got == kinds.NormalizeIdentityKey(want.Name)
 }
 
+// splitContactName splits a display name into given/family for provider write
+// bodies: everything before the last space is the given name(s), so "Ada
+// Lovelace" and "Mary Ann Smith" land the family name last. A one-word name
+// is all given.
+func splitContactName(name string) (given, family string) {
+	name = strings.TrimSpace(name)
+	if i := strings.LastIndex(name, " "); i >= 0 {
+		return name[:i], name[i+1:]
+	}
+	return name, ""
+}
+
 // placeContactDisplay names a contact in skip/conflict reports.
 func placeContactDisplay(c kinds.Contact) string {
 	if c.Name != "" {

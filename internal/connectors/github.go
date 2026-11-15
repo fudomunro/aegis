@@ -300,23 +300,18 @@ func (c *GitHubConnector) ListUserContacts(ctx context.Context) ([]kinds.Contact
 	return contacts, truncated, nil
 }
 
-// listOrgs returns the organizations the authenticated user belongs to.
-func (c *GitHubConnector) listOrgs(ctx context.Context, token string) ([]string, bool, error) {
-	var out []string
+// githubPageList walks one GitHub collection endpoint under the page cap.
+func githubPageList[T any](ctx context.Context, c *GitHubConnector, token, path string) ([]T, bool, error) {
+	var out []T
 	truncated := false
 	for page := 1; page <= shared.LibraryPageCap; page++ {
-		var batch []struct {
-			Login string `json:"login"`
-		}
-		next, err := c.getJSON(ctx, token, "/user/orgs?per_page="+strconv.Itoa(githubPageSize)+"&page="+strconv.Itoa(page), &batch)
+		var batch []T
+		next, err := c.getJSON(ctx, token,
+			path+"?per_page="+strconv.Itoa(githubPageSize)+"&page="+strconv.Itoa(page), &batch)
 		if err != nil {
 			return out, truncated, err
 		}
-		for _, o := range batch {
-			if o.Login != "" {
-				out = append(out, o.Login)
-			}
-		}
+		out = append(out, batch...)
 		if !next {
 			return out, truncated, nil
 		}
@@ -325,52 +320,30 @@ func (c *GitHubConnector) listOrgs(ctx context.Context, token string) ([]string,
 		}
 	}
 	return out, truncated, nil
+}
+
+// listOrgs returns the organizations the authenticated user belongs to.
+func (c *GitHubConnector) listOrgs(ctx context.Context, token string) ([]string, bool, error) {
+	batch, truncated, err := githubPageList[struct {
+		Login string `json:"login"`
+	}](ctx, c, token, "/user/orgs")
+	out := make([]string, 0, len(batch))
+	for _, o := range batch {
+		if o.Login != "" {
+			out = append(out, o.Login)
+		}
+	}
+	return out, truncated, err
 }
 
 // listOrgMembers returns the members of one organization.
 func (c *GitHubConnector) listOrgMembers(ctx context.Context, token, org string) ([]githubUser, bool, error) {
-	var out []githubUser
-	truncated := false
-	for page := 1; page <= shared.LibraryPageCap; page++ {
-		var batch []githubUser
-		next, err := c.getJSON(ctx, token,
-			"/orgs/"+url.PathEscape(org)+"/members?per_page="+strconv.Itoa(githubPageSize)+"&page="+strconv.Itoa(page),
-			&batch)
-		if err != nil {
-			return out, truncated, err
-		}
-		out = append(out, batch...)
-		if !next {
-			return out, truncated, nil
-		}
-		if page == shared.LibraryPageCap {
-			truncated = true
-		}
-	}
-	return out, truncated, nil
+	return githubPageList[githubUser](ctx, c, token, "/orgs/"+url.PathEscape(org)+"/members")
 }
 
 // listFollowing returns the users the authenticated user follows.
 func (c *GitHubConnector) listFollowing(ctx context.Context, token string) ([]githubUser, bool, error) {
-	var out []githubUser
-	truncated := false
-	for page := 1; page <= shared.LibraryPageCap; page++ {
-		var batch []githubUser
-		next, err := c.getJSON(ctx, token,
-			"/user/following?per_page="+strconv.Itoa(githubPageSize)+"&page="+strconv.Itoa(page),
-			&batch)
-		if err != nil {
-			return out, truncated, err
-		}
-		out = append(out, batch...)
-		if !next {
-			return out, truncated, nil
-		}
-		if page == shared.LibraryPageCap {
-			truncated = true
-		}
-	}
-	return out, truncated, nil
+	return githubPageList[githubUser](ctx, c, token, "/user/following")
 }
 
 // fetchUser returns the full profile for one login.
@@ -383,7 +356,7 @@ func (c *GitHubConnector) fetchUser(ctx context.Context, token, login string) (g
 // getJSON GETs a GitHub API path and decodes the JSON body into out. It
 // returns hasMore=true when a Link header advertises a next page.
 func (c *GitHubConnector) getJSON(ctx context.Context, token, path string, out any) (hasMore bool, err error) {
-	u := strings.TrimRight(c.GitHubUpstreamBase(), "/") + path
+	u := shared.TrimRightSlash(c.GitHubUpstreamBase()) + path
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return false, err

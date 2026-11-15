@@ -3,6 +3,7 @@ package connectors
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -265,25 +266,10 @@ func (c *MicrosoftMailConnector) fetchMessage(ctx context.Context, token, id str
 }
 
 // microsoftMailGet performs one authenticated Graph GET with the mail body
-// limit (wider than the shared Graph plumbing's request limit). Headers are
-// returned so callers can honor throttle hints.
+// limit (wider than the shared Graph request limit). Headers are returned so
+// callers can honor throttle hints.
 func microsoftMailGet(ctx context.Context, token, url string) ([]byte, http.Header, int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Prefer", `outlook.timezone="UTC"`)
-	resp, err := shared.HTTPClient.Do(req)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	defer resp.Body.Close()
-	data, err := readAllLimit(resp.Body, microsoftMailBodyLimit)
-	if err != nil {
-		return nil, resp.Header, resp.StatusCode, err
-	}
-	return data, resp.Header, resp.StatusCode, nil
+	return microsoftGraphDo(ctx, token, http.MethodGet, url, "", nil, microsoftMailBodyLimit)
 }
 
 // ListMessages implements MessageProvider: the user's recent Outlook mail
@@ -381,15 +367,8 @@ func (c *MicrosoftMailConnector) IngestMail(ctx context.Context, sink MailSink, 
 		if remaining := maxMsgs - res.Stored - res.Failed; remaining < pageSize {
 			pageSize = remaining
 		}
-		listURL := c.archiveListURL(pageToken, query, pageSize)
-		data, headers, status, err := microsoftMailGet(ctx, token, listURL)
-		if err != nil {
-			return c.finishMailSync(sink, res, cursor, err)
-		}
-		if status == http.StatusUnauthorized {
-			return c.finishMailSync(sink, res, cursor, kinds.ErrUnauthorized)
-		}
-		if status == http.StatusTooManyRequests {
+		raw, headers, err := c.fetchArchivePage(ctx, token, pageToken, query, pageSize)
+		if errors.Is(err, errMailThrottled) {
 			// Throttled: stop and leave the cursor on this page so the
 			// remaining messages are retried after the window resets.
 			res.Truncated = true
@@ -397,41 +376,15 @@ func (c *MicrosoftMailConnector) IngestMail(ctx context.Context, sink MailSink, 
 			retry := cursor
 			retry.PageToken = pageToken
 			retry.Done = false
-			return c.finishMailSync(sink, res, retry,
-				fmt.Errorf("microsoft graph throttled mail list (%d)", status))
+			return c.finishMailSync(sink, res, retry, err)
 		}
-		if status != http.StatusOK {
-			return c.finishMailSync(sink, res, cursor,
-				fmt.Errorf("microsoft mail list returned %d: %s", status, truncateBytes(data, 200)))
-		}
-		var raw graphList[microsoftMailboxMessage]
-		if err := json.Unmarshal(data, &raw); err != nil {
+		if err != nil {
 			return c.finishMailSync(sink, res, cursor, err)
 		}
 		// pageFetchToken is the token that produced this page. Only advance
 		// the durable cursor after the whole page is stored (or skipped).
 		pageFetchToken := pageToken
-		truncatedMidPage := false
-		for _, item := range raw.Value {
-			if res.Stored+res.Failed >= maxMsgs {
-				res.Truncated = true
-				truncatedMidPage = true
-				break
-			}
-			if item.ID == "" {
-				continue
-			}
-			res.Listed++
-			if err := c.storeMailMessageArchive(sink, item, folders); err != nil {
-				// Fail-open per message: one bad item must not drop the batch.
-				logger.Warn("mail archive store failed", "id", item.ID, "error", err)
-				res.Failed++
-				continue
-			}
-			res.Stored++
-			res.LastStored = item.ID
-		}
-		if truncatedMidPage {
+		if c.storeArchivePage(sink, logger, folders, raw.Value, &res, maxMsgs) {
 			// Leave the cursor on this page: the next run re-listes it and
 			// the upsert absorbs the overlap, so no message is skipped.
 			break
@@ -492,6 +445,61 @@ func (c *MicrosoftMailConnector) storeMailMessageArchive(sink MailSink, raw micr
 	}
 	msg := MapMicrosoftMessage(raw, folders, true)
 	return sink.Store(MicrosoftMailServiceID, msg, payload)
+}
+
+// errMailThrottled reports a 429 on the archive list; the walk leaves the
+// cursor on the page and surfaces Retry-After instead of counting a failure.
+var errMailThrottled = errors.New("microsoft graph throttled mail list")
+
+// fetchArchivePage fetches and decodes one archive list page, classifying
+// the statuses the walk treats specially: unauthorized and throttled wrap
+// errMailThrottled/ErrUnauthorized, other non-200s carry the upstream text.
+// The headers ride along so the throttle path can read Retry-After.
+func (c *MicrosoftMailConnector) fetchArchivePage(ctx context.Context, token, pageToken, query string, pageSize int) (graphList[microsoftMailboxMessage], http.Header, error) {
+	listURL := c.archiveListURL(pageToken, query, pageSize)
+	data, headers, status, err := microsoftMailGet(ctx, token, listURL)
+	if err != nil {
+		return graphList[microsoftMailboxMessage]{}, nil, err
+	}
+	switch {
+	case status == http.StatusUnauthorized:
+		return graphList[microsoftMailboxMessage]{}, headers, kinds.ErrUnauthorized
+	case status == http.StatusTooManyRequests:
+		return graphList[microsoftMailboxMessage]{}, headers,
+			fmt.Errorf("%w (%d)", errMailThrottled, status)
+	case status != http.StatusOK:
+		return graphList[microsoftMailboxMessage]{}, headers,
+			fmt.Errorf("microsoft mail list returned %d: %s", status, truncateBytes(data, 200))
+	}
+	var raw graphList[microsoftMailboxMessage]
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return graphList[microsoftMailboxMessage]{}, headers, err
+	}
+	return raw, nil, nil
+}
+
+// storeArchivePage stores each listed message fail-open — one bad item must
+// not drop the batch. Reports true when the message cap cut the page short,
+// meaning the cursor must not advance past it.
+func (c *MicrosoftMailConnector) storeArchivePage(sink MailSink, logger *slog.Logger, folders map[string]string, items []microsoftMailboxMessage, res *shared.MailIngestResult, maxMsgs int) (truncatedMidPage bool) {
+	for _, item := range items {
+		if res.Stored+res.Failed >= maxMsgs {
+			res.Truncated = true
+			return true
+		}
+		if item.ID == "" {
+			continue
+		}
+		res.Listed++
+		if err := c.storeMailMessageArchive(sink, item, folders); err != nil {
+			logger.Warn("mail archive store failed", "id", item.ID, "error", err)
+			res.Failed++
+			continue
+		}
+		res.Stored++
+		res.LastStored = item.ID
+	}
+	return false
 }
 
 // finishMailSync records the outcome on the durable cursor and reports
@@ -564,21 +572,6 @@ func (c *MicrosoftMailConnector) mailboxFolders(ctx context.Context, token strin
 	return folders
 }
 
-// microsoftGraphTime maps a Graph instant string to RFC3339 UTC.
-func microsoftGraphTime(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	if parsed, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-		return parsed.UTC().Format(time.RFC3339)
-	}
-	if parsed, err := time.Parse("2006-01-02T15:04:05", raw); err == nil {
-		return parsed.UTC().Format(time.RFC3339)
-	}
-	return raw
-}
-
 // microsoftMailboxName normalizes a Graph folder display name onto the
 // neutral mailbox tokens the other mail sources use.
 func microsoftMailboxName(display string) string {
@@ -641,8 +634,8 @@ func MapMicrosoftMessage(raw microsoftMailboxMessage, folders map[string]string,
 	to := mapMicrosoftMailRecipients(raw.ToRecipients)
 	cc := mapMicrosoftMailRecipients(raw.CcRecipients)
 	mailbox := microsoftMailboxName(folders[raw.ParentFolderID])
-	sentAt := microsoftGraphTime(raw.SentDateTime)
-	receivedAt := microsoftGraphTime(raw.ReceivedDateTime)
+	sentAt := microsoftInstantToRFC3339(raw.SentDateTime)
+	receivedAt := microsoftInstantToRFC3339(raw.ReceivedDateTime)
 
 	var sender *kinds.Contact
 	if len(from) > 0 {

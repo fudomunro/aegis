@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/fudomunro/aegis/internal/kinds"
 )
@@ -163,9 +162,10 @@ func (c *MicrosoftCalendarConnector) PlaceEvents(ctx context.Context, events []k
 	return result, nil
 }
 
-// postEntity creates one Graph record and returns its id + etag.
-func microsoftPostEntity(ctx context.Context, base, token, path string, body any) (microsoftEntityRef, error) {
-	data, status, err := microsoftGraphRequest(ctx, token, http.MethodPost, microsoftGraphURL(base, path), body)
+// microsoftWriteEntity runs one Graph write and decodes the id + etag
+// response, mapping the failure statuses the write surface reports.
+func microsoftWriteEntity(ctx context.Context, base, token, method, path, etag string, body any) (microsoftEntityRef, error) {
+	data, status, err := microsoftGraphRequestIfMatch(ctx, token, method, microsoftGraphURL(base, path), etag, body)
 	if err != nil {
 		return microsoftEntityRef{}, err
 	}
@@ -184,25 +184,15 @@ func microsoftPostEntity(ctx context.Context, base, token, path string, body any
 	return ref, nil
 }
 
+// postEntity creates one Graph record and returns its id + etag.
+func microsoftPostEntity(ctx context.Context, base, token, path string, body any) (microsoftEntityRef, error) {
+	return microsoftWriteEntity(ctx, base, token, http.MethodPost, path, "", body)
+}
+
 // patchEntity updates one Graph record with If-Match and returns the new etag.
 func microsoftPatchEntity(ctx context.Context, base, token, path, etag string, body any) (string, error) {
-	data, status, err := microsoftGraphRequestIfMatch(ctx, token, http.MethodPatch, microsoftGraphURL(base, path), etag, body)
-	if err != nil {
-		return "", err
-	}
-	switch {
-	case status == http.StatusUnauthorized:
-		return "", kinds.ErrUnauthorized
-	case status == http.StatusConflict || status == http.StatusPreconditionFailed:
-		return "", ErrConflict
-	case status >= 400:
-		return "", graphWriteError(status, data)
-	}
-	var ref microsoftEntityRef
-	if err := json.Unmarshal(data, &ref); err != nil {
-		return "", err
-	}
-	return ref.ETag, nil
+	ref, err := microsoftWriteEntity(ctx, base, token, http.MethodPatch, path, etag, body)
+	return ref.ETag, err
 }
 
 // microsoftContactFromBody maps a neutral contact onto the Graph write body.
@@ -211,11 +201,9 @@ func microsoftContactFromBody(ct kinds.Contact) microsoftContactWrite {
 		DisplayName: ct.Name,
 		CompanyName: ct.Organization,
 	}
-	if fields := strings.Fields(ct.Name); len(fields) > 1 {
-		body.GivenName = fields[0]
-		body.Surname = strings.Join(fields[1:], " ")
-	} else if len(fields) == 1 {
-		body.GivenName = fields[0]
+	if given, family := splitContactName(ct.Name); given != "" || family != "" {
+		body.GivenName = given
+		body.Surname = family
 	}
 	for _, e := range ct.Emails {
 		body.EmailAddresses = append(body.EmailAddresses, struct {
@@ -223,8 +211,8 @@ func microsoftContactFromBody(ct kinds.Contact) microsoftContactWrite {
 		}{Address: e})
 	}
 	if len(ct.Phones) > 0 {
-		body.BusinessPhones = append(body.BusinessPhones, ct.Phones...)
 		body.MobilePhone = ct.Phones[0]
+		body.BusinessPhones = append(body.BusinessPhones, ct.Phones[1:]...)
 	}
 	return body
 }

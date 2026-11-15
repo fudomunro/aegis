@@ -194,15 +194,16 @@ func (c *MicrosoftCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.
 	StreamProxy(w, r, c.MicrosoftCalendarUpstreamBase(), remainingPath, token, "Microsoft Calendar", logger)
 }
 
-func (c *MicrosoftCalendarConnector) HandleListEvents(w http.ResponseWriter, r *http.Request) {
-	events, truncated, err := c.ListEventsWithWindow(r.Context(), r.URL.Query())
+// writeEventList renders the neutral event-list envelope for one handler's
+// fetch result: 401 on missing credentials, sanitized 502 otherwise.
+func (c *MicrosoftCalendarConnector) writeEventList(w http.ResponseWriter, logMsg string, logArgs []any, events []kinds.CalendarEvent, truncated bool, err error) {
 	if err != nil {
 		if err == kinds.ErrUnauthorized {
 			shared.WriteJSONError(w, http.StatusUnauthorized,
 				"no valid Microsoft token — authorize at /v1/auth/"+MicrosoftCalendarServiceID+"/login")
 			return
 		}
-		slog.Warn("microsoft calendar list events failed", "error", err)
+		slog.Warn(logMsg, append([]any{"error", err}, logArgs...)...)
 		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch events from Microsoft")
 		return
 	}
@@ -229,6 +230,11 @@ func (c *MicrosoftCalendarConnector) HandleListEvents(w http.ResponseWriter, r *
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
+}
+
+func (c *MicrosoftCalendarConnector) HandleListEvents(w http.ResponseWriter, r *http.Request) {
+	events, truncated, err := c.ListEventsWithWindow(r.Context(), r.URL.Query())
+	c.writeEventList(w, "microsoft calendar list events failed", nil, events, truncated, err)
 }
 
 // microsoftCalendarItem is a Graph calendar summary.
@@ -282,34 +288,7 @@ func (c *MicrosoftCalendarConnector) HandleListCalendarEvents(w http.ResponseWri
 		return
 	}
 	events, truncated, err := c.ListEventsForCalendar(r.Context(), token, calendarID, r.URL.Query())
-	if err != nil {
-		slog.Warn("microsoft calendar events fetch failed", "calendar", calendarID, "error", err)
-		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch events from Microsoft")
-		return
-	}
-	if events == nil {
-		events = []kinds.CalendarEvent{}
-	}
-	result := kinds.CalendarEventList{
-		Events:    events,
-		Total:     len(events),
-		Synced:    true,
-		Truncated: truncated,
-		ByService: map[string]kinds.LibraryServiceStatus{
-			MicrosoftCalendarServiceID: {
-				Status:    kinds.LibraryStatusOK,
-				Count:     len(events),
-				Truncated: truncated,
-			},
-		},
-	}
-	data, err := json.Marshal(result)
-	if err != nil {
-		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build events list")
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	c.writeEventList(w, "microsoft calendar events fetch failed", []any{"calendar", calendarID}, events, truncated, err)
 }
 
 // HandleGetEvent fetches one event and maps it to the neutral shape.
@@ -336,7 +315,7 @@ func (c *MicrosoftCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *ht
 		shared.WriteJSONError(w, http.StatusBadGateway, "failed to parse Microsoft Graph response")
 		return
 	}
-	ev := MapMicrosoftCalendarEvent(raw, calendarID, "")
+	ev := MapMicrosoftCalendarEvent(raw, calendarID)
 	out, err := json.Marshal(ev)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to encode event")
@@ -426,7 +405,7 @@ func (c *MicrosoftCalendarConnector) ListCalendarEventsDelta(ctx context.Context
 			return nil, "", false, err
 		}
 		for _, item := range records {
-			mapped := MapMicrosoftCalendarEvent(item, "", "")
+			mapped := MapMicrosoftCalendarEvent(item, "")
 			if mapped.Title == "" && mapped.EntityID == "" && len(mapped.Sources) == 0 {
 				continue
 			}
@@ -449,36 +428,10 @@ func (c *MicrosoftCalendarConnector) ListEventsWithWindow(ctx context.Context, q
 	if token == "" {
 		return nil, false, kinds.ErrUnauthorized
 	}
-	timeMin, timeMax := MicrosoftCalendarDefaultWindow()
-	if q != nil {
-		if v := strings.TrimSpace(q.Get("timeMin")); v != "" {
-			timeMin = v
-		}
-		if v := strings.TrimSpace(q.Get("timeMax")); v != "" {
-			timeMax = v
-		}
-	}
-	next := c.calendarViewURL("", timeMin, timeMax, q)
-	var all []kinds.CalendarEvent
-	truncated := false
-	for page := 0; page < shared.LibraryPageCap && next != ""; page++ {
-		events, nextLink, tr, err := c.fetchEventPage(ctx, token, next, "")
-		if err != nil {
-			return nil, false, err
-		}
-		all = append(all, events...)
-		if tr {
-			truncated = true
-		}
-		next = nextLink
-		if page == shared.LibraryPageCap-1 && next != "" {
-			truncated = true
-		}
-	}
-	return all, truncated, nil
+	return c.ListEventsForCalendar(ctx, token, "", q)
 }
 
-// ListEventsForCalendar lists events for one calendar.
+// ListEventsForCalendar lists events for one calendar ("" = every calendar).
 func (c *MicrosoftCalendarConnector) ListEventsForCalendar(ctx context.Context, token, calendarID string, q url.Values) ([]kinds.CalendarEvent, bool, error) {
 	timeMin, timeMax := MicrosoftCalendarDefaultWindow()
 	if q != nil {
@@ -542,10 +495,9 @@ func (c *MicrosoftCalendarConnector) fetchEventPage(ctx context.Context, token, 
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, "", false, err
 	}
-	calName := ""
 	out := make([]kinds.CalendarEvent, 0, len(raw.Value))
 	for _, item := range raw.Value {
-		mapped := MapMicrosoftCalendarEvent(item, calendarID, calName)
+		mapped := MapMicrosoftCalendarEvent(item, calendarID)
 		if mapped.Title == "" && mapped.EntityID == "" && len(mapped.Sources) == 0 {
 			continue
 		}
@@ -591,7 +543,7 @@ func MicrosoftCalendarDefaultWindow() (timeMin, timeMax string) {
 // MapMicrosoftCalendarEvent converts a Graph event into the neutral shape.
 // iCalUId becomes the durable cross-service EntityID so Microsoft and Google
 // events merge on iCalUID (issue #145).
-func MapMicrosoftCalendarEvent(raw microsoftEvent, calendarID, calendarName string) kinds.CalendarEvent {
+func MapMicrosoftCalendarEvent(raw microsoftEvent, calendarID string) kinds.CalendarEvent {
 	startAt := microsoftTimeToRFC3339(raw.Start)
 	endAt := microsoftTimeToRFC3339(raw.End)
 
@@ -615,25 +567,21 @@ func MapMicrosoftCalendarEvent(raw microsoftEvent, calendarID, calendarName stri
 	if raw.Type != "" {
 		extra["event_type"] = raw.Type
 	}
-	if calendarName != "" && calendarName != calendarID {
-		extra["calendar_name"] = calendarName
-	}
 	if len(extra) > 0 {
 		src.Extra = extra
 	}
 
 	ev := kinds.CalendarEvent{
-		Title:        strings.TrimSpace(raw.Subject),
-		Description:  raw.BodyPreview,
-		StartAt:      startAt,
-		EndAt:        endAt,
-		AllDay:       raw.IsAllDay,
-		Location:     strings.TrimSpace(raw.Location.DisplayName),
-		Status:       microsoftEventStatus(raw.ShowAs, raw.IsCancelled),
-		CalendarID:   calendarID,
-		CalendarName: calendarName,
-		EntityID:     raw.ICalUId,
-		Sources:      []kinds.CalendarEventSource{src},
+		Title:       strings.TrimSpace(raw.Subject),
+		Description: raw.BodyPreview,
+		StartAt:     startAt,
+		EndAt:       endAt,
+		AllDay:      raw.IsAllDay,
+		Location:    strings.TrimSpace(raw.Location.DisplayName),
+		Status:      microsoftEventStatus(raw.ShowAs, raw.IsCancelled),
+		CalendarID:  calendarID,
+		EntityID:    raw.ICalUId,
+		Sources:     []kinds.CalendarEventSource{src},
 	}
 
 	if raw.Organizer != nil && (raw.Organizer.EmailAddress.Address != "" || raw.Organizer.EmailAddress.Name != "") {
