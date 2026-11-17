@@ -1,6 +1,7 @@
 package mail
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -302,5 +303,158 @@ func TestArchiveSearchAll(t *testing.T) {
 	// WithBody fills body text on All queries (issue #311 fetch/search).
 	if resp.Messages[0].Body == "" {
 		t.Fatalf("body missing: %+v", resp.Messages[0])
+	}
+}
+
+// searchTotal counts matches for the given free-text query.
+func searchTotal(t *testing.T, a *Archive, q string) int {
+	t.Helper()
+	resp, err := a.Search(SearchQuery{Q: q, Limit: 50})
+	if err != nil {
+		t.Fatalf("search %q: %v", q, err)
+	}
+	return resp.Total
+}
+
+// TestArchiveStoreBuffersUntilFlush pins the batched ingest write path:
+// Store buffers rows and they only become queryable at a flush point.
+// Ingest calls Upsert through Sink.Store and pays one commit per batch
+// instead of per message.
+func TestArchiveStoreBuffersUntilFlush(t *testing.T) {
+	a := openTestArchive(t)
+	for i := 0; i < 3; i++ {
+		if err := a.Store(sampleMailRecord(fmt.Sprintf("b%d", i), "buffered", "some body text")); err != nil {
+			t.Fatalf("store %d: %v", i, err)
+		}
+	}
+	if got := searchTotal(t, a, "buffered"); got != 0 {
+		t.Fatalf("buffered rows are queryable before flush: %d", got)
+	}
+	if err := a.Flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if got := searchTotal(t, a, "buffered"); got != 3 {
+		t.Fatalf("after flush got %d rows, want 3", got)
+	}
+	// Flush is idempotent on an empty buffer.
+	if err := a.Flush(); err != nil {
+		t.Fatalf("second flush: %v", err)
+	}
+}
+
+// TestArchiveSetMetaCommitsPending pins the ordering invariant the
+// ingests rely on: a durable position is written together with the rows
+// it covers. The takeout walk cursor rides on SetMeta.
+func TestArchiveSetMetaCommitsPending(t *testing.T) {
+	a := openTestArchive(t)
+	for i := 0; i < 2; i++ {
+		if err := a.Store(sampleMailRecord(fmt.Sprintf("m%d", i), "meta", "some body text")); err != nil {
+			t.Fatalf("store %d: %v", i, err)
+		}
+	}
+	if err := a.SetMeta("takeout:cursor", `{"offset":42}`); err != nil {
+		t.Fatalf("set meta: %v", err)
+	}
+	if got := searchTotal(t, a, "meta"); got != 2 {
+		t.Fatalf("rows did not commit with the meta write: %d", got)
+	}
+	v, err := a.GetMeta("takeout:cursor")
+	if err != nil || v != `{"offset":42}` {
+		t.Fatalf("meta = %q, %v", v, err)
+	}
+}
+
+// TestArchiveSaveSyncCursorCommitsPending pins the same invariant on the
+// sync cursor path used by the live Gmail and Graph walks.
+func TestArchiveSaveSyncCursorCommitsPending(t *testing.T) {
+	a := openTestArchive(t)
+	for i := 0; i < 2; i++ {
+		if err := a.Store(sampleMailRecord(fmt.Sprintf("c%d", i), "cursor", "some body text")); err != nil {
+			t.Fatalf("store %d: %v", i, err)
+		}
+	}
+	want := shared.MailIngestCursor{PageToken: "page-1", LastSyncAt: "2024-06-01T09:00:00Z"}
+	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, want); err != nil {
+		t.Fatalf("save cursor: %v", err)
+	}
+	if got := searchTotal(t, a, "cursor"); got != 2 {
+		t.Fatalf("rows did not commit with the cursor write: %d", got)
+	}
+	got, err := a.LoadSyncCursor(connectors.GoogleGmailServiceID)
+	if err != nil {
+		t.Fatalf("load cursor: %v", err)
+	}
+	if got.PageToken != want.PageToken || got.LastSyncAt != want.LastSyncAt {
+		t.Fatalf("cursor = %+v, want %+v", got, want)
+	}
+}
+
+// TestArchiveStoreAutoFlushes bounds the buffer: a long walk commits on
+// its own every ingestBatchSize rows so memory stays flat and a crash
+// cannot strand a whole export in the buffer. The remainder stays
+// buffered until the cursor write (or Flush) closes the batch.
+func TestArchiveStoreAutoFlushes(t *testing.T) {
+	a := openTestArchive(t)
+	n := ingestBatchSize + 5
+	for i := 0; i < n; i++ {
+		if err := a.Store(sampleMailRecord(fmt.Sprintf("a%d", i), "autoflush", "some body text")); err != nil {
+			t.Fatalf("store %d: %v", i, err)
+		}
+	}
+	if got := searchTotal(t, a, "autoflush"); got != ingestBatchSize {
+		t.Fatalf("auto-flush committed %d rows, want %d", got, ingestBatchSize)
+	}
+	if err := a.Flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+	if got := searchTotal(t, a, "autoflush"); got != n {
+		t.Fatalf("after flush got %d rows, want %d", got, n)
+	}
+}
+
+// TestArchiveCloseFlushes keeps rows from stranding in the buffer when a
+// run ends without a cursor write (fail-open callers that drop the error).
+func TestArchiveCloseFlushes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mail-archive.db")
+	a, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := a.Store(sampleMailRecord("z1", "closed", "some body text")); err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	if err := a.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	b, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer b.Close()
+	if got := searchTotal(t, b, "closed"); got != 1 {
+		t.Fatalf("row did not survive close: %d", got)
+	}
+}
+
+// TestSinkStoreCommitsWithCursor guards the sink wiring itself: Sink.Store
+// must buffer (not write immediately), so the ingest's cursor write is
+// what commits the batch.
+func TestSinkStoreCommitsWithCursor(t *testing.T) {
+	a := openTestArchive(t)
+	s := Sink{A: a}
+	msg := newMessage(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName,
+		"sink1", kinds.MessageChannelEmail, "sink subject", "snip", "2024-06-01T09:00:00Z")
+	msg.Body = "sink body text"
+	if err := s.Store(connectors.GoogleGmailServiceID, msg, []byte(`{"raw":true}`)); err != nil {
+		t.Fatalf("sink store: %v", err)
+	}
+	if got := searchTotal(t, a, "sink"); got != 0 {
+		t.Fatalf("sink store wrote through immediately: %d", got)
+	}
+	if err := s.SaveCursor(connectors.GoogleGmailServiceID, shared.MailIngestCursor{PageToken: "p"}); err != nil {
+		t.Fatalf("save cursor: %v", err)
+	}
+	if got := searchTotal(t, a, "sink"); got != 1 {
+		t.Fatalf("rows did not commit with the sink cursor write: %d", got)
 	}
 }

@@ -70,6 +70,9 @@ type MailSink interface {
 	HasMessage(service string, msg kinds.Message) (bool, error)
 	// Store upserts one message with its raw provider payload. Core
 	// compresses the payload and stamps service name, dataset, and FTS.
+	// Rows may buffer until the ingest persists its position (SaveCursor /
+	// MetaSet): core commits both in one transaction, so a durable cursor
+	// never runs ahead of the rows it covers.
 	Store(service string, msg kinds.Message, rawPayload []byte) error
 	// LoadCursor/SaveCursor round-trip the durable ingest position under
 	// the shared cursor keys; the cursor's LastSyncAt is what overviews

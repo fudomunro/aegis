@@ -18,7 +18,10 @@ func (s Sink) Store(service string, msg kinds.Message, rawPayload []byte) error 
 	if err != nil {
 		return err
 	}
-	return s.A.Upsert(RecordFromMessage(service, "", msg, gz))
+	// Buffered: the batch commits with the ingest position that covers it
+	// (Archive.SetMeta / SaveSyncCursor), so a durable cursor never runs
+	// ahead of the rows it claims.
+	return s.A.Store(RecordFromMessage(service, "", msg, gz))
 }
 
 func (s Sink) LoadCursor(service string) (shared.MailIngestCursor, error) {
