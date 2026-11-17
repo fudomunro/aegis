@@ -494,11 +494,8 @@ func (a *Archive) Get(service, id string) (Record, error) {
 		return Record{}, fmt.Errorf("mail archive disabled")
 	}
 	row := a.db.QueryRow(`
-SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
-       subject, snippet, from_name, from_email, to_json, cc_json,
-       sent_at, received_at, direction, is_read, body_text, dataset,
-       COALESCE(attachments_json, '')
-FROM mail_messages WHERE service=? AND service_msg_id=?`, service, id)
+SELECT `+mailRowColumns(true)+`
+FROM mail_messages m WHERE m.service=? AND m.service_msg_id=?`, service, id)
 	rec, err := scanMailRecord(row, true)
 	if err != nil {
 		return Record{}, err
@@ -562,7 +559,11 @@ func (a *Archive) Search(q SearchQuery) (SearchResponse, error) {
 	// Default remains newest-first to match live provider listings.
 	// Rows with empty sent_at sort last in both directions so they cannot
 	// win "oldest"/"newest" answers (issue #77 edge-missing-sent).
-	orderBy := `CASE WHEN m.sent_at = '' THEN 1 ELSE 0 END, m.sent_at DESC, m.id DESC`
+	// DESC (the default) needs no CASE to push dateless rows last: '' sorts
+	// below every timestamp, so ORDER BY can follow the mail_messages_sent
+	// index instead of sorting every match. ASC still needs the CASE, or ''
+	// would win "oldest" (issue #77 edge-missing-sent).
+	orderBy := `m.sent_at DESC, m.id DESC`
 	if strings.EqualFold(strings.TrimSpace(q.Sort), "asc") {
 		orderBy = `CASE WHEN m.sent_at = '' THEN 1 ELSE 0 END, m.sent_at ASC, m.id ASC`
 	}
@@ -601,10 +602,7 @@ func (a *Archive) Search(q SearchQuery) (SearchResponse, error) {
 	}
 
 	fts := strings.TrimSpace(q.Q)
-	querySQL := `SELECT m.service, m.service_msg_id, m.thread_id, m.message_id, m.mailbox, m.labels_json,
-       m.subject, m.snippet, m.from_name, m.from_email, m.to_json, m.cc_json,
-       m.sent_at, m.received_at, m.direction, m.is_read, m.body_text, m.dataset,
-       COALESCE(m.attachments_json, '') `
+	querySQL := `SELECT ` + mailRowColumns(q.WithBody) + ` `
 	queryArgs := args
 	if fts != "" {
 		match, _ := mailFTSMatch(fts)
@@ -729,13 +727,12 @@ func (a *Archive) hydrateMessageSiblings(msgs []kinds.Message, dataset string) [
 		placeholders = append(placeholders, "?")
 		args = append(args, id)
 	}
-	querySQL := `SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
-       subject, snippet, from_name, from_email, to_json, cc_json,
-       sent_at, received_at, direction, is_read, body_text, dataset,
-       COALESCE(attachments_json, '')
-       FROM mail_messages WHERE message_id IN (` + strings.Join(placeholders, ",") + `)`
+	// Siblings are merge participants, not page content: never select
+	// body_text here — it doubles the bytes for every search.
+	querySQL := `SELECT ` + mailRowColumns(false) + `
+       FROM mail_messages m WHERE m.message_id IN (` + strings.Join(placeholders, ",") + `)`
 	if dataset != "" {
-		querySQL += ` AND dataset = ?`
+		querySQL += ` AND m.dataset = ?`
 		args = append(args, dataset)
 	}
 	rows, err := a.db.Query(querySQL, args...)
@@ -966,6 +963,20 @@ func normalizeMailTimeBound(raw string, lower bool) string {
 	return raw
 }
 
+// mailRowColumns lists the columns scanMailRecord reads, in scan order.
+// body_text is large and the driver materializes every column a query
+// returns even when the scan ignores it, so it is only selected when the
+// caller wants the body — a page of results rarely does.
+func mailRowColumns(withBody bool) string {
+	cols := `m.service, m.service_msg_id, m.thread_id, m.message_id, m.mailbox, m.labels_json,
+       m.subject, m.snippet, m.from_name, m.from_email, m.to_json, m.cc_json,
+       m.sent_at, m.received_at, m.direction, m.is_read`
+	if withBody {
+		cols += `, m.body_text`
+	}
+	return cols + `, m.dataset, COALESCE(m.attachments_json, '')`
+}
+
 func scanMailRecord(row shared.RowScanner, withBody bool) (Record, error) {
 	var (
 		rec            Record
@@ -979,9 +990,12 @@ func scanMailRecord(row shared.RowScanner, withBody bool) (Record, error) {
 	scanDest := []any{
 		&rec.Service, &rec.ID, &rec.ThreadID, &rec.MessageID, &rec.Mailbox, &labelsJSON,
 		&rec.Subject, &rec.Snippet, &rec.FromName, &rec.FromEmail, &toJSON, &ccJSON,
-		&rec.SentAt, &rec.ReceivedAt, &rec.Direction, &isRead, &body, &rec.Dataset,
-		&attachmentsStr,
+		&rec.SentAt, &rec.ReceivedAt, &rec.Direction, &isRead,
 	}
+	if withBody {
+		scanDest = append(scanDest, &body)
+	}
+	scanDest = append(scanDest, &rec.Dataset, &attachmentsStr)
 	if err := row.Scan(scanDest...); err != nil {
 		return Record{}, err
 	}
