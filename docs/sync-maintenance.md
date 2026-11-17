@@ -111,10 +111,10 @@ that drives the connector against the mock connector (the drift-injection
 harness's saved-tracks shapes) — healthy pages must parse, learned renames
 must keep working, shape drift must be flagged, garbage must error — and
 files a `sync-failure` ticket when the behavior regresses. It runs three
-times a day on a host schedule (a laptop cron, or a scheduled GitHub
-Actions workflow) and never touches a live Aegis instance, a live provider,
-or credentials. The tiers above describe what live-account probes run
-against as canary accounts arrive.
+times a day on GitHub Actions (`.github/workflows/maintenance.yml`) and
+never touches a live Aegis instance, a live provider, or credentials. The
+tiers above describe what live-account probes run against as canary
+accounts arrive.
 
 Every observation carries: instance id, Aegis version/commit, timestamp,
 `service`/`kind`, and where possible `job_type`. Without the version stamp,
@@ -482,7 +482,7 @@ Prove the loop on one or two connectors before building fleet collection:
    agent-assisted with a human reviewer, using the ticket schema as-is.
 5. Only then: schedule canaries and automate ticket intake. — landed
    (issue #243): `aegis-dashboard canary` is the scheduled synthetic
-   exercise (three times a day, host cron or Actions — never a live
+   exercise (three times a day on GitHub Actions — never a live
    instance) and `aegis-dashboard intake` is the pickup side. Canary tier
    escalation (the risk tiers in phase 1) remains the eventual follow-on.
 

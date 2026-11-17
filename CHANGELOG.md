@@ -15,9 +15,11 @@ issue numbers; this file is where that context lives.
   parse to the fixture's tracks, learned renames must keep working, shape
   drift must be flagged, garbage must error) and files a `sync-failure`
   ticket through the tool's ticket surface when the behavior regresses. It
-  runs three times a day on a host schedule — a laptop cron today, a
-  scheduled GitHub Actions workflow when it moves there — and never touches
-  a live Aegis instance, a live provider, or credentials. Ticket intake is
+  runs three times a day on GitHub Actions
+  (`.github/workflows/maintenance.yml`) — the instance-free halves of the
+  loop tick there, with capture and scan staying on the instance — and
+  never touches a live Aegis instance, a live provider, or credentials.
+  Ticket intake is
   the pickup side: `aegis-dashboard intake` lists open `sync-failure`/`ready`
   tickets whose repro bundle is attached as fix-cycle work orders, oldest
   first, with the fixture/repro-test paths and expected/actual shape a fix

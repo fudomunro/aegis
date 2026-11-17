@@ -1,0 +1,62 @@
+name: Maintenance
+
+# The sync-maintenance loop's instance-free scheduled phases (issue #243):
+# the synthetic canary drives the connector against the mock connector and
+# files a sync-failure ticket when the behavior regresses, and ticket intake
+# publishes the fix-cycle pickup queue. Both need only the gh CLI — no live
+# Aegis, provider, or credentials — so they run here three times a day
+# instead of on a host cron. Instance-bound capture and scan stay with the
+# instance (docs/observability.md).
+on:
+  schedule:
+    - cron: '23 */8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+
+jobs:
+  loop:
+    name: Canary + intake
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The ticket is the record; the step goes red on a detected
+      # regression so the run history reads as the canary's health.
+      - name: Synthetic canary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          go run ./cmd/aegis-dashboard canary -repo "${{ github.repository }}" | tee canary-report.json
+          {
+            echo '### Synthetic canary'
+            echo '```json'
+            cat canary-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          jq -e '.result == "pass"' canary-report.json >/dev/null
+
+      - name: Ticket intake
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          go run ./cmd/aegis-dashboard intake -repo "${{ github.repository }}" | tee intake-report.json
+          {
+            echo '### Fix-cycle pickup queue'
+            echo '```json'
+            cat intake-report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
