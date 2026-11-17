@@ -92,6 +92,76 @@ go test -count=1 -run 'TestMailQuery|TestLibraryMerge|TestLibraryAggregates|Test
 CI uses only the small set. Do not commit large binary fixtures — generate
 stress data locally with `-seed-sample-stress`.
 
+### Performance benchmarks
+
+Measurement infrastructure for the I/O and CPU performance work (issue #75).
+Two layers: Go microbenchmarks for repeatable per-operation cost, and one
+manual end-to-end procedure for real disk-read numbers. Post before/after
+numbers on the performance issue when changing anything these cover — a
+benchmark without a recorded number is not evidence.
+
+**Microbenchmarks.** All are in `_bench_test.go` files beside the code they
+exercise and none run in CI (CI machines are too noisy to gate on):
+
+```bash
+# Mail archive write and read paths (per-message SQL + inline FTS)
+go test -bench 'BenchmarkArchive' -benchtime=2s ./internal/core/mail/
+
+# Takeout export walk + RFC822 parse only (no archive writes)
+go test -bench 'BenchmarkTakeoutWalk' -benchtime=2s ./internal/connectors/
+
+# Full -import-takeout run: walk + parse + identity check + SQLite ingest
+go test -bench 'BenchmarkImportTakeout' -benchtime=1x ./internal/cli/
+
+# Response cache hit cost and Set eviction churn
+go test -bench 'BenchmarkCache' -benchtime=2s ./internal/shared/
+
+# Pre-request hook injection (JSON round trip over a realistic body)
+go test -bench 'BenchmarkRequestInstructions' -benchtime=2s ./internal/core/inject/
+```
+
+`BenchmarkImportTakeout` is the headline number for ingest work: one
+iteration ingests 3000 messages across three batches, so the durable walk
+cursor resume is on the measured path. It reports `msgs/sec` and source
+`MB/s` alongside wall time; run it with `-benchtime=1x` because one
+iteration already costs hundreds of milliseconds.
+
+**Manual end-to-end procedure.** For real disk-read byte counts, which the
+microbenchmarks cannot see:
+
+```bash
+# 1. Generate a stress corpus (10k mail rows). This also fills
+#    <data-dir>/mail-archive.db — the import below must target a FRESH
+#    archive to measure ingest rather than skips.
+./aegis -data-dir /tmp/aegis-bench -seed-sample -seed-sample-stress
+
+# 2. Import the generated mbox into a fresh archive, watching I/O
+time ./aegis -import-takeout /tmp/aegis-bench/sample/sample-mail.mbox \
+  -mail-archive /tmp/aegis-bench/import-target.db \
+  -copy-ledger /tmp/aegis-bench/import-ledger.db \
+  -import-takeout-batch 2000
+```
+
+Record per run: wall time, `messages/sec` from the batch log lines, process
+read/write bytes (macOS `fs_usage -w -f filesys` or `pid_rusage`; Linux
+`/proc/<pid>/io` and `iostat -w 1 -W`), and archive size after (`du -h`).
+Compare the archive size against the source size — the gap is the write
+amplification being tracked. Repeat with the server also running against the
+same archive to see contention.
+
+The generated corpus is ~3.2MB (10k rows, short bodies — that scale is for
+search and read-path benchmarks, not byte volume). For ingest I/O numbers
+at real export scale, point the same two commands at an actual Takeout
+export, or rely on `BenchmarkImportTakeout`, whose fixture is deliberately
+multi-batch so the cursor resume is on the measured path.
+
+**What each number is for.** `BenchmarkImportTakeout` wall time and
+`msgs/sec` move when ingest SQL changes (batch transactions, deferred FTS,
+import PRAGMAs). `BenchmarkTakeoutWalk` moves when the export walk or
+parser changes. `BenchmarkCacheSetChurn` should stay flat as entry count
+grows — if per-op cost climbs, eviction is scanning more than it should.
+`BenchmarkRequestInstructions` is the chat-latency-path guard.
+
 ### Project structure
 
 ```
