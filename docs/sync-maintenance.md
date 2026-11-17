@@ -105,6 +105,17 @@ Two sources, deliberately in this order:
 | Read-only live | Real accounts, read scopes only | When test credentials exist |
 | Write | Mutating calls | **Disposable accounts only**, ever |
 
+Scheduling is landed (issue #243), outside the application like the rest of
+the loop tooling: `aegis-dashboard canary` is a synthetic regression canary
+that drives the connector against the mock connector (the drift-injection
+harness's saved-tracks shapes) — healthy pages must parse, learned renames
+must keep working, shape drift must be flagged, garbage must error — and
+files a `sync-failure` ticket when the behavior regresses. It runs three
+times a day on a host schedule (a laptop cron, or a scheduled GitHub
+Actions workflow) and never touches a live Aegis instance, a live provider,
+or credentials. The tiers above describe what live-account probes run
+against as canary accounts arrive.
+
 Every observation carries: instance id, Aegis version/commit, timestamp,
 `service`/`kind`, and where possible `job_type`. Without the version stamp,
 phase 2 cannot tell which code a failure refers to.
@@ -137,8 +148,13 @@ phase 2 cannot tell which code a failure refers to.
 ### Phase 3 — Fix PR
 
 The agent's job: turn the ticket's red test green without changing product
-semantics. Pickup is label-filtered — `gh issue list --label sync-failure
---label ready` — so `needs-fixture` tickets wait at triage. Sequence:
+semantics. Pickup is label-filtered and automated (issue #243):
+`aegis-dashboard intake -repo owner/name` lists open `sync-failure`/`ready`
+tickets whose repro bundle is attached — oldest first, as fix-cycle work
+orders — so `needs-fixture` tickets wait at triage and a scheduled driver
+can start the cycle without a human initiating each one. Tickets missing
+half their bundle are reported as incomplete, never silently dropped.
+Sequence:
 
 1. Reproduce: add the repro test from the bundle. **It must be red on main.**
 2. Fix the connector (or, rarely, core dispatch) behind that test.
@@ -464,7 +480,11 @@ Prove the loop on one or two connectors before building fleet collection:
    (a local scheduled job; manual trigger is fine to start).
 4. One end-to-end fix cycle — ideally a forced contract drift — done
    agent-assisted with a human reviewer, using the ticket schema as-is.
-5. Only then: schedule canaries and automate ticket intake.
+5. Only then: schedule canaries and automate ticket intake. — landed
+   (issue #243): `aegis-dashboard canary` is the scheduled synthetic
+   exercise (three times a day, host cron or Actions — never a live
+   instance) and `aegis-dashboard intake` is the pickup side. Canary tier
+   escalation (the risk tiers in phase 1) remains the eventual follow-on.
 
 Done means: a fixture captured at failure time becomes a red test an agent can
 turn green, and a reviewer can judge the PR without re-deriving the bug from

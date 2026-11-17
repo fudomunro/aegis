@@ -82,12 +82,26 @@ scanner rewrites only the evidence block on rescan and never touches triage
 prose or labels. It uses the `gh` CLI, so neither the instance nor the tool
 needs a GitHub token of its own; an empty `-repo` scans without ticketing
 and reports ticketable clusters as `disabled`. A local scheduled job is the
-intended trigger:
+intended trigger — capture and scan hourly, and the synthetic canary and
+ticket intake three times a day:
 
 ```cron
 0 * * * * curl -sS -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/signals" >/dev/null
 7 * * * * aegis-dashboard scan -repo owner/name -bundles "$DATA/maintenance" >/dev/null
+23 */8 * * * aegis-dashboard canary -repo owner/name
+37 */8 * * * aegis-dashboard intake -repo owner/name > "$DATA/maintenance/intake.json"
 ```
+
+The canary line needs no instance at all: `aegis-dashboard
+canary` drives the connector functionality against the mock connector
+in-process and files a `sync-failure` ticket when the behavior regresses —
+a laptop cron or a scheduled GitHub Actions workflow runs it the same way.
+Ticket intake is the phase 3 pickup: `aegis-dashboard intake` lists open
+`sync-failure` tickets the `ready` label says carry a complete repro
+bundle and prints them as fix-cycle work orders, oldest first —
+including the fixture/repro-test paths and the expected/actual shape that
+defines "fixed". Its stdout is the work-order feed a scheduled agent driver
+consumes to start fix cycles without a human initiating each one.
 
 The maintenance dashboard makes this work visible — as a separate tool, not
 an application surface. The published dashboard regenerates at
