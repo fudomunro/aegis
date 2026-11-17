@@ -60,7 +60,22 @@ func RequestInstructions(original []byte, content, provider, model string) (Resu
 	shape := detectBodyShape(full, provider, model)
 	res := Result{Shape: shape}
 
-	if containsContent(instructionCarrierText(full, shape), content) {
+	// Chat bodies carry instructions in their system/developer messages, and
+	// the injection below needs the same decoded message list — decode it
+	// once. Decoding it twice (scan, then inject) dominated this path's
+	// allocations (issue #75 measurements).
+	var chatMsgs []json.RawMessage
+	if shape == shared.BodyShapeChat {
+		raw, ok := full["messages"]
+		if !ok {
+			return res, ErrUnrecognizedBodyShape
+		}
+		if err := json.Unmarshal(raw, &chatMsgs); err != nil {
+			return res, ErrUnrecognizedBodyShape
+		}
+	}
+
+	if containsContent(instructionCarrierText(full, shape, chatMsgs), content) {
 		res.Body = original
 		res.AlreadyPresent = true
 		return res, nil
@@ -69,7 +84,7 @@ func RequestInstructions(original []byte, content, provider, model string) (Resu
 	var err error
 	switch shape {
 	case shared.BodyShapeChat:
-		err = injectChatMessages(full, content)
+		err = injectChatMessages(full, chatMsgs, content)
 	case shared.BodyShapeAnthropic:
 		err = injectAnthropicSystem(full, content)
 	case shared.BodyShapeResponses:
@@ -140,7 +155,10 @@ func containsContent(haystack, needle string) bool {
 }
 
 // instructionCarrierText extracts existing system/instruction text for dedupe.
-func instructionCarrierText(full map[string]json.RawMessage, shape string) string {
+// instructionCarrierText is where a prior injection would have landed:
+// the chat system/developer messages (already decoded by the caller),
+// Anthropic's system slot, or the Responses instructions/input carriers.
+func instructionCarrierText(full map[string]json.RawMessage, shape string, chatMsgs []json.RawMessage) string {
 	switch shape {
 	case shared.BodyShapeAnthropic:
 		return contentText(full["system"])
@@ -149,29 +167,35 @@ func instructionCarrierText(full map[string]json.RawMessage, shape string) strin
 		parts = append(parts, inputCarrierText(full["input"])...)
 		return strings.Join(parts, "\n")
 	default:
-		raw, ok := full["messages"]
-		if !ok {
-			return ""
-		}
-		var msgs []json.RawMessage
-		if err := json.Unmarshal(raw, &msgs); err != nil {
-			return ""
-		}
-		var parts []string
-		for _, m := range msgs {
-			var obj struct {
-				Role    string          `json:"role"`
-				Content json.RawMessage `json:"content"`
-			}
-			if err := json.Unmarshal(m, &obj); err != nil {
-				continue
-			}
-			if obj.Role == "system" || obj.Role == "developer" {
-				parts = append(parts, contentText(obj.Content))
-			}
-		}
-		return strings.Join(parts, "\n")
+		return chatSystemText(chatMsgs)
 	}
+}
+
+// chatSystemText flattens the text chat-shaped bodies carry in their
+// system/developer messages. The role check decodes only the role — the
+// content is cloned per message otherwise, and most messages are not
+// carriers.
+func chatSystemText(msgs []json.RawMessage) string {
+	var parts []string
+	for _, m := range msgs {
+		var role struct {
+			Role string `json:"role"`
+		}
+		if err := json.Unmarshal(m, &role); err != nil {
+			continue
+		}
+		if role.Role != "system" && role.Role != "developer" {
+			continue
+		}
+		var obj struct {
+			Content json.RawMessage `json:"content"`
+		}
+		if err := json.Unmarshal(m, &obj); err != nil {
+			continue
+		}
+		parts = append(parts, contentText(obj.Content))
+	}
+	return strings.Join(parts, "\n")
 }
 
 func inputCarrierText(raw json.RawMessage) []string {
@@ -231,15 +255,10 @@ func contentText(raw json.RawMessage) string {
 	return strings.Join(parts, "\n")
 }
 
-func injectChatMessages(full map[string]json.RawMessage, content string) error {
-	raw, ok := full["messages"]
-	if !ok {
-		return ErrUnrecognizedBodyShape
-	}
-	var msgs []json.RawMessage
-	if err := json.Unmarshal(raw, &msgs); err != nil {
-		return ErrUnrecognizedBodyShape
-	}
+// injectChatMessages prepends the instruction block as the first system
+// message. msgs is the already-decoded message list (RequestInstructions
+// decodes it once for both the scan and this write).
+func injectChatMessages(full map[string]json.RawMessage, msgs []json.RawMessage, content string) error {
 	sysMsg, err := json.Marshal(map[string]string{
 		"role":    "system",
 		"content": content,

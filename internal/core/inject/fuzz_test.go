@@ -82,7 +82,10 @@ func FuzzDetectBodyShape(f *testing.F) {
 		default:
 			t.Fatalf("unexpected shape %q", shape)
 		}
-		// Carrier text extraction must be total on any decoded object.
-		_ = instructionCarrierText(full, shape)
+		// Carrier text extraction must be total on any decoded object —
+		// including malformed message entries.
+		var msgs []json.RawMessage
+		_ = json.Unmarshal(full["messages"], &msgs)
+		_ = instructionCarrierText(full, shape, msgs)
 	})
 }
