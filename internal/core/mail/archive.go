@@ -164,14 +164,18 @@ type SearchQuery struct {
 // cursor/next_cursor. offset remains accepted for admin UI callers.
 type SearchResponse struct {
 	Messages []kinds.Message `json:"messages"`
-	Total    int             `json:"total"`
-	Limit    int             `json:"limit"`
-	Offset   int             `json:"offset"`
+	// Total is the merged match count inside the loaded window — the full
+	// filtered count only while Truncated is false. The window is sized to
+	// the page (see searchWindow), so a deep page or a big result set loads
+	// more rows and reports a bigger Total.
+	Total int `json:"total"`
+	Limit int `json:"limit"`
+	Offset int `json:"offset"`
 	// NextCursor continues the walk; omitted at the end (issue #185).
 	NextCursor string `json:"next_cursor,omitempty"`
 	Query      string `json:"query,omitempty"`
-	// Truncated reports the SQL merge window filled on an All query —
-	// more matches may exist (issue #311).
+	// Truncated reports that the load window filled — more matches may
+	// exist beyond Total (issue #311).
 	Truncated bool `json:"truncated,omitempty"`
 }
 
@@ -536,6 +540,35 @@ func (a *Archive) GetMerged(dataset, service, id string) (kinds.Message, bool) {
 // rather than raw (service, id) copies (issue #139).
 const mailSearchMergeCap = 5000
 
+// Page loads are windowed rather than always fetching the full merge cap:
+// a page of 50 results should not read every matching row. Merging
+// collapses multi-source copies, so the window needs more raw rows than the
+// page has messages, and it grows with the offset so a walk cannot stall on
+// collapse. Total reports the merged count inside the window — a lower
+// bound once the window fills (Truncated).
+const (
+	mailSearchPageWindowFactor = 4
+	mailSearchPageWindowFloor  = 200
+)
+
+// searchWindow returns how many raw rows one request may load: grown with
+// the page and its offset, floored so small pages still merge a useful
+// window, and bounded by mailSearchMergeCap. All-queries load the full
+// window (they return the whole match set).
+func searchWindow(offset, limit int, all bool) int {
+	if all {
+		return mailSearchMergeCap
+	}
+	w := (offset + limit) * mailSearchPageWindowFactor
+	if w < mailSearchPageWindowFloor {
+		w = mailSearchPageWindowFloor
+	}
+	if w > mailSearchMergeCap {
+		w = mailSearchMergeCap
+	}
+	return w
+}
+
 // Search runs FTS + structured filters. Limit defaults to 25 (cap
 // kinds.MaxPageLimit). Source rows that share an identity (RFC Message-ID,
 // else subject+from+sent_at) are merged into one Message with multi-source
@@ -562,10 +595,15 @@ func (a *Archive) Search(q SearchQuery) (SearchResponse, error) {
 	// DESC (the default) needs no CASE to push dateless rows last: '' sorts
 	// below every timestamp, so ORDER BY can follow the mail_messages_sent
 	// index instead of sorting every match. ASC still needs the CASE, or ''
-	// would win "oldest" (issue #77 edge-missing-sent).
-	orderBy := `m.sent_at DESC, m.id DESC`
+	// would win "oldest" (issue #77 edge-missing-sent). The message_id
+	// tiebreak mirrors the merge sort (MessageIdentityKey is "msgid:"+id),
+	// so rows arrive in the order the merge will rank them: the load window
+	// stays a stable prefix as it grows and a cursor walk cannot reshuffle
+	// pages. Rows without a Message-ID rank by their fallback key instead —
+	// rare, and only a tie group straddling a window edge can wobble.
+	orderBy := `m.sent_at DESC, m.message_id DESC, m.id DESC`
 	if strings.EqualFold(strings.TrimSpace(q.Sort), "asc") {
-		orderBy = `CASE WHEN m.sent_at = '' THEN 1 ELSE 0 END, m.sent_at ASC, m.id ASC`
+		orderBy = `CASE WHEN m.sent_at = '' THEN 1 ELSE 0 END, m.sent_at ASC, m.message_id ASC, m.id ASC`
 	}
 
 	where := []string{"1=1"}
@@ -615,8 +653,9 @@ func (a *Archive) Search(q SearchQuery) (SearchResponse, error) {
 	} else {
 		querySQL += `FROM mail_messages m WHERE ` + strings.Join(where, " AND ")
 	}
+	window := searchWindow(offset, limit, q.All)
 	querySQL += ` ORDER BY ` + orderBy + ` LIMIT ?`
-	queryArgs = append(queryArgs, mailSearchMergeCap)
+	queryArgs = append(queryArgs, window)
 
 	rows, err := a.db.Query(querySQL, queryArgs...)
 	if err != nil {
@@ -643,6 +682,8 @@ func (a *Archive) Search(q SearchQuery) (SearchResponse, error) {
 	merged := kinds.MergeMessages(a.hydrateMessageSiblings(msgs, q.Dataset))
 	sortMailMessages(merged, strings.EqualFold(strings.TrimSpace(q.Sort), "asc"))
 	total := len(merged)
+	// The window filled: Total is a lower bound and the walk may have more.
+	windowFilled := len(msgs) >= window
 	if q.All {
 		if merged == nil {
 			merged = []kinds.Message{}
@@ -652,18 +693,21 @@ func (a *Archive) Search(q SearchQuery) (SearchResponse, error) {
 			Total:     total,
 			Limit:     total,
 			Query:     fts,
-			Truncated: len(msgs) >= mailSearchMergeCap,
+			Truncated: windowFilled,
 		}, nil
 	}
 	if offset >= total {
-		return SearchResponse{Messages: []kinds.Message{}, Total: total, Limit: limit, Offset: offset, Query: fts}, nil
+		return SearchResponse{Messages: []kinds.Message{}, Total: total, Limit: limit, Offset: offset, Query: fts, Truncated: windowFilled}, nil
 	}
 	end := offset + limit
 	if end > total {
 		end = total
 	}
 	resp := SearchResponse{Messages: merged[offset:end], Total: total, Limit: limit, Offset: offset, Query: fts}
-	if end < total {
+	resp.Truncated = windowFilled
+	// A filled window means more matches may exist beyond Total, so the
+	// walk continues even when this window's page is exhausted.
+	if end < total || windowFilled {
 		resp.NextCursor = kinds.EncodeCursor(end)
 	}
 	return resp, nil

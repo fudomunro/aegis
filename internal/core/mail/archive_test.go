@@ -309,7 +309,7 @@ func TestArchiveSearchAll(t *testing.T) {
 // searchTotal counts matches for the given free-text query.
 func searchTotal(t *testing.T, a *Archive, q string) int {
 	t.Helper()
-	resp, err := a.Search(SearchQuery{Q: q, Limit: 50})
+	resp, err := a.Search(SearchQuery{Q: q, All: true})
 	if err != nil {
 		t.Fatalf("search %q: %v", q, err)
 	}
@@ -456,5 +456,95 @@ func TestSinkStoreCommitsWithCursor(t *testing.T) {
 	}
 	if got := searchTotal(t, a, "sink"); got != 1 {
 		t.Fatalf("rows did not commit with the sink cursor write: %d", got)
+	}
+}
+
+// TestSearchWindow sizes a page's load window to the page instead of
+// always fetching the full merge cap.
+func TestSearchWindow(t *testing.T) {
+	cases := []struct {
+		offset, limit int
+		all           bool
+		want          int
+	}{
+		{0, 25, false, mailSearchPageWindowFloor},
+		{0, 50, false, mailSearchPageWindowFloor},
+		{0, 200, false, 800},
+		{1000, 50, false, 4200},
+		{2000, 50, false, mailSearchMergeCap},
+		{0, 25, true, mailSearchMergeCap},
+	}
+	for _, c := range cases {
+		if got := searchWindow(c.offset, c.limit, c.all); got != c.want {
+			t.Errorf("searchWindow(%d,%d,%t) = %d, want %d", c.offset, c.limit, c.all, got, c.want)
+		}
+	}
+}
+
+// TestSearchWindowWalk pins the bounded-window contract end to end: Total
+// counts the loaded window (a lower bound once it fills), and the cursor
+// walk still reaches every message exactly once as the window grows.
+func TestSearchWindowWalk(t *testing.T) {
+	a := openTestArchive(t)
+	const n = 250
+	for i := 0; i < n; i++ {
+		if err := a.Upsert(sampleMailRecord(fmt.Sprintf("w%d", i), "windowed", "some body text")); err != nil {
+			t.Fatalf("seed %d: %v", i, err)
+		}
+	}
+
+	first, err := a.Search(SearchQuery{Q: "windowed", Limit: 10})
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+	if len(first.Messages) != 10 {
+		t.Fatalf("first page has %d messages, want 10", len(first.Messages))
+	}
+	if first.Total > mailSearchPageWindowFloor {
+		t.Fatalf("total %d exceeds the load window %d", first.Total, mailSearchPageWindowFloor)
+	}
+	if !first.Truncated {
+		t.Fatal("a full window must report truncated (total is a lower bound)")
+	}
+	if first.NextCursor == "" {
+		t.Fatal("a full window must continue the walk even when the page is complete")
+	}
+
+	seen := map[string]bool{}
+	for _, m := range first.Messages {
+		seen[m.Sources[0].ID] = true
+	}
+	cur := first.NextCursor
+	off := 0
+	for i := 0; i < 40 && cur != ""; i++ {
+		next, err := kinds.DecodeCursor(cur)
+		if err != nil {
+			t.Fatalf("decode cursor %q: %v", cur, err)
+		}
+		if next <= off {
+			t.Fatalf("cursor did not advance: %d -> %d", off, next)
+		}
+		off = next
+		resp, err := a.Search(SearchQuery{Q: "windowed", Limit: 10, Offset: off})
+		if err != nil {
+			t.Fatalf("page at %d: %v", off, err)
+		}
+		for _, m := range resp.Messages {
+			if len(m.Sources) == 0 {
+				t.Fatalf("message without sources: %+v", m)
+			}
+			id := m.Sources[0].ID
+			if seen[id] {
+				t.Fatalf("walk returned %s twice (offset %d)", id, off)
+			}
+			seen[id] = true
+		}
+		cur = resp.NextCursor
+	}
+	if cur != "" {
+		t.Fatalf("walk did not finish: cursor %q after %d messages", cur, len(seen))
+	}
+	if len(seen) != n {
+		t.Fatalf("walk saw %d messages, want %d", len(seen), n)
 	}
 }

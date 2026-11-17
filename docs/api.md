@@ -151,7 +151,7 @@ Every `GET /v1/library/{kind}` (built-in and user-defined) shares one agent-faci
 
 | Response field | Meaning |
 |----------------|---------|
-| `total` | Full **filtered** count for this request (not the page length). |
+| `total` | Matching items loaded for this request (not the page length). Equals the full **filtered** count only while `truncated` is false — sources may cap how much they load, so treat it as a lower bound when `truncated` is set. |
 | `next_cursor` | Pass as the next `cursor`. **Omitted when the walk is complete.** |
 | `truncated` | Upstream page-cap incompleteness (see below) — **not** “more pages in this response.” |
 | `synced` / `by_service` | Multi-source merge flag and per-service fetch status (unchanged). |
@@ -226,7 +226,7 @@ Returns the user's liked/saved tracks from every connected music service in Aegi
 }
 ```
 
-`total` is the full filtered count; `next_cursor` (when present) continues the page walk — see [Pagination and filters](api.md). When any service hits its **upstream** page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`. That flag is independent of `next_cursor`.
+`total` counts the matching items loaded for this request (the full filtered count while `truncated` is false); `next_cursor` (when present) continues the page walk — see [Pagination and filters](api.md). When any service hits its **upstream** page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`. That flag is independent of `next_cursor`.
 
 Cross-service merge prefers shared **ISRC** (`entity_id`, `match: "isrc"`), then **title + primary artist** via `NormalizeIdentityKey` (`match: "name"`). Spotify maps `/me/tracks` (saved library) and supplies ISRC when present; YouTube Music maps the channel liked-videos playlist, keeps only music-shaped items (category Music or a `" - Topic"` catalog channel), and strips YouTube title decoration so music videos can name-match catalog tracks.
 
