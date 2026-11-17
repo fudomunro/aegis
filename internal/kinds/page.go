@@ -13,8 +13,9 @@ import (
 //	request:  limit (default 100, max 500), cursor (opaque)
 //	response: next_cursor (omitted at end of the filtered set)
 //
-// total is the full filtered count across the merge; truncated stays about
-// upstream page-cap incompleteness, not the agent page window.
+// total is the count of matching items loaded for the request — the full
+// filtered count only while truncated is false. truncated stays about
+// source page-cap incompleteness, not the agent page window.
 const (
 	DefaultPageLimit = 100
 	MaxPageLimit     = 500
@@ -24,7 +25,8 @@ const (
 // library list response. Per-kind item arrays stay kind-named (contacts,
 // tracks, …); these fields are identical everywhere (issue #185).
 type LibraryListMeta struct {
-	// Total is the full filtered item count for the request (not the page).
+	// Total is the count of matching items loaded for the request (the full
+	// filtered count only while Truncated is false).
 	Total int `json:"total"`
 	// Synced is true when multi-source merge ran for this kind.
 	Synced bool `json:"synced,omitempty"`
