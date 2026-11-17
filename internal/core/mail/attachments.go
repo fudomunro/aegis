@@ -77,12 +77,9 @@ func (a *Archive) AttachmentDocuments(baseURL string, q AttachmentQuery) ([]kind
 	args = append(args, limit)
 
 	rows, err := a.db.Query(`
-SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
-       subject, snippet, from_name, from_email, to_json, cc_json,
-       sent_at, received_at, direction, is_read, body_text, dataset,
-       attachments_json
-FROM mail_messages WHERE `+strings.Join(where, " AND ")+`
-ORDER BY CASE WHEN sent_at = '' THEN 1 ELSE 0 END, sent_at DESC, id DESC
+SELECT `+mailRowColumns(false)+`
+FROM mail_messages m WHERE `+strings.Join(where, " AND ")+`
+ORDER BY CASE WHEN m.sent_at = '' THEN 1 ELSE 0 END, m.sent_at DESC, m.id DESC
 LIMIT ?`, args...)
 	if err != nil {
 		return nil, false, err

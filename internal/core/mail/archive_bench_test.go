@@ -131,6 +131,10 @@ func BenchmarkArchiveSearch(b *testing.B) {
 		{Q: "benchmark body filler", Limit: 50},
 		{From: "sender@example.com", Limit: 50},
 		{Q: "subject", Limit: 50, WithBody: true},
+		// Browse (no query terms): the sort-only path where an index-backed
+		// ORDER BY should stop the scan at the page instead of sorting every
+		// match.
+		{Limit: 50},
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -138,6 +142,29 @@ func BenchmarkArchiveSearch(b *testing.B) {
 		q := queries[i%len(queries)]
 		if _, err := a.Search(q); err != nil {
 			b.Fatalf("search %+v: %v", q, err)
+		}
+	}
+}
+
+// BenchmarkArchiveSearchBrowse is the sort-only path (no query terms): a
+// page of recent mail. This is where an index-backed ORDER BY should stop
+// the scan at the page instead of sorting every match.
+func BenchmarkArchiveSearchBrowse(b *testing.B) {
+	a := benchArchive(b)
+	body := benchBody(50)
+	payload := benchGzipPayload(b, 4096)
+	const corpus = 2000
+	for i := 0; i < corpus; i++ {
+		if err := a.Upsert(benchRecord(i, body, payload)); err != nil {
+			b.Fatalf("seed upsert %d: %v", i, err)
+		}
+	}
+	q := SearchQuery{Limit: 50}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := a.Search(q); err != nil {
+			b.Fatalf("browse search: %v", err)
 		}
 	}
 }
