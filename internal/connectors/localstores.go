@@ -50,14 +50,19 @@ func (s LocalImportStoreSpec) AdminPrefix() string {
 	return "/v1/admin/" + s.Stem
 }
 
-// StoreFlagName is the disabling flag, e.g. "-signal-store".
+// StoreFlagName is the Go flag name for the disabling flag: "signal-store"
+// for the CLI form -signal-store. Flag registration and flag.Visit keys use
+// this bare name (the flag package rejects names that begin with "-", and
+// the hub keys its explicitly-set map by the visited name); operator-facing
+// copy shows the dashed CLI form instead (ImportAdmin.FlagName).
 func (s LocalImportStoreSpec) StoreFlagName() string {
-	return "-" + s.Stem + "-store"
+	return s.Stem + "-store"
 }
 
-// ImportFlagName is the one-shot import flag, e.g. "-import-signal".
+// ImportFlagName is the Go flag name for the one-shot import flag:
+// "import-signal" for the CLI form -import-signal.
 func (s LocalImportStoreSpec) ImportFlagName() string {
-	return "-import-" + s.Stem
+	return "import-" + s.Stem
 }
 
 // LocalImportStoreSpecs returns the ordered registry of local import
