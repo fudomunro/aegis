@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
@@ -19,6 +20,11 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 	_ "modernc.org/sqlite"
 )
+
+// ingestBatchSize is how many buffered ingest rows share one commit
+// before the write path flushes on its own. Bounds both transaction size
+// and the memory a walk can hold while it parses.
+const ingestBatchSize = 500
 
 // Archive is Aegis's local queryable mail mirror.
 //
@@ -36,6 +42,10 @@ import (
 type Archive struct {
 	db   *sql.DB
 	path string
+	// mu guards pending. Rows buffered by Store wait here for the next
+	// batched commit (see withPending).
+	mu      sync.Mutex
+	pending []Record
 }
 
 // Record is one archived message. Neutral Message fields are
@@ -216,12 +226,18 @@ func Open(path string) (*Archive, error) {
 	return a, nil
 }
 
-// Close releases the database handle.
+// Close commits any rows still buffered by Store and releases the database
+// handle.
 func (a *Archive) Close() error {
 	if a == nil || a.db == nil {
 		return nil
 	}
-	return a.db.Close()
+	flushErr := a.Flush()
+	dbErr := a.db.Close()
+	if flushErr != nil {
+		return flushErr
+	}
+	return dbErr
 }
 
 // Path returns the on-disk location ("" when disabled).
@@ -298,11 +314,91 @@ CREATE TABLE IF NOT EXISTS mail_meta (
 	return nil
 }
 
-// Upsert stores or replaces one message and refreshes its FTS row.
+// Upsert stores or replaces one message and refreshes its FTS row, in its
+// own transaction. Ingest paths use Store instead so a batch of messages
+// shares one commit.
 func (a *Archive) Upsert(rec Record) error {
 	if a == nil || a.db == nil {
 		return fmt.Errorf("mail archive disabled")
 	}
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := a.upsertRecord(tx, rec); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// Store buffers one ingested message for the next batched commit. Rows
+// land in one transaction at a flush point — ingestBatchSize of them, or
+// the cursor/meta persistence that closes an ingest batch (see
+// withPending) — instead of paying a commit per message.
+func (a *Archive) Store(rec Record) error {
+	if a == nil || a.db == nil {
+		return fmt.Errorf("mail archive disabled")
+	}
+	if rec.Service == "" || rec.ID == "" {
+		return fmt.Errorf("mail archive store requires service and id")
+	}
+	a.mu.Lock()
+	a.pending = append(a.pending, rec)
+	full := len(a.pending) >= ingestBatchSize
+	a.mu.Unlock()
+	if full {
+		return a.Flush()
+	}
+	return nil
+}
+
+// Flush commits any messages buffered by Store in one transaction.
+func (a *Archive) Flush() error {
+	return a.withPending(func(dbtx) error { return nil })
+}
+
+// withPending commits the buffered ingest rows together with fn's writes
+// in one transaction, so a durable ingest position never runs ahead of the
+// rows it covers: either both land or neither does. With an empty buffer
+// fn runs against the connection directly. A failed call keeps the buffer
+// for the next attempt — upserts are idempotent and the caller's cursor
+// does not advance, so nothing is lost.
+func (a *Archive) withPending(fn func(ex dbtx) error) error {
+	if a == nil || a.db == nil {
+		return fmt.Errorf("mail archive disabled")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.pending) == 0 {
+		return fn(a.db)
+	}
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, rec := range a.pending {
+		if err := a.upsertRecord(tx, rec); err != nil {
+			return err
+		}
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	a.pending = nil
+	return tx.Commit()
+}
+
+// dbtx is the write-path subset of *sql.DB and *sql.Tx.
+type dbtx interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// upsertRecord writes one message row and its FTS entry against ex, which
+// is either the connection or an open batch transaction.
+func (a *Archive) upsertRecord(ex dbtx, rec Record) error {
 	if rec.Service == "" || rec.ID == "" {
 		return fmt.Errorf("mail archive upsert requires service and id")
 	}
@@ -342,13 +438,7 @@ func (a *Archive) Upsert(rec Record) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	participants := mailParticipantsText(rec)
 
-	tx, err := a.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.Exec(`
+	if _, err := ex.Exec(`
 INSERT INTO mail_messages (
   service, service_msg_id, thread_id, message_id, mailbox, labels_json,
   subject, snippet, from_name, from_email, to_json, cc_json,
@@ -383,19 +473,19 @@ ON CONFLICT(service, service_msg_id) DO UPDATE SET
 
 	// ON CONFLICT DO UPDATE keeps the original rowid; re-read it for FTS.
 	var id int64
-	if err := tx.QueryRow(`SELECT id FROM mail_messages WHERE service=? AND service_msg_id=?`,
+	if err := ex.QueryRow(`SELECT id FROM mail_messages WHERE service=? AND service_msg_id=?`,
 		rec.Service, rec.ID).Scan(&id); err != nil {
 		return err
 	}
 
-	if _, err := tx.Exec(`DELETE FROM mail_fts WHERE rowid=?`, id); err != nil {
+	if _, err := ex.Exec(`DELETE FROM mail_fts WHERE rowid=?`, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`INSERT INTO mail_fts(rowid, subject, from_email, participants, body_text) VALUES (?,?,?,?,?)`,
+	if _, err := ex.Exec(`INSERT INTO mail_fts(rowid, subject, from_email, participants, body_text) VALUES (?,?,?,?,?)`,
 		id, rec.Subject, strings.ToLower(rec.FromEmail), participants, rec.BodyText); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 // Get returns one archived message by service-local id.
@@ -742,33 +832,34 @@ func (a *Archive) LoadSyncCursor(service string) (shared.MailIngestCursor, error
 	return cur, nil
 }
 
-// SaveSyncCursor persists ingest progress (fail-open callers still record errors).
+// SaveSyncCursor persists ingest progress (fail-open callers still record
+// errors). All cursor keys and any rows buffered by Store commit in one
+// transaction — progress is never durable ahead of the messages it covers.
 func (a *Archive) SaveSyncCursor(service string, cur shared.MailIngestCursor) error {
-	if a == nil || a.db == nil {
-		return fmt.Errorf("mail archive disabled")
-	}
-	if err := a.SetMeta("sync:"+service+":page_token", cur.PageToken); err != nil {
-		return err
-	}
 	done := "0"
 	if cur.Done {
 		done = "1"
 	}
-	if err := a.SetMeta("sync:"+service+":done", done); err != nil {
-		return err
+	kvs := [][2]string{
+		{"sync:" + service + ":page_token", cur.PageToken},
+		{"sync:" + service + ":done", done},
+		{"sync:" + service + ":error", cur.Error},
+		{"sync:last_error", cur.Error},
 	}
 	if cur.LastSyncAt != "" {
-		if err := a.SetMeta("sync:"+service+":last_at", cur.LastSyncAt); err != nil {
-			return err
-		}
-		if ifErr := a.SetMeta("sync:last_at", cur.LastSyncAt); ifErr != nil {
-			return ifErr
-		}
+		kvs = append(kvs,
+			[2]string{"sync:" + service + ":last_at", cur.LastSyncAt},
+			[2]string{"sync:last_at", cur.LastSyncAt},
+		)
 	}
-	if err := a.SetMeta("sync:"+service+":error", cur.Error); err != nil {
-		return err
-	}
-	return a.SetMeta("sync:last_error", cur.Error)
+	return a.withPending(func(ex dbtx) error {
+		for _, kv := range kvs {
+			if err := setMeta(ex, kv[0], kv[1]); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (a *Archive) GetMeta(key string) (string, error) {
@@ -780,8 +871,15 @@ func (a *Archive) GetMeta(key string) (string, error) {
 	return v, err
 }
 
+// SetMeta persists ingest-private state. Any rows buffered by Store commit
+// in the same transaction, so a saved position never runs ahead of the
+// messages it covers.
 func (a *Archive) SetMeta(key, value string) error {
-	_, err := a.db.Exec(`
+	return a.withPending(func(ex dbtx) error { return setMeta(ex, key, value) })
+}
+
+func setMeta(ex dbtx, key, value string) error {
+	_, err := ex.Exec(`
 INSERT INTO mail_meta(key, value) VALUES(?,?)
 ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
 	return err
