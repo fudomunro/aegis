@@ -4,6 +4,8 @@ aegis
 /aegis-dashboard
 /cmd/aegis-dashboard/aegis-dashboard
 *.exe
+# Go test binaries (go test -c / -cpuprofile output)
+*.test
 
 # Coding-agent session state
 .mimocode/
