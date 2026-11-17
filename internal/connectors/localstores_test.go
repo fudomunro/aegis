@@ -1,6 +1,7 @@
 package connectors
 
 import (
+	"flag"
 	"strings"
 	"testing"
 )
@@ -34,7 +35,7 @@ func TestLocalImportStoreSpecs(t *testing.T) {
 		if spec.DefaultFile != spec.Stem+".db" {
 			t.Errorf("%s: DefaultFile = %q, want %q", spec.Stem, spec.DefaultFile, spec.Stem+".db")
 		}
-		if spec.StoreFlagName() != "-"+spec.Stem+"-store" || spec.ImportFlagName() != "-import-"+spec.Stem {
+		if spec.StoreFlagName() != spec.Stem+"-store" || spec.ImportFlagName() != "import-"+spec.Stem {
 			t.Errorf("%s: derived flag names wrong: %q %q", spec.Stem, spec.StoreFlagName(), spec.ImportFlagName())
 		}
 		if spec.AdminPrefix() != "/v1/admin/"+spec.Stem {
@@ -56,8 +57,9 @@ func TestLocalImportStoreSpecs(t *testing.T) {
 			t.Fatalf("%s: Open(\"\") should return a disabled store", spec.Stem)
 		}
 		adminCopy := store.Admin()
-		if adminCopy.FlagName != spec.StoreFlagName() {
-			t.Errorf("%s: Admin().FlagName = %q, want %q", spec.Stem, adminCopy.FlagName, spec.StoreFlagName())
+		// Admin copy shows the dashed CLI form; the flag name itself is bare.
+		if adminCopy.FlagName != "-"+spec.StoreFlagName() {
+			t.Errorf("%s: Admin().FlagName = %q, want %q", spec.Stem, adminCopy.FlagName, "-"+spec.StoreFlagName())
 		}
 		if adminCopy.Panel.Heading == "" || adminCopy.Panel.Title == "" || adminCopy.Panel.Intro == "" ||
 			adminCopy.Panel.Placeholder == "" {
@@ -134,5 +136,35 @@ func TestLocalImportStoreSpecs(t *testing.T) {
 	}
 	if _, ok := LocalImportStoreSpecFor("no-such-store"); ok {
 		t.Error("LocalImportStoreSpecFor must miss unknown stems")
+	}
+}
+
+// TestLocalImportStoreFlagNamesRegister guards the flag-registration
+// contract the hub relies on when it registers one -<stem>-store and
+// -import-<stem> pair per declared store. Names must be bare Go flag
+// names: flag.String panics on a leading "-", and the hub looks up
+// "explicitly set" in the map flag.Visit builds from the registered
+// names. The dashed CLI form is operator copy only (Admin().FlagName).
+func TestLocalImportStoreFlagNamesRegister(t *testing.T) {
+	for _, spec := range LocalImportStoreSpecs() {
+		for _, name := range []string{spec.StoreFlagName(), spec.ImportFlagName()} {
+			if strings.HasPrefix(name, "-") {
+				t.Errorf("%s: flag name %q must not begin with '-' (flag.String panics on it)", spec.Stem, name)
+				continue
+			}
+			fs := flag.NewFlagSet("test", flag.ContinueOnError)
+			// A name the flag package rejects panics here — that panic is
+			// exactly the regression this test exists to catch.
+			fs.String(name, "", "test")
+			if err := fs.Parse([]string{"-" + name, "value"}); err != nil {
+				t.Errorf("%s: parse -%s: %v", spec.Stem, name, err)
+				continue
+			}
+			visited := map[string]bool{}
+			fs.Visit(func(f *flag.Flag) { visited[f.Name] = true })
+			if !visited[name] {
+				t.Errorf("%s: flag.Visit did not report %q; the hub's explicitly-set lookup would miss", spec.Stem, name)
+			}
+		}
 	}
 }
