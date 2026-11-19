@@ -105,7 +105,7 @@ func TestHandleLibraryCopies_ListAndFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/copies", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/copies", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().HandleLibraryCopies)(w, req)
@@ -126,7 +126,7 @@ func TestHandleLibraryCopies_ListAndFilter(t *testing.T) {
 		t.Fatalf("sync_modes = %v", resp.SyncModes)
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/v1/library/copies?kind=playlists", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/me/copies?kind=playlists", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().HandleLibraryCopies)(w2, req2)
@@ -141,7 +141,7 @@ func TestHandleLibraryCopies_ListAndFilter(t *testing.T) {
 
 func TestHandleLibraryCopies_MethodAndDisabled(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	req := httptest.NewRequest(http.MethodPost, "/v1/library/copies", nil)
+	req := httptest.NewRequest(http.MethodPost, "/me/copies", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().HandleLibraryCopies)(w, req)
@@ -149,7 +149,7 @@ func TestHandleLibraryCopies_MethodAndDisabled(t *testing.T) {
 		t.Fatalf("status = %d", w.Code)
 	}
 
-	req2 := httptest.NewRequest(http.MethodGet, "/v1/library/copies", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/me/copies", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().HandleLibraryCopies)(w2, req2)

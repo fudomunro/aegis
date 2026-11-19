@@ -11,7 +11,7 @@ import (
 )
 
 func TestWithPeerLog_IncludesIdentity(t *testing.T) {
-	r := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	r := httptest.NewRequest("GET", "/me/playlists", nil)
 	r = withPeerIdentity(r, &PeerIdentity{
 		LoginName: "alice@example.com",
 		Source:    "serve-headers",
@@ -26,7 +26,7 @@ func TestWithPeerLog_IncludesIdentity(t *testing.T) {
 }
 
 func TestWithPeerLog_NoIdentityIsNoop(t *testing.T) {
-	r := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	r := httptest.NewRequest("GET", "/me/playlists", nil)
 	if withPeerLog(slog.Default(), r) == nil {
 		t.Fatal("expected logger")
 	}
@@ -60,7 +60,7 @@ func TestConnectorInstructions_DoNotRequireAPIKey(t *testing.T) {
 		if strings.Contains(instr, "Do not call") == false && !strings.Contains(instr, "use Aegis") {
 			t.Errorf("%s: missing library-first / do-not-call-provider wording", c.name)
 		}
-		if !strings.Contains(instr, "/v1/library/playlists") {
+		if !strings.Contains(instr, "/me/playlists") {
 			t.Errorf("%s: missing library endpoint mention", c.name)
 		}
 		if !strings.Contains(instr, "sources[]") {

@@ -102,7 +102,7 @@ func (c *GitHubConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves GitHub people, organization members, or who they know on GitHub, use Aegis's unified data API. Do not call the GitHub API directly.
 
-GET %s/v1/library/contacts — contacts across every connected contact service (name, emails, handles, organization, sources[])
+GET %s/me/contacts — contacts across every connected contact service (name, emails, handles, organization, sources[])
 
 GitHub contacts cover organization members and users the account follows. sources[] records where each contact lives for sync. Contacts use neutral identity matching (email → phone → handle → name) so people can be matched to photos, messages, and events.`, root)
 }

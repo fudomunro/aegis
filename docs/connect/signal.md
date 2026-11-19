@@ -19,8 +19,8 @@ Or use **Advanced → Signal import** (`/v1/admin/signal/import`).
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/library/messages` | Imported Signal chats (source service `signal`) |
-| `GET /v1/library/contacts` | Imported Signal contacts |
+| `GET /me/messages` | Imported Signal chats (source service `signal`) |
+| `GET /me/contacts` | Imported Signal contacts |
 | `GET /v1/services/signal/import/status` | Contact + message counts |
 | `POST /v1/services/signal/import` | `{"path": "/path/to/export"}` |
 
@@ -34,7 +34,7 @@ plaintext `.db` / `.sqlite` dumps in either Signal **Desktop** schema
 supported — decrypt or export first. Re-import skips rows already stored.
 Attachments and media are never stored (text metadata only). The import
 source is service `signal` with `channel: "signal"` and feeds both
-`/v1/library/messages` and `/v1/library/contacts`.
+`/me/messages` and `/me/contacts`.
 
 A minimal JSONL sample lives at `examples/signal-export-sample.jsonl`.
 

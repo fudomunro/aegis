@@ -23,8 +23,8 @@ import (
 // contacts and chat messages arrive as a file-based export the operator
 // prepares (Desktop/Android backup → plaintext SQLite, or a JSONL dump).
 // Aegis stores neutral contact + message metadata only — never attachments
-// or other media. The local store feeds /v1/library/contacts and
-// /v1/library/messages like other file-based import sources.
+// or other media. The local store feeds /me/contacts and
+// /me/messages like other file-based import sources.
 
 const (
 	SignalServiceID   = "signal"
@@ -70,7 +70,7 @@ func (s *SignalStore) Admin() ImportAdmin {
 		FlagName:    "-signal-store",
 		PathHint:    "a Signal export file or directory",
 		SamplePath:  "~/Downloads/signal-export (JSONL, or plaintext .db from signalbackup-tools)",
-		LibraryPath: "/v1/library/messages",
+		LibraryPath: "/me/messages",
 		Panel: ImportPanel{
 			Heading: "Signal import (read-only)",
 			Title:   "Signal contacts and chats",
@@ -1157,7 +1157,7 @@ func (c *SignalConnector) Capabilities() shared.ServiceCapabilities {
 						Name:        "list_contacts",
 						Description: "Imported Signal contacts (permission key: contacts)",
 						Method:      "GET",
-						Path:        "/v1/library/contacts",
+						Path:        "/me/contacts",
 						Response: shared.ResponseSpec{
 							Description: "Neutral contacts with sources[]",
 							Fields:      []string{"contacts", "total"},
@@ -1173,7 +1173,7 @@ func (c *SignalConnector) Capabilities() shared.ServiceCapabilities {
 						Name:        "list_messages",
 						Description: "Imported Signal messages (permission key: messages)",
 						Method:      "GET",
-						Path:        "/v1/library/messages",
+						Path:        "/me/messages",
 						Parameters: []shared.Parameter{
 							{Name: "after", In: "query", Type: "string", Description: "On/after sent time (RFC3339 or YYYY-MM-DD)"},
 							{Name: "before", In: "query", Type: "string", Description: "Before sent time"},
@@ -1201,7 +1201,7 @@ func (c *SignalConnector) Capabilities() shared.ServiceCapabilities {
 
 func (c *SignalConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	return fmt.Sprintf(`When the user's request involves Signal chats or Signal contacts, use Aegis. Imported Signal history is available through GET %s/v1/library/messages and GET %s/v1/library/contacts (source service "signal"). Attachments and media are never stored — text metadata only. Signal has no live API here: if history is missing, ask the operator to import an export (Advanced → Signal import).
+	return fmt.Sprintf(`When the user's request involves Signal chats or Signal contacts, use Aegis. Imported Signal history is available through GET %s/me/messages and GET %s/me/contacts (source service "signal"). Attachments and media are never stored — text metadata only. Signal has no live API here: if history is missing, ask the operator to import an export (Advanced → Signal import).
 `, root, root)
 }
 

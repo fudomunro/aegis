@@ -17,7 +17,7 @@ Or use **Advanced → LinkedIn import** (`/v1/admin/linkedin/import`).
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/library/contacts` | Imported LinkedIn connections (source service `linkedin`) |
+| `GET /me/contacts` | Imported LinkedIn connections (source service `linkedin`) |
 | `GET /v1/services/linkedin/import/status` | Imported connection count |
 | `POST /v1/services/linkedin/import` | `{"path": "/path/to/export"}` |
 
@@ -34,7 +34,7 @@ Mapping: name → `Contact.Name`, email → `emails`, the profile public id
 `sources[].extra`. Re-import skips rows already stored (keyed by profile
 public id). Contact metadata only — profile photos and other media are
 never stored. The import source is service `linkedin` and feeds
-`/v1/library/contacts`, where identity matching can fold connections into
+`/me/contacts`, where identity matching can fold connections into
 the same people as Google Contacts or CardDAV.
 
 A minimal sample lives at `examples/linkedin-connections-sample.csv`.

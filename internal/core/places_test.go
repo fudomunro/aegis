@@ -116,7 +116,7 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 		connectors.TimelineServiceID:  &fakePlaceProvider{visits: samplePlaces()},
 		connectors.OwnTracksServiceID: &fakePlaceProvider{visits: samplePlaces()},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/places", nil)
+	req := httptest.NewRequest("GET", "/me/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("places"))(w, req)
@@ -142,7 +142,7 @@ func TestHandleLibraryPlaces_DeniedByDefault(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/places", nil)
+	req := httptest.NewRequest("GET", "/me/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("places"))(w, req)
@@ -163,10 +163,10 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/places/city", nil)
+	req := httptest.NewRequest("GET", "/me/places/city", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/places/city"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/places/city"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -198,10 +198,10 @@ func TestHandleLibraryPlaces_NamesOmitsCoords(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/places/names", nil)
+	req := httptest.NewRequest("GET", "/me/places/names", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/places/names"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/places/names"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -233,7 +233,7 @@ func TestHandleLibraryPlaces_FullKeepsCoords(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/places", nil)
+	req := httptest.NewRequest("GET", "/me/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("places"))(w, req)

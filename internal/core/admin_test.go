@@ -111,7 +111,7 @@ func TestHandleAdmin_FriendlyShellPaths(t *testing.T) {
 		}
 	}
 
-	for _, path := range []string{"/nope", "/v1/admin/nope", "/v1/library"} {
+	for _, path := range []string{"/nope", "/v1/admin/nope", "/me"} {
 		req := httptest.NewRequest("GET", path, nil)
 		w := httptest.NewRecorder()
 		srv.admin().HandleAdmin(w, req)

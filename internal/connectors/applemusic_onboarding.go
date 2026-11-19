@@ -35,7 +35,7 @@ func (c *AppleMusicConnector) Onboarding() shared.OnboardingSpec {
 			Name:        AppleMusicServiceName,
 			Action:      "inject",
 			CacheTTL:    "5m",
-			Description: "Apple Music library playlists, tracks, albums, and artists for /v1/library, plus mirror/converge placement.",
+			Description: "Apple Music library playlists, tracks, albums, and artists for /me, plus mirror/converge placement.",
 			Aliases:     []string{"apple music", "musickit", "itunes"},
 			SecretHeaders: []string{
 				appleMusicKeyIDHeader,
@@ -85,7 +85,7 @@ func (c *AppleMusicConnector) Onboarding() shared.OnboardingSpec {
 		Guides: []shared.OnboardingGuide{
 			{
 				ID: appleMusicGuideIntro,
-				Body: "Library playlists and tracks for `GET /v1/library/playlists` and `GET /v1/library/tracks`, and a mirror target that matches on ISRC. " +
+				Body: "Library playlists and tracks for `GET /me/playlists` and `GET /me/tracks`, and a mirror target that matches on ISRC. " +
 					"An [Apple Developer Program](https://developer.apple.com/programs/) membership is required to create the MusicKit key. " +
 					"Credentials are stored encrypted — never shown again after save, never sent to agents.",
 			},
@@ -202,7 +202,7 @@ func (c *AppleMusicConnector) OnboardingStatus(ctx context.Context) shared.Onboa
 	status.Summary = append(status.Summary, appleMusicLibrarySummary(c.host.LibraryReadable("playlists")))
 	if res.OK {
 		status.Hints = append(status.Hints,
-			fmt.Sprintf("Connected — %d playlist(s) visible. Try GET /v1/library/playlists.", res.Metrics["playlist_count"]))
+			fmt.Sprintf("Connected — %d playlist(s) visible. Try GET /me/playlists.", res.Metrics["playlist_count"]))
 	}
 	return status
 }

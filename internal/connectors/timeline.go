@@ -70,7 +70,7 @@ func (s *TimelineStore) Admin() ImportAdmin {
 		FlagName:    "-timeline-store",
 		PathHint:    "a Timeline JSON file, directory, or Takeout zip",
 		SamplePath:  "~/Downloads/Takeout/Location History/Semantic Location History (JSON files or a Takeout zip)",
-		LibraryPath: "/v1/library/places",
+		LibraryPath: "/me/places",
 		BareResult:  true,
 		Panel: ImportPanel{
 			Heading: "Timeline import (read-only)",
@@ -676,7 +676,7 @@ func (c *TimelineConnector) Capabilities() shared.ServiceCapabilities {
 						Name:        "list_place_visits",
 						Description: "Imported Timeline visits and trips (permission key: places)",
 						Method:      "GET",
-						Path:        "/v1/library/places",
+						Path:        "/me/places",
 						Parameters: []shared.Parameter{
 							{Name: "after", In: "query", Type: "string", Description: "Visits overlapping this RFC3339 time or later"},
 							{Name: "before", In: "query", Type: "string", Description: "Visits starting before this RFC3339 time"},
@@ -696,11 +696,11 @@ func (c *TimelineConnector) Capabilities() shared.ServiceCapabilities {
 
 func (c *TimelineConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	return "Google Timeline visits imported from a Takeout export are available at " + root + "/v1/library/places (visits and trips with time windows). Import is admin-only (Advanced → Timeline import). Do not request raw GPS points."
+	return "Google Timeline visits imported from a Takeout export are available at " + root + "/me/places (visits and trips with time windows). Import is admin-only (Advanced → Timeline import). Do not request raw GPS points."
 }
 
 func (c *TimelineConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	shared.WriteJSONError(w, http.StatusNotFound, "google-timeline is import-only; use /v1/library/places")
+	shared.WriteJSONError(w, http.StatusNotFound, "google-timeline is import-only; use /me/places")
 }
 
 // ListUserPlaceVisits returns imported visits as a PlaceVisitProvider.

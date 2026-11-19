@@ -97,7 +97,7 @@ func TestAuthMiddleware_DataScopeKey(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 	w := httptest.NewRecorder()
-	h(w, scopeRequest("YOUR_SHIRE_KEY", "/v1/library/contacts"))
+	h(w, scopeRequest("YOUR_SHIRE_KEY", "/me/contacts"))
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -121,7 +121,7 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/library/photos/share", nil)
+	req := httptest.NewRequest(http.MethodPost, "/me/photos/share", nil)
 	req.Header.Set("X-Api-Key", "YOUR_DEMO_KEY")
 	h(w, req)
 	if w.Code != http.StatusForbidden {
@@ -137,7 +137,7 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 	}
 
 	w = httptest.NewRecorder()
-	h(w, scopeRequest("YOUR_DEMO_KEY", "/v1/library/contacts"))
+	h(w, scopeRequest("YOUR_DEMO_KEY", "/me/contacts"))
 	if w.Code != http.StatusOK {
 		t.Fatalf("read status = %d", w.Code)
 	}
@@ -146,8 +146,8 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 func TestLibraryContacts_DatasetIsolation(t *testing.T) {
 	srv := twoScopeServer(t)
 
-	shireBody := callLibrary(t, srv, "YOUR_SHIRE_KEY", "/v1/library/contacts")
-	gondorBody := callLibrary(t, srv, "YOUR_GONDOR_KEY", "/v1/library/contacts")
+	shireBody := callLibrary(t, srv, "YOUR_SHIRE_KEY", "/me/contacts")
+	gondorBody := callLibrary(t, srv, "YOUR_GONDOR_KEY", "/me/contacts")
 
 	if !strings.Contains(shireBody, "shire") {
 		t.Fatalf("shire body missing shire identities: %s", shireBody)
@@ -165,8 +165,8 @@ func TestLibraryContacts_DatasetIsolation(t *testing.T) {
 
 func TestLibraryCache_DoesNotLeakAcrossScopes(t *testing.T) {
 	srv := twoScopeServer(t)
-	first := callLibrary(t, srv, "YOUR_SHIRE_KEY", "/v1/library/contacts")
-	second := callLibrary(t, srv, "YOUR_GONDOR_KEY", "/v1/library/contacts")
+	first := callLibrary(t, srv, "YOUR_SHIRE_KEY", "/me/contacts")
+	second := callLibrary(t, srv, "YOUR_GONDOR_KEY", "/me/contacts")
 	if strings.Contains(second, "shire") {
 		t.Fatalf("cache leak into gondor: %s", second)
 	}
@@ -254,7 +254,7 @@ func callLibrary(t *testing.T, srv *Server, key, path string) string {
 func callMailSearch(t *testing.T, srv *Server, key string) string {
 	t.Helper()
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, scopeRequest(key, "/v1/library/messages"))
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, scopeRequest(key, "/me/messages"))
 	if w.Code != http.StatusOK {
 		t.Fatalf("mail search %s status=%d body=%s", key, w.Code, w.Body.String())
 	}
@@ -263,11 +263,11 @@ func callMailSearch(t *testing.T, srv *Server, key string) string {
 
 func callMailFetch(t *testing.T, srv *Server, key, service, id string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := scopeRequest(key, "/v1/library/messages/"+service+"/"+id)
+	req := scopeRequest(key, "/me/messages/"+service+"/"+id)
 	req.SetPathValue("service", service)
 	req.SetPathValue("id", id)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/messages/{service}/{id}"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/messages/{service}/{id}"))(w, req)
 	return w
 }
 
@@ -318,22 +318,22 @@ func TestLibraryDocumentText_HidesForeignDataset(t *testing.T) {
 	}
 	ownID := shireDocs[0].Sources[0].ID
 	w := httptest.NewRecorder()
-	req := scopeRequest("YOUR_SHIRE_KEY", "/v1/library/documents/sample-library-shire/"+ownID+"/text")
+	req := scopeRequest("YOUR_SHIRE_KEY", "/me/documents/sample-library-shire/"+ownID+"/text")
 	srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		r.SetPathValue("service", "sample-library-shire")
 		r.SetPathValue("id", ownID)
-		srv.library().RouteHandler("/v1/library/documents/{service}/{id}/text")(w, r)
+		srv.library().RouteHandler("/me/documents/{service}/{id}/text")(w, r)
 	})(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("own document text status = %d body=%s", w.Code, w.Body.String())
 	}
 
 	w = httptest.NewRecorder()
-	req = scopeRequest("YOUR_SHIRE_KEY", "/v1/library/documents/sample-library-gondor/"+ownID+"/text")
+	req = scopeRequest("YOUR_SHIRE_KEY", "/me/documents/sample-library-gondor/"+ownID+"/text")
 	srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		r.SetPathValue("service", "sample-library-gondor")
 		r.SetPathValue("id", ownID)
-		srv.library().RouteHandler("/v1/library/documents/{service}/{id}/text")(w, r)
+		srv.library().RouteHandler("/me/documents/{service}/{id}/text")(w, r)
 	})(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("foreign document text status = %d body=%s", w.Code, w.Body.String())
@@ -434,13 +434,13 @@ func TestScopeGrants_NoGrantsPrincipalSeesNothing(t *testing.T) {
 	srv := twoScopeServer(t)
 
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, scopeRequest("YOUR_EMPTY_KEY", "/v1/library/contacts"))
+	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, scopeRequest("YOUR_EMPTY_KEY", "/me/contacts"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("library status = %d body=%s", w.Code, w.Body.String())
 	}
 
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, scopeRequest("YOUR_EMPTY_KEY", "/v1/library/messages"))
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, scopeRequest("YOUR_EMPTY_KEY", "/me/messages"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("mail search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -453,7 +453,7 @@ func TestScopeGrants_NoGrantsPrincipalSeesNothing(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("pre-request status = %d body=%s", w.Code, w.Body.String())
 	}
-	if strings.Contains(w.Body.String(), "/v1/library") || strings.Contains(w.Body.String(), "/v1/mail") {
+	if strings.Contains(w.Body.String(), "/me") || strings.Contains(w.Body.String(), "/v1/mail") {
 		t.Fatalf("no-grants principal was given data hints: %s", w.Body.String())
 	}
 }
@@ -466,19 +466,19 @@ func TestScopeGrants_TypeAllowList(t *testing.T) {
 			Grants: policy.DataGrants{"contacts": {Default: shared.AccessRead}}},
 	})
 
-	body := callLibrary(t, srv, "YOUR_CONTACTS_KEY", "/v1/library/contacts")
+	body := callLibrary(t, srv, "YOUR_CONTACTS_KEY", "/me/contacts")
 	if !strings.Contains(body, "shire") {
 		t.Fatalf("granted type missing: %s", body)
 	}
 
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, scopeRequest("YOUR_CONTACTS_KEY", "/v1/library/tracks"))
+	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, scopeRequest("YOUR_CONTACTS_KEY", "/me/tracks"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("unlisted type status = %d body=%s", w.Code, w.Body.String())
 	}
 
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, scopeRequest("YOUR_CONTACTS_KEY", "/v1/library/messages"))
+	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, scopeRequest("YOUR_CONTACTS_KEY", "/me/messages"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("unlisted mail status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -488,8 +488,8 @@ func TestScopeGrants_TypeAllowList(t *testing.T) {
 // a stated type level: the overridden connector disappears from the aggregate
 // while the other still answers.
 // TestScopeGrants_RouteKeys: a grant map key is a route (issue #348). A
-// freebusy-only scope reaches /v1/library/freebusy but never
-// /v1/library/events, and the full-read scope's cached events page is not
+// freebusy-only scope reaches /me/freebusy but never
+// /me/events, and the full-read scope's cached events page is not
 // served to it.
 func TestScopeGrants_RouteKeys(t *testing.T) {
 	srv := scopeServer(t, []scopes.Scope{
@@ -500,7 +500,7 @@ func TestScopeGrants_RouteKeys(t *testing.T) {
 
 	// Full-read scope first so its events page is cached.
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, scopeRequest("YOUR_SHIRE_KEY", "/v1/library/events"))
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, scopeRequest("YOUR_SHIRE_KEY", "/me/events"))
 	if w.Code != http.StatusOK {
 		t.Fatalf("events shire status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -514,14 +514,14 @@ func TestScopeGrants_RouteKeys(t *testing.T) {
 
 	// The freebusy-only scope is denied the events route entirely.
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, scopeRequest("YOUR_BUSY_KEY", "/v1/library/events"))
+	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, scopeRequest("YOUR_BUSY_KEY", "/me/events"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("events busy status = %d body=%s, want 403", w.Code, w.Body.String())
 	}
 
 	// …and gets availability from its own route.
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, scopeRequest("YOUR_BUSY_KEY", "/v1/library/freebusy"))
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/freebusy"))(w, scopeRequest("YOUR_BUSY_KEY", "/me/freebusy"))
 	if w.Code != http.StatusOK {
 		t.Fatalf("freebusy busy status = %d body=%s", w.Code, w.Body.String())
 	}

@@ -392,7 +392,7 @@ func TestLinkedInCapabilitiesAndInstructions(t *testing.T) {
 		t.Fatalf("operations = %+v", caps.Kinds[0].Operations)
 	}
 	s := c.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(s, "LinkedIn") || !strings.Contains(s, "/v1/library/contacts") {
+	if !strings.Contains(s, "LinkedIn") || !strings.Contains(s, "/me/contacts") {
 		t.Fatalf("instructions = %q", s)
 	}
 	for _, banned := range []string{"-linkedin-store", "-import-linkedin"} {
@@ -480,7 +480,7 @@ func TestLinkedInServiceAndAdmin(t *testing.T) {
 
 	var nilStore *LinkedInStore
 	admin := nilStore.Admin()
-	if admin.PathHint == "" || admin.SamplePath == "" || admin.LibraryPath != "/v1/library/contacts" {
+	if admin.PathHint == "" || admin.SamplePath == "" || admin.LibraryPath != "/me/contacts" {
 		t.Fatalf("admin = %+v", admin)
 	}
 	if admin.Counts() != nil {
@@ -494,7 +494,7 @@ func TestLinkedInServiceAndAdmin(t *testing.T) {
 	if len(emptyHints) == 0 {
 		t.Fatal("empty state needs hints")
 	}
-	fullHints := admin.Hints(ImportHintState{Enabled: true, Counts: map[string]int{"contacts": 5}, LibraryURL: "https://aegis.example.com/v1/library/contacts"})
+	fullHints := admin.Hints(ImportHintState{Enabled: true, Counts: map[string]int{"contacts": 5}, LibraryURL: "https://aegis.example.com/me/contacts"})
 	if len(fullHints) == 0 || !strings.Contains(fullHints[0], "5") {
 		t.Fatalf("populated hints = %v", fullHints)
 	}

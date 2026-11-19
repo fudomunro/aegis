@@ -83,10 +83,10 @@ func TestLibraryKinds_RoutesInSync(t *testing.T) {
 	}
 
 	fixed := map[string]bool{
-		"/v1/library/copies": true,
-		"/v1/library/review": true,
-		"/v1/library/links":  true,
-		"/v1/library/links/": true,
+		"/me/copies": true,
+		"/me/review": true,
+		"/me/links":  true,
+		"/me/links/": true,
 	}
 	for path := range (&Server{}).library().RouteHandlers() {
 		if _, ok := declared[path]; ok || fixed[path] {

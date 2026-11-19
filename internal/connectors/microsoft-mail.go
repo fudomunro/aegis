@@ -125,7 +125,7 @@ func (c *MicrosoftMailConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Outlook, Microsoft 365, or their work email, use Aegis's unified data API. Do not call Microsoft Graph directly.
 
-GET %s/v1/library/messages — the user's mail across connected services (subject, snippet, from/to, sent_at, direction, sources[])
+GET %s/me/messages — the user's mail across connected services (subject, snippet, from/to, sent_at, direction, sources[])
 
 sources[] records where each message lives (service + id) for sync. Fetch each message at /v1/services/{sources[].service}/messages/{sources[].id} — never send one service's id to another. Library lists carry snippets only.
 
@@ -137,7 +137,7 @@ Message bodies stay on Microsoft Graph — Aegis does not store mailboxes. Cross
 
 // HandleProxy processes a Microsoft Graph mail request through the
 // connector. Issue #119 leaves only message detail (full bodies) as
-// agent-facing content transport — lists live on /v1/library/messages.
+// agent-facing content transport — lists live on /me/messages.
 func (c *MicrosoftMailConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	logger := slog.With("service", MicrosoftMailServiceID, "method", r.Method, "path", remainingPath)
 
@@ -158,7 +158,7 @@ func (c *MicrosoftMailConnector) HandleProxy(w http.ResponseWriter, r *http.Requ
 	}
 
 	shared.WriteJSONError(w, http.StatusNotFound,
-		"microsoft-mail serves message detail only; use /v1/library/messages for the list")
+		"microsoft-mail serves message detail only; use /me/messages for the list")
 }
 
 // MicrosoftMailIDFromProxyPath extracts a message id from /messages/{id} or

@@ -89,7 +89,7 @@ func (c *MicrosoftContactsConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Outlook, Microsoft 365, or their address book, use Aegis's unified data API. Do not call Microsoft Graph directly.
 
-GET %s/v1/library/contacts — contacts across every connected contact service (name, emails, phones, organization, sources[])
+GET %s/me/contacts — contacts across every connected contact service (name, emails, phones, organization, sources[])
 
 sources[] records where each contact lives for sync. Contacts use neutral identity matching (email → phone → handle → name) so people can be matched to photos, messages, and events.`, root)
 }

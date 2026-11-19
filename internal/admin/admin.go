@@ -89,7 +89,7 @@ type AdminSummary struct {
 // HandleAdminLibrary returns one unified library dataset for the admin UI.
 // GET /v1/admin/library/{kind}
 //
-// Same aggregate pipeline and JSON shape as the agent /v1/library/{kind}
+// Same aggregate pipeline and JSON shape as the agent /me/{kind}
 // endpoints, but access is not recorded on the Home access-count stats
 // (issue #62). Admin browsing must not look like agent traffic.
 func (h *Handlers) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {

@@ -59,9 +59,9 @@ func (c *AmazonMusicConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Amazon Music or their music library, use Aegis's unified data API. Do not call Amazon Music directly.
 
-GET %s/v1/library/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
-GET %s/v1/library/tracks — liked/saved tracks
-GET %s/v1/library/albums — saved albums
+GET %s/me/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
+GET %s/me/tracks — liked/saved tracks
+GET %s/me/albums — saved albums
 
 sources[] records where each item lives for sync/backup — prefer the library over service-specific calls.
 

@@ -121,7 +121,7 @@ func TestMicrosoftContacts_HandleProxy_NeutralList(t *testing.T) {
 func TestMicrosoftContacts_SystemInstructions_MentionLibraryOnly(t *testing.T) {
 	c := NewMicrosoftContactsConnector(newTestHost(""))
 	s := c.SystemInstructions("https://aegis.example.com")
-	for _, want := range []string{"/v1/library/contacts", "Microsoft"} {
+	for _, want := range []string{"/me/contacts", "Microsoft"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("instructions missing %q: %s", want, s)
 		}

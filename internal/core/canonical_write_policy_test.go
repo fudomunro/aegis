@@ -80,7 +80,7 @@ func TestLibraryInstructions_MultiSourceMutationRule(t *testing.T) {
 	}
 	// The one-shot mirror endpoint is retired (issue #389); instructions
 	// must not advertise it.
-	if strings.Contains(instr, "/v1/library/mirror") {
+	if strings.Contains(instr, "/me/mirror") {
 		t.Fatalf("instructions advertise the retired mirror endpoint: %s", instr)
 	}
 }

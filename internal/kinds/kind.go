@@ -13,7 +13,7 @@ import (
 // photos/share) stay admin-registered in core (issue #312).
 type Route struct {
 	// Pattern is the ServeMux pattern: the kind path, or a kind subroute
-	// like "/v1/library/documents/{service}/{id}/text".
+	// like "/me/documents/{service}/{id}/text".
 	Pattern string
 	// Handler is bound to the instance Host and Engine at construction.
 	Handler http.HandlerFunc
@@ -21,7 +21,7 @@ type Route struct {
 	// document text: no).
 	AppReadable bool
 	// GrantKey names the route in a data grant: the library-relative route
-	// path (issue #348), e.g. "freebusy" for /v1/library/freebusy. A grant
+	// path (issue #348), e.g. "freebusy" for /me/freebusy. A grant
 	// map key is a route — empty means the kind's PermType.
 	GrantKey string
 }

@@ -88,7 +88,7 @@ func (c *YNABConnector) Capabilities() shared.ServiceCapabilities {
 							{Name: "type", In: "query", Type: "string", Description: "unapproved or categorized"},
 						},
 						Response: shared.ResponseSpec{
-							Description: "Raw YNAB transaction list; prefer GET /v1/library/transactions for neutral values",
+							Description: "Raw YNAB transaction list; prefer GET /me/transactions for neutral values",
 							Fields:      []string{"data.transactions"},
 						},
 					},
@@ -103,7 +103,7 @@ func (c *YNABConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves YNAB (budgets, categorized spending), use Aegis's unified data API. Do not call api.ynab.com directly and never ask the user for a Personal Access Token.
 
-GET %s/v1/library/transactions — money questions ("did we go over on groceries?", "what did we spend on restaurants?") merged with any imported Quicken files. Amounts are signed decimal strings (negative = outflow). Filter with after/before/account/q/currency. When permission is "summary", only category/month totals are available — do not request line items.
+GET %s/me/transactions — money questions ("did we go over on groceries?", "what did we spend on restaurants?") merged with any imported Quicken files. Amounts are signed decimal strings (negative = outflow). Filter with after/before/account/q/currency. When permission is "summary", only category/month totals are available — do not request line items.
 
 sources[] records where each transaction lives for sync.`, root)
 }

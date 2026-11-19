@@ -32,17 +32,17 @@ func (s stubKind) Readable(Host) bool      { return true }
 
 func TestMergeUserDefined_RejectsShadowing(t *testing.T) {
 	builtin := []Kind{
-		stubKind{id: "documents", pattern: "/v1/library/documents"},
-		stubKind{id: "text", pattern: "/v1/library/documents/{service}/{id}/text"},
+		stubKind{id: "documents", pattern: "/me/documents"},
+		stubKind{id: "text", pattern: "/me/documents/{service}/{id}/text"},
 	}
 	udks := []Kind{
 		// ID collision with a built-in.
-		stubKind{id: "documents", pattern: "/v1/library/other-documents"},
+		stubKind{id: "documents", pattern: "/me/other-documents"},
 		// Pattern conflict with a built-in subroute (unequal patterns —
 		// only the ServeMux registration check catches this).
-		stubKind{id: "doc-text-clone", pattern: "/v1/library/documents/{a}/{b}/text"},
+		stubKind{id: "doc-text-clone", pattern: "/me/documents/{a}/{b}/text"},
 		// Clean pack.
-		stubKind{id: "safe-udk", pattern: "/v1/library/safe-udk"},
+		stubKind{id: "safe-udk", pattern: "/me/safe-udk"},
 	}
 	merged, skipped := MergeUserDefined(builtin, udks)
 
@@ -68,7 +68,7 @@ func TestMergeUserDefined_RejectsShadowing(t *testing.T) {
 
 func TestMergeUserDefined_RejectsReservedIDs(t *testing.T) {
 	merged, skipped := MergeUserDefined(nil, []Kind{
-		stubKind{id: "tracks", pattern: "/v1/library/whatever"},
+		stubKind{id: "tracks", pattern: "/me/whatever"},
 	})
 	if len(merged) != 0 || len(skipped) != 1 {
 		t.Fatalf("merged = %v skipped = %v, want only the reserved id skipped", merged, skipped)
@@ -153,7 +153,7 @@ func TestMapUserDefinedDocument_HTTPSource(t *testing.T) {
 	defer srv.Close()
 	schema := UserDefinedKindSchema{
 		ID:   "books",
-		Path: "/v1/library/books",
+		Path: "/me/books",
 		Fields: map[string]UserDefinedField{
 			"title":  {Type: "string"},
 			"author": {Type: "string"},

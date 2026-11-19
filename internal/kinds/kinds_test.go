@@ -67,7 +67,7 @@ type goodProvider struct{}
 func (goodProvider) List(context.Context) ([]int, bool, error) { return []int{1}, false, nil }
 
 func TestOwnerView_Marker(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+	r := httptest.NewRequest(http.MethodGet, "/me/tracks", nil)
 	if OwnerView(r) {
 		t.Fatal("plain request must not be owner view")
 	}
@@ -95,7 +95,7 @@ func TestCollect_PermissionsAndProviders(t *testing.T) {
 	}
 	collect := func() ([]NamedLister[int], []string) {
 		return Collect[int, testProvider](h,
-			httptest.NewRequest(http.MethodGet, "/v1/library/x", nil), "widgets",
+			httptest.NewRequest(http.MethodGet, "/me/x", nil), "widgets",
 			func(p testProvider) func(context.Context) ([]int, bool, error) { return p.List })
 	}
 	targets, denied := collect()

@@ -17,7 +17,7 @@ import (
 // MicrosoftCalendarConnector proxies Microsoft Graph and implements
 // CalendarEventProvider (issue #145). It lists the user's Microsoft 365 /
 // Outlook.com calendar entries as neutral CalendarEvent values so agents can
-// ask "what's on my calendar?" through /v1/library/events and the two homes
+// ask "what's on my calendar?" through /me/events and the two homes
 // can sync — including the free/busy projection onto Google Calendar. Event
 // content stays on Microsoft Graph (non-Aegis canonical).
 type MicrosoftCalendarConnector struct {
@@ -130,11 +130,11 @@ func (c *MicrosoftCalendarConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Outlook, Microsoft 365, their schedule, meetings, or calendar events, use Aegis's unified data API. Do not call Microsoft Graph directly.
 
-GET %s/v1/library/events — calendar events across every connected calendar service (title, start_at, end_at, all_day, location, organizer, attendees, sources[])
-GET %s/v1/library/freebusy — busy intervals only for scheduling (no titles or attendees)
+GET %s/me/events — calendar events across every connected calendar service (title, start_at, end_at, all_day, location, organizer, attendees, sources[])
+GET %s/me/freebusy — busy intervals only for scheduling (no titles or attendees)
 
 sources[] records where each event lives for sync. Event content stays on Microsoft 365 — Aegis does not store calendars.
-Organizer/attendees use neutral identity matching so people on a meeting can match /v1/library/contacts.`, root, root)
+Organizer/attendees use neutral identity matching so people on a meeting can match /me/contacts.`, root, root)
 }
 
 // HandleProxy processes a Microsoft Graph calendar request through the connector.

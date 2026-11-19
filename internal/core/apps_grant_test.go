@@ -131,10 +131,10 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 	}
 	srv.config = &Config{Services: []Service{*svc}}
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
-	req = httptest.NewRequest("GET", "/v1/library/freebusy", nil)
+	req = httptest.NewRequest("GET", "/me/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("freebusy with granted token: %d %s", w.Code, w.Body.String())
 	}

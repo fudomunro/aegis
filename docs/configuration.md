@@ -12,7 +12,7 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](../aegis.example
   "action": "inject",
   "endpoint": "https://api.spotify.com/v1",
   "cache_ttl": "10m",
-  "description": "Lists Spotify playlists and liked tracks into /v1/library/*",
+  "description": "Lists Spotify playlists and liked tracks into /me/*",
   "connection": "spotify",
   "oauth_scopes": ["user-library-read", "user-follow-read", "playlist-read-private"]
 }
@@ -201,12 +201,12 @@ level on the full route:
 
 | Grant key | Route | Returns |
 |-----------|-------|---------|
-| `freebusy` | `GET /v1/library/freebusy` | availability only (`start_at`, `end_at`, `all_day`, `status`) |
-| `transactions/totals` | `GET /v1/library/transactions/totals` | category/month totals only |
-| `transactions/items` | `GET /v1/library/transactions/items` | line items without account identifiers |
-| `documents/metadata` | `GET /v1/library/documents/metadata` | titles, dates, tags, sources — no excerpt |
-| `places/city` | `GET /v1/library/places/city` | locality, country, and the visit window |
-| `places/names` | `GET /v1/library/places/names` | names and addresses, no coordinates |
+| `freebusy` | `GET /me/freebusy` | availability only (`start_at`, `end_at`, `all_day`, `status`) |
+| `transactions/totals` | `GET /me/transactions/totals` | category/month totals only |
+| `transactions/items` | `GET /me/transactions/items` | line items without account identifiers |
+| `documents/metadata` | `GET /me/documents/metadata` | titles, dates, tags, sources — no excerpt |
+| `places/city` | `GET /me/places/city` | locality, country, and the visit window |
+| `places/names` | `GET /me/places/names` | names and addresses, no coordinates |
 
 **Resolution** (uniform deny-by-default):
 
@@ -220,8 +220,8 @@ level on the full route:
 - **The full routes serve their richest shape** (`events`, `transactions`,
  `documents`, `places` with coordinates). Grant a narrowed route instead of
  the full one when a caller needs less — a `freebusy`-only key is denied
- `/v1/library/events` outright, and full text
- (`GET /v1/library/documents/{service}/{id}/text`) is a read on the
+ `/me/events` outright, and full text
+ (`GET /me/documents/{service}/{id}/text`) is a read on the
  `documents` route.
 - **The places family is opt-in**: `places`, `places/names`, and
  `places/city` stay closed until named — the reserved `default` key never
@@ -332,7 +332,7 @@ copy:
 **Read surface:**
 
 ```
-GET /v1/library/copies?kind=&service=&status=&entity_key=
+GET /me/copies?kind=&service=&status=&entity_key=
 ```
 
 Returns `copies[]` (`role`, `sync_mode`, `status`, `version`, `watermark`,
@@ -361,7 +361,7 @@ auto-sync secondary copies. Repair / re-mirror is a separate operator action.
 show a per-item copy badge (“2 copies · 1 stale”), source chips/detail show
 `role` / `sync_mode` / `as_of` / `checked_at` / `sync_status`, the Library
 tab filters by copy status (in sync / stale / missing / unchecked), and
-Advanced → Copy ledger lists `GET /v1/library/copies` rows with the same
+Advanced → Copy ledger lists `GET /me/copies` rows with the same
 filters.
 
 ### Sync queue
@@ -628,7 +628,7 @@ An explicit flag always wins:
 | `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
 | `-sync-jobs` | the copy-ledger path | Sync job queue; empty (explicitly set) disables the sync worker |
 | `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables the local mail archive source |
-| `-search-index` | `search-index.db` | Empty string (explicitly set) disables `q=` search on `/v1/library/{kind}` |
+| `-search-index` | `search-index.db` | Empty string (explicitly set) disables `q=` search on `/me/{kind}` |
 | `-quicken-store` | `quicken.db` | Empty string (explicitly set) disables the Quicken import source |
 | `-timeline-store` | `timeline.db` | Empty string (explicitly set) disables the Google Timeline import source |
 | `-signal-store` | `signal.db` | Empty string (explicitly set) disables the Signal import source |
@@ -828,7 +828,7 @@ POST /v1/admin/apps
 {"id":"eco","name":"Event Coordinator","scopes":{"freebusy":"read","default":"none"}}
 → {"app":{...},"token":"aeg_app_…"}
 
-GET /v1/library/freebusy
+GET /me/freebusy
 Authorization: Bearer aeg_app_…
 ```
 
@@ -845,12 +845,12 @@ Authorization: Bearer aeg_app_…
 
 **What an app token can call:**
 
-- `GET /v1/library/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages,transactions,places,documents}` only
+- `GET /me/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages,transactions,places,documents}` only
 - Not admin, OAuth, service proxy, mail, pre-request, mirror, review, or links
 - Not document full-text (`…/{service}/{id}/text`) and not user-defined kinds. Built-in list paths are derived from `LibraryKind.AppReadable`.
 
-When an app holds only the `freebusy` route grant, `/v1/library/events` is
-denied and `/v1/library/freebusy` serves availability only.
+When an app holds only the `freebusy` route grant, `/me/events` is
+denied and `/me/freebusy` serves availability only.
 Cache entries are isolated per grant map so a freebusy app
 never reads a full-events cache.
 
@@ -1012,7 +1012,7 @@ Demo flow:
 2. Consent page lists what the app may read (this demo asks for
  `freebusy:read` only). Allow the grant.
 3. The browser returns with `?code=` and exchanges it for an app token.
-4. The page calls `GET /v1/library/freebusy` and shows busy intervals.
+4. The page calls `GET /me/freebusy` and shows busy intervals.
 5. Toggle Aegis **off** to clear the page token and `POST /v1/apps/revoke`.
 
 `redirect_uri` must be a path on the same host (no open redirects). Reuse of a

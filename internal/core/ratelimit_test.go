@@ -114,7 +114,7 @@ func TestAuthBruteForce_LocksOutIP(t *testing.T) {
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	attempt := func(key string) int {
-		req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+		req := httptest.NewRequest(http.MethodGet, "/me/tracks", nil)
 		req.Header.Set("X-Api-Key", key)
 		w := httptest.NewRecorder()
 		h(w, req)
@@ -141,7 +141,7 @@ func TestAuthBruteForce_LocksOutTokenAcrossIPs(t *testing.T) {
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	for i := 0; i < 3; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+		req := httptest.NewRequest(http.MethodGet, "/me/tracks", nil)
 		req.RemoteAddr = fmt.Sprintf("203.0.113.%d:41000", i+1)
 		req.Header.Set("X-Api-Key", "probed-key")
 		w := httptest.NewRecorder()
@@ -151,7 +151,7 @@ func TestAuthBruteForce_LocksOutTokenAcrossIPs(t *testing.T) {
 		}
 	}
 	// Same presented key from a fresh IP: the per-token cap still holds.
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/tracks", nil)
 	req.RemoteAddr = "198.51.100.7:41000"
 	req.Header.Set("X-Api-Key", "probed-key")
 	w := httptest.NewRecorder()
@@ -171,7 +171,7 @@ func TestAuthBruteForce_SkipsPerIPForLoopbackEdge(t *testing.T) {
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	for i := 0; i < 6; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+		req := httptest.NewRequest(http.MethodGet, "/me/tracks", nil)
 		req.RemoteAddr = "127.0.0.1:52000"
 		req.Header.Set("X-Api-Key", fmt.Sprintf("wrong-key-%d", i))
 		w := httptest.NewRecorder()
@@ -195,7 +195,7 @@ func TestAuthBruteForce_TailnetIdentityExempt(t *testing.T) {
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	for i := 0; i < 6; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+		req := httptest.NewRequest(http.MethodGet, "/me/tracks", nil)
 		w := httptest.NewRecorder()
 		h(w, req)
 		if w.Code != http.StatusUnauthorized {
@@ -343,7 +343,7 @@ func TestAuthFailures_AnonymousNotCounted(t *testing.T) {
 
 	for i := 0; i < 6; i++ {
 		w := httptest.NewRecorder()
-		h(w, httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil))
+		h(w, httptest.NewRequest(http.MethodGet, "/me/tracks", nil))
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("failure %d = %d, want 401 (anonymous 401s must not lock out)", i, w.Code)
 		}

@@ -156,7 +156,7 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`id="copies-body"`,
 		`id="reload-copies"`,
 		`data-copies-status`,
-		"/v1/library/copies",
+		"/me/copies",
 		"Copy ledger",
 		"matchesCopyFilter",
 		"copyStatusOfSources",

@@ -13,7 +13,7 @@ import (
 )
 
 func TestAgentForRequest_APIKeyFallback(t *testing.T) {
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	if got := agentForRequest(req); got != "api-key" {
 		t.Fatalf("agent = %q, want api-key", got)
 	}
@@ -106,7 +106,7 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 		playlists: []kinds.Playlist{{Name: "Mix", Sources: []kinds.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req := httptest.NewRequest("GET", "/me/playlists", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
@@ -178,7 +178,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 	}
 
 	// Agent path still records.
-	req3 := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req3 := httptest.NewRequest("GET", "/me/playlists", nil)
 	req3.Header.Set("X-Api-Key", "test-key")
 	w3 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w3, req3)

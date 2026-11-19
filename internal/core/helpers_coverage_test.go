@@ -74,30 +74,30 @@ func TestLibraryRouteHandlers_Registry(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	routes := srv.library().RouteHandlers()
 	want := []string{
-		"/v1/library/playlists",
-		"/v1/library/tracks",
-		"/v1/library/albums",
-		"/v1/library/artists",
-		"/v1/library/contacts",
-		"/v1/library/photos",
-		"/v1/library/events",
-		"/v1/library/freebusy",
-		"/v1/library/messages",
-		"/v1/library/messages/{service}/{id}",
-		"/v1/library/transactions",
-		"/v1/library/places",
-		"/v1/library/documents",
-		"/v1/library/documents/metadata",
-		"/v1/library/documents/{service}/{id}/text",
-		"/v1/library/documents/{service}/{id}/bytes",
-		"/v1/library/places/city",
-		"/v1/library/places/names",
-		"/v1/library/transactions/items",
-		"/v1/library/transactions/totals",
-		"/v1/library/copies",
-		"/v1/library/review",
-		"/v1/library/links",
-		"/v1/library/links/",
+		"/me/playlists",
+		"/me/tracks",
+		"/me/albums",
+		"/me/artists",
+		"/me/contacts",
+		"/me/photos",
+		"/me/events",
+		"/me/freebusy",
+		"/me/messages",
+		"/me/messages/{service}/{id}",
+		"/me/transactions",
+		"/me/places",
+		"/me/documents",
+		"/me/documents/metadata",
+		"/me/documents/{service}/{id}/text",
+		"/me/documents/{service}/{id}/bytes",
+		"/me/places/city",
+		"/me/places/names",
+		"/me/transactions/items",
+		"/me/transactions/totals",
+		"/me/copies",
+		"/me/review",
+		"/me/links",
+		"/me/links/",
 	}
 	if len(routes) != len(want) {
 		t.Fatalf("routes = %v", routes)
@@ -198,8 +198,8 @@ func TestScopesSatisfy_CoverageHelpers(t *testing.T) {
 func TestHandleAdminRoutesStillRegistered(t *testing.T) {
 	// Smoke: library route handlers are wired and method-checked.
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	handler := srv.library().RouteHandlers()["/v1/library/review"]
-	req := httptest.NewRequest(http.MethodHead, "/v1/library/review", nil)
+	handler := srv.library().RouteHandlers()["/me/review"]
+	req := httptest.NewRequest(http.MethodHead, "/me/review", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
 	if w.Code != http.StatusMethodNotAllowed {

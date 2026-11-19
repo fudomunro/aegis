@@ -62,7 +62,7 @@ func TestHandleLibraryPlaylists_AggregatesServices(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req := httptest.NewRequest("GET", "/me/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
@@ -116,7 +116,7 @@ func TestHandleLibraryPlaylists_UnauthorizedService(t *testing.T) {
 		"youtube-music": &fakePlaylistProvider{err: kinds.ErrUnauthorized},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req := httptest.NewRequest("GET", "/me/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
@@ -151,7 +151,7 @@ func TestHandleLibraryPlaylists_ErrorService(t *testing.T) {
 		"spotify": &fakePlaylistProvider{err: errors.New("upstream boom")},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req := httptest.NewRequest("GET", "/me/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
@@ -207,7 +207,7 @@ func TestPreRequest_PlaylistWithoutServiceName(t *testing.T) {
 	if resp.Action != ActionModify {
 		t.Fatalf("action = %s, want modify", resp.Action)
 	}
-	if !strings.Contains(string(resp.RequestBody), "/v1/library/playlists") {
+	if !strings.Contains(string(resp.RequestBody), "/me/playlists") {
 		t.Fatalf("request_body missing library endpoint: %s", resp.RequestBody)
 	}
 }
@@ -319,7 +319,7 @@ func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req := httptest.NewRequest("GET", "/me/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
@@ -387,7 +387,7 @@ func TestHandleLibraryTracks_AggregatesAndMerges(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -449,7 +449,7 @@ func TestHandleLibraryTracks_UnauthorizedService(t *testing.T) {
 		"youtube-music": &fakeLikedTrackProvider{err: kinds.ErrUnauthorized},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -486,7 +486,7 @@ func TestHandleLibraryTracks_PermissionDenied(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -530,7 +530,7 @@ func TestPreRequest_LikedSongsWithoutServiceName(t *testing.T) {
 	if resp.Action != ActionModify {
 		t.Fatalf("action = %s, want modify", resp.Action)
 	}
-	if !strings.Contains(string(resp.RequestBody), "/v1/library/tracks") {
+	if !strings.Contains(string(resp.RequestBody), "/me/tracks") {
 		t.Fatalf("request_body missing tracks library endpoint: %s", resp.RequestBody)
 	}
 }
@@ -801,7 +801,7 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
+	req := httptest.NewRequest("GET", "/me/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
@@ -833,7 +833,7 @@ func TestHandleLibraryAlbums_PermissionDenied(t *testing.T) {
 		"spotify": &fakeAlbumProvider{albums: []kinds.Album{{Name: "X", Sources: []kinds.AlbumSource{{Service: "spotify", ID: "1"}}}}},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
+	req := httptest.NewRequest("GET", "/me/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
@@ -864,7 +864,7 @@ func TestHandleLibraryArtists_AggregatesAndMerges(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
+	req := httptest.NewRequest("GET", "/me/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
@@ -920,7 +920,7 @@ func TestPreRequest_AlbumsWithoutServiceName(t *testing.T) {
 	if resp.Action != ActionModify {
 		t.Fatalf("action = %s, want modify", resp.Action)
 	}
-	if !strings.Contains(string(resp.RequestBody), "/v1/library/albums") {
+	if !strings.Contains(string(resp.RequestBody), "/me/albums") {
 		t.Fatalf("request_body missing albums library endpoint: %s", resp.RequestBody)
 	}
 }

@@ -22,8 +22,8 @@ Agent data is the unified library. Calendar list/proxy paths are
 not agent API.
 
 ```
-GET /v1/library/events
-GET /v1/library/freebusy
+GET /me/events
+GET /me/freebusy
 ```
 
 This phase is **read-only**. Capabilities do not advertise agent write ops

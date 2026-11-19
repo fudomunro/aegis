@@ -29,7 +29,7 @@ fail-open; Aegis owns OAuth; coverage floor 80%.
 
 **What it asks for.** Let a user define a source and a schema for personal
 data, then have Aegis expose that data to agents under the same kind-centric
-surface as built-in kinds (`/v1/library/{kind}`, neutral list, permissions,
+surface as built-in kinds (`/me/{kind}`, neutral list, permissions,
 pre-request injection). Work spreadsheets / DBs were named as the likely
 utility; canonical ownership is still open.
 

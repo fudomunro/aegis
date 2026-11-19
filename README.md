@@ -8,12 +8,12 @@ A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aper
 
 Aegis runs as two components:
 
-1. **Pre-request hook** — Aperture calls Aegis before forwarding requests to LLM providers. Aegis detects service references and injects instructions that point the agent at Aegis's unified library (`/v1/library/{kind}`) instead of external APIs.
-2. **Unified library + content transport** — Agents call `GET /v1/library/{kind}` for the user's data (playlists, tracks, photos, messages, …). Add `?q=` to search a kind's fields instead of paging the whole list. A narrow `/v1/services/{id}/...` transport remains only for content the library cannot store (photo bytes, full message bodies, playlist items) and local import.
+1. **Pre-request hook** — Aperture calls Aegis before forwarding requests to LLM providers. Aegis detects service references and injects instructions that point the agent at Aegis's unified library (`/me/{kind}`) instead of external APIs.
+2. **Unified library + content transport** — Agents call `GET /me/{kind}` for the user's data (playlists, tracks, photos, messages, …). Add `?q=` to search a kind's fields instead of paging the whole list. A narrow `/v1/services/{id}/...` transport remains only for content the library cannot store (photo bytes, full message bodies, playlist items) and local import.
 
 ```
 Agent → Aperture → Aegis (hook: inject library URLs) → LLM
-Agent → Aegis (/v1/library, content transport) → provider APIs
+Agent → Aegis (/me, content transport) → provider APIs
 ```
 
 ## Prerequisites
@@ -50,7 +50,7 @@ cp aegis.example.json ~/Library/Application\ Support/Aegis/aegis.json
 Then **connect one service** (for example [Spotify](docs/connect/spotify.md)) and call the library:
 
 ```bash
-curl -s https://aegis.your-tailnet.ts.net/v1/library/playlists
+curl -s https://aegis.your-tailnet.ts.net/me/playlists
 ```
 
 You should see neutral playlist objects with `sources[]` provenance. Vocabulary (service vs connector, data grant, canonical home, content transport) is defined in [`docs/glossary.md`](docs/glossary.md).

@@ -35,8 +35,8 @@ func newTransactionsKind(h Host, e *Engine, d Deps) Kind {
 		provides: providerProvides[TransactionProvider],
 		routes: []Route{
 			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve, GrantKey: transactionsRouteKey},
-			{Pattern: "/v1/library/transactions/items", AppReadable: true, Handler: k.serveItems, GrantKey: transactionsItemsRouteKey},
-			{Pattern: "/v1/library/transactions/totals", AppReadable: true, Handler: k.serveTotals, GrantKey: transactionsTotalsRouteKey},
+			{Pattern: "/me/transactions/items", AppReadable: true, Handler: k.serveItems, GrantKey: transactionsItemsRouteKey},
+			{Pattern: "/me/transactions/totals", AppReadable: true, Handler: k.serveTotals, GrantKey: transactionsTotalsRouteKey},
 		},
 	}
 	return k
@@ -55,20 +55,20 @@ const (
 )
 
 // serve returns full line items, including account identifiers:
-// GET /v1/library/transactions. Query filters: after, before, account, q,
+// GET /me/transactions. Query filters: after, before, account, q,
 // currency (issue #141).
 func (k *transactionsKind) serve(w http.ResponseWriter, r *http.Request) {
 	k.serveShape(w, r, transactionsRouteKey, transactionFull)
 }
 
 // serveItems returns line items with account identifiers stripped:
-// GET /v1/library/transactions/items.
+// GET /me/transactions/items.
 func (k *transactionsKind) serveItems(w http.ResponseWriter, r *http.Request) {
 	k.serveShape(w, r, transactionsItemsRouteKey, transactionItems)
 }
 
 // serveTotals returns category/month totals only:
-// GET /v1/library/transactions/totals.
+// GET /me/transactions/totals.
 func (k *transactionsKind) serveTotals(w http.ResponseWriter, r *http.Request) {
 	k.serveShape(w, r, transactionsTotalsRouteKey, transactionTotals)
 }

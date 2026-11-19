@@ -109,7 +109,7 @@ iCloud is **best-effort** in this phase, not an officially supported target.
 
 ## Free/busy
 
-Mirrored and listed CalDAV events feed `GET /v1/library/freebusy` (issue
+Mirrored and listed CalDAV events feed `GET /me/freebusy` (issue
 #128) exactly like Google Calendar. A freebusy-only data grant never sees
 titles, attendees, or locations.
 

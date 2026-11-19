@@ -22,7 +22,7 @@ Read-only — no budget mutations are advertised.
 Agent data is the unified library:
 
 ```
-GET /v1/library/transactions
+GET /me/transactions
 ```
 
 YNAB budget/account/transaction proxy paths are not agent API.

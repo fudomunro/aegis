@@ -17,8 +17,8 @@ func TestBuiltinLibraryKinds_UniqueIDs(t *testing.T) {
 		if k.ID != k.PermType {
 			t.Errorf("kind %q: PermType %q must equal ID", k.ID, k.PermType)
 		}
-		if k.Path != "/v1/library/"+k.ID {
-			t.Errorf("kind %q: Path %q must be /v1/library/%s", k.ID, k.Path, k.ID)
+		if k.Path != "/me/"+k.ID {
+			t.Errorf("kind %q: Path %q must be /me/%s", k.ID, k.Path, k.ID)
 		}
 		if seen[k.ID] {
 			t.Fatalf("duplicate kind ID %q", k.ID)

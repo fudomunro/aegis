@@ -258,7 +258,7 @@ func (h *Handlers) buildFlowTopology(window time.Duration, windowLabel string) F
 		ID:     "search",
 		Kind:   FlowKindStore,
 		Label:  "Search index",
-		Detail: "Local FTS index for /v1/library/{kind}?q=",
+		Detail: "Local FTS index for /me/{kind}?q=",
 		Parent: "aegis",
 		Status: "disabled",
 	}

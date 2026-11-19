@@ -44,14 +44,14 @@ func newDocumentsKind(h Host, e *Engine, d Deps) Kind {
 		provides: providerProvides[DocumentProvider],
 		routes: []Route{
 			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve, GrantKey: documentsRouteKey},
-			{Pattern: "/v1/library/documents/metadata", AppReadable: true, Handler: k.serveMetadata, GrantKey: documentsMetadataRouteKey},
+			{Pattern: "/me/documents/metadata", AppReadable: true, Handler: k.serveMetadata, GrantKey: documentsMetadataRouteKey},
 			// Full text is a read on the documents route: the metadata
 			// route never sees it (issue #143).
-			{Pattern: "/v1/library/documents/{service}/{id}/text", Handler: k.serveText, GrantKey: documentsRouteKey},
+			{Pattern: "/me/documents/{service}/{id}/text", Handler: k.serveText, GrantKey: documentsRouteKey},
 			// Attachment bytes for archived export copies (issue #215):
 			// neutral octet streams, gated like text. Live-provider
 			// documents keep their own sources[].blob_url.
-			{Pattern: "/v1/library/documents/{service}/{id}/bytes", Handler: k.serveBytes, GrantKey: documentsRouteKey},
+			{Pattern: "/me/documents/{service}/{id}/bytes", Handler: k.serveBytes, GrantKey: documentsRouteKey},
 		},
 	}
 	return k
@@ -66,14 +66,14 @@ func (k *documentsKind) HasProviders(h Host) bool {
 }
 
 // serve returns the user's documents with list excerpts:
-// GET /v1/library/documents. Query filters: q, tag, after, before (issue
+// GET /me/documents. Query filters: q, tag, after, before (issue
 // #143).
 func (k *documentsKind) serve(w http.ResponseWriter, r *http.Request) {
 	k.serveShape(w, r, documentsRouteKey, false)
 }
 
 // serveMetadata returns titles, dates, tags, and sources only — no excerpt
-// or text: GET /v1/library/documents/metadata (issue #348).
+// or text: GET /me/documents/metadata (issue #348).
 func (k *documentsKind) serveMetadata(w http.ResponseWriter, r *http.Request) {
 	k.serveShape(w, r, documentsMetadataRouteKey, true)
 }
@@ -140,7 +140,7 @@ func (k *documentsKind) serveShape(w http.ResponseWriter, r *http.Request, grant
 }
 
 // serveText returns full extracted text for one document:
-// GET /v1/library/documents/{service}/{id}/text. Gated separately from
+// GET /me/documents/{service}/{id}/text. Gated separately from
 // list metadata: metadata access cannot read content (issue #143).
 func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -154,7 +154,7 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("service")
 	id := r.PathValue("id")
 	if serviceID == "" || id == "" {
-		shared.WriteJSONError(w, http.StatusNotFound, "expected /v1/library/documents/{service}/{id}/text")
+		shared.WriteJSONError(w, http.StatusNotFound, "expected /me/documents/{service}/{id}/text")
 		return
 	}
 
@@ -248,7 +248,7 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveBytes returns one archived attachment's raw bytes:
-// GET /v1/library/documents/{service}/{id}/bytes. The neutral byte read for
+// GET /me/documents/{service}/{id}/bytes. The neutral byte read for
 // export copies (issue #215) — live-provider documents keep their own
 // sources[].blob_url. Gated like full text: metadata access cannot read it.
 func (k *documentsKind) serveBytes(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +263,7 @@ func (k *documentsKind) serveBytes(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("service")
 	id := r.PathValue("id")
 	if serviceID == "" || id == "" {
-		shared.WriteJSONError(w, http.StatusNotFound, "expected /v1/library/documents/{service}/{id}/bytes")
+		shared.WriteJSONError(w, http.StatusNotFound, "expected /me/documents/{service}/{id}/bytes")
 		return
 	}
 
@@ -322,7 +322,7 @@ func documentServiceName(d Document) string {
 	return DocumentServiceName(d)
 }
 
-// documentFilters are agent-facing list filters for GET /v1/library/documents.
+// documentFilters are agent-facing list filters for GET /me/documents.
 type documentFilters struct {
 	Q      string // free-text on title/correspondent/document_type/tags/excerpt
 	Tag    string // exact tag name (case-insensitive)
@@ -331,7 +331,7 @@ type documentFilters struct {
 }
 
 // parseDocumentFilters reads query parameters from the request.
-// The issue's API shape is GET /v1/library/documents?q=&tag=&after=&before=.
+// The issue's API shape is GET /me/documents?q=&tag=&after=&before=.
 func parseDocumentFilters(r *http.Request) documentFilters {
 	q := r.URL.Query()
 	return documentFilters{

@@ -79,7 +79,7 @@ func (c *ImmichConnector) Capabilities() shared.ServiceCapabilities {
 							{Name: "size", In: "body", Type: "integer", Description: "Page size (default 250)", Default: 250},
 						},
 						Response: shared.ResponseSpec{
-							Description: "Immich search response; use GET /v1/library/photos for neutral Photo values",
+							Description: "Immich search response; use GET /me/photos for neutral Photo values",
 							Fields:      []string{"assets.total", "assets.items", "assets.nextPage"},
 						},
 					},
@@ -122,7 +122,7 @@ func (c *ImmichConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Immich (self-hosted photos), use Aegis's unified data API. Do not call Immich directly or ask the user for an API key.
 
-GET %s/v1/library/photos — photo metadata from every connected photo service, including Immich (bytes stay on Immich)
+GET %s/me/photos — photo metadata from every connected photo service, including Immich (bytes stay on Immich)
 
 Photos are metadata-only. Use sources[].blob_url to fetch bytes (Aegis attaches the Immich API key). Immich holds the authoritative copy (canonical home).
 

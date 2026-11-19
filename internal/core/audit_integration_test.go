@@ -100,7 +100,7 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req := httptest.NewRequest("GET", "/me/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)
@@ -176,7 +176,7 @@ func (f *fakeLikedTracks) ListUserLikedTracks(context.Context) ([]kinds.Track, b
 }
 
 func TestAgentForRequest_ScopePrincipal(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/contacts", nil)
 	if got := agentForRequest(req); got != "api-key" {
 		t.Fatalf("bare = %q", got)
 	}
@@ -200,7 +200,7 @@ func TestRecordAccessFrom_FillsClientIP(t *testing.T) {
 	if err := validateConfig(srv.config); err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/contacts", nil)
 	req.RemoteAddr = "127.0.0.1:52000"
 	req.Header.Set("X-Real-IP", "203.0.113.9")
 	srv.recordAccessFrom(req, metrics.AccessEvent{Agent: "scope:family", Surface: metrics.MetricSurfaceLibrary, Target: "contacts"})
@@ -232,7 +232,7 @@ func TestDenyAuditRows_CarryClientIP(t *testing.T) {
 	srv.audit = a
 
 	// Auth denial: bad credential, resolved client IP must land on the row.
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/contacts", nil)
 	req.RemoteAddr = "203.0.113.44:41000"
 	req.Header.Set("X-Api-Key", "wrong-key")
 	w := httptest.NewRecorder()

@@ -54,7 +54,7 @@ the system flags map to labels (`SEEN`, `ANSWERED`, `FLAGGED`, `DRAFT`,
 Agent data is the unified library:
 
 ```
-GET /v1/library/messages
+GET /me/messages
 ```
 
 Library lists carry snippets only — message bodies stay on the IMAP server

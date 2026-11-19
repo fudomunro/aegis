@@ -86,8 +86,8 @@ func (c *CalDAVConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves CalDAV, Nextcloud calendar, or iCloud Calendar, use Aegis's unified data API. Do not call the DAV server directly.
 
-GET %s/v1/library/events — calendar events across every connected service (title, start_at, end_at, location, sources[])
-GET %s/v1/library/freebusy — busy intervals only (scheduling-safe)
+GET %s/me/events — calendar events across every connected service (title, start_at, end_at, location, sources[])
+GET %s/me/freebusy — busy intervals only (scheduling-safe)
 
 sources[] records where each event lives (service, id, etag for conflict-safe writes).`, root, root)
 }
@@ -96,7 +96,7 @@ sources[] records where each event lives (service, id, etag for conflict-safe wr
 func (c *CalDAVConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	_ = remainingPath
 	shared.WriteJSONError(w, http.StatusNotFound,
-		"CalDAV is library-only — use GET /v1/library/events or /v1/library/freebusy")
+		"CalDAV is library-only — use GET /me/events or /me/freebusy")
 }
 
 // ListCalendarEvents fetches the default window via CalDAV REPORT.

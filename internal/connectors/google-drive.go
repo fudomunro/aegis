@@ -85,7 +85,7 @@ func (c *GoogleDriveConnector) Capabilities() shared.ServiceCapabilities {
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token"},
 						},
 						Response: shared.ResponseSpec{
-							Description: "Drive file list; use GET /v1/library/documents for neutral Document values",
+							Description: "Drive file list; use GET /me/documents for neutral Document values",
 							Fields:      []string{"files", "nextPageToken"},
 						},
 					},
@@ -110,9 +110,9 @@ func (c *GoogleDriveConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Google Docs or paperwork stored in Drive, use Aegis's unified data API. Do not call the Drive API directly or ask the user for OAuth.
 
-GET %s/v1/library/documents — document metadata from every connected source (Google Docs contribute title, dates, owner). Filter with q/tag/after/before. Start here — do not walk Drive /files one by one.
+GET %s/me/documents — document metadata from every connected source (Google Docs contribute title, dates, owner). Filter with q/tag/after/before. Start here — do not walk Drive /files one by one.
 
-GET %s/v1/library/documents/google-drive/{id}/text — full document text for one doc (plain-text export). Requires documents=read. Prefer this over raw Drive export calls when you need content.
+GET %s/me/documents/google-drive/{id}/text — full document text for one doc (plain-text export). Requires documents=read. Prefer this over raw Drive export calls when you need content.
 
 Content export is HTML or plain text via Drive files.export — not markdown yet. Files stay on Google Drive; use sources[].url to open the doc. sources[].blob_url is Aegis content transport (HTML export) — do not call Drive API paths outside /v1/services/google-drive.`, root, root)
 }

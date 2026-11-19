@@ -115,7 +115,7 @@ func (c *PaperlessConnector) Capabilities() shared.ServiceCapabilities {
 							{Name: "page_size", In: "query", Type: "integer", Description: "Page size (default 100)", Default: 100},
 						},
 						Response: shared.ResponseSpec{
-							Description: "Paperless document list; use GET /v1/library/documents for neutral Document values",
+							Description: "Paperless document list; use GET /me/documents for neutral Document values",
 							Fields:      []string{"count", "next", "results"},
 						},
 					},
@@ -154,9 +154,9 @@ func (c *PaperlessConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Paperless-ngx (receipts, warranties, leases, letters), use Aegis's unified data API. Do not call Paperless directly or ask the user for an API token.
 
-GET %s/v1/library/documents — document metadata from every connected source (title, dates, tags, correspondent; excerpt only when documents=read). Filter with q/tag/after/before.
+GET %s/me/documents — document metadata from every connected source (title, dates, tags, correspondent; excerpt only when documents=read). Filter with q/tag/after/before.
 
-GET %s/v1/library/documents/{service}/{id}/text — full extracted text for one document. Requires documents=read; metadata access is list-only.
+GET %s/me/documents/{service}/{id}/text — full extracted text for one document. Requires documents=read; metadata access is list-only.
 
 Document bytes stay on Paperless. Use sources[].blob_url / sources[].url to reach the file. Aegis does not store or OCR documents.`, root, root)
 }

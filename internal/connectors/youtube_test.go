@@ -13,10 +13,10 @@ func TestYouTubeMusicConnector_SystemInstructions(t *testing.T) {
 
 	instructions := conn.SystemInstructions("https://aegis.example.com")
 
-	if !strings.Contains(instructions, "/v1/library/playlists") {
+	if !strings.Contains(instructions, "/me/playlists") {
 		t.Fatal("instructions missing library playlists")
 	}
-	if !strings.Contains(instructions, "/v1/library/tracks") {
+	if !strings.Contains(instructions, "/me/tracks") {
 		t.Fatal("instructions missing library tracks")
 	}
 	if !strings.Contains(instructions, "/v1/services/youtube-music/playlists/{id}") {

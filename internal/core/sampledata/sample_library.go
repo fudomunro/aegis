@@ -78,7 +78,7 @@ func (c *SampleLibraryConnector) Capabilities() shared.ServiceCapabilities {
 }
 
 func (c *SampleLibraryConnector) SystemInstructions(baseURL string) string {
-	return fmt.Sprintf("Sample Library (%s) is synthetic fixture data. Use Aegis library endpoints under %s/v1/library/; there is no upstream provider.",
+	return fmt.Sprintf("Sample Library (%s) is synthetic fixture data. Use Aegis library endpoints under %s/me/; there is no upstream provider.",
 		c.dataset, strings.TrimRight(baseURL, "/"))
 }
 
@@ -87,7 +87,7 @@ func (c *SampleLibraryConnector) HandleProxy(w http.ResponseWriter, r *http.Requ
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	shared.WriteJSONError(w, http.StatusNotFound, "sample library data is only available through /v1/library")
+	shared.WriteJSONError(w, http.StatusNotFound, "sample library data is only available through /me")
 }
 
 func (c *SampleLibraryConnector) ListUserPlaylists(context.Context) ([]kinds.Playlist, bool, error) {

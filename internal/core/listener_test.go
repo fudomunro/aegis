@@ -23,22 +23,22 @@ func TestAPIRouteAllowed(t *testing.T) {
 		{http.MethodGet, "/healthz"},
 		{http.MethodHead, "/readyz"},
 		{http.MethodPost, "/v1/pre-request"},
-		{http.MethodGet, "/v1/library/playlists"},
-		{http.MethodGet, "/v1/library/messages"},
-		{http.MethodGet, "/v1/library/messages/google-gmail/abc"},
-		{http.MethodGet, "/v1/library/documents/immich/abc/text"},
-		{http.MethodGet, "/v1/library/links"},
-		{http.MethodGet, "/v1/library/review-page-of-udk"},
-		{http.MethodHead, "/v1/library/contacts"},
+		{http.MethodGet, "/me/playlists"},
+		{http.MethodGet, "/me/messages"},
+		{http.MethodGet, "/me/messages/google-gmail/abc"},
+		{http.MethodGet, "/me/documents/immich/abc/text"},
+		{http.MethodGet, "/me/links"},
+		{http.MethodGet, "/me/review-page-of-udk"},
+		{http.MethodHead, "/me/contacts"},
 		{http.MethodGet, "/v1/services/immich/assets/abc/original"},
 		{http.MethodPost, "/v1/services/signal/import"},
 		{http.MethodGet, "/v1/auth/status"},
 		{http.MethodPost, "/v1/apps/token"},
 		{http.MethodPost, "/v1/apps/revoke"},
 		// Grant-decided library writes.
-		{http.MethodPost, "/v1/library/photos/share"},
-		{http.MethodPost, "/v1/library/links"},
-		{http.MethodDelete, "/v1/library/links/abc"},
+		{http.MethodPost, "/me/photos/share"},
+		{http.MethodPost, "/me/links"},
+		{http.MethodDelete, "/me/links/abc"},
 	}
 	for _, tc := range allowed {
 		if !apiRouteAllowed(tc.method, tc.path) {
@@ -65,16 +65,16 @@ func TestAPIRouteAllowed(t *testing.T) {
 		{http.MethodGet, "/v1/auth/spotify"},
 		{http.MethodGet, "/v1/auth/spotify/callback"},
 		// Owner-internal maintenance reads stay admin-side.
-		{http.MethodGet, "/v1/library/review"},
-		{http.MethodGet, "/v1/library/copies"},
+		{http.MethodGet, "/me/review"},
+		{http.MethodGet, "/me/copies"},
 		// Mail retrieval retired with /v1/mail (issue #311): unlisted.
 		{http.MethodGet, "/v1/mail/search"},
 		{http.MethodGet, "/v1/mail/status"},
 		{http.MethodPost, "/v1/mail/sync"},
 		{http.MethodGet, "/v1/mail/sync"},
 		// Mutations on agent read prefixes are not agent routes.
-		{http.MethodPost, "/v1/library/playlists"},
-		{http.MethodDelete, "/v1/library/playlists"},
+		{http.MethodPost, "/me/playlists"},
+		{http.MethodDelete, "/me/playlists"},
 		{http.MethodPut, "/v1/services/immich/assets"},
 		{http.MethodPost, "/v1/auth/status"},
 		// Demo / dev harnesses never publish.
@@ -98,7 +98,7 @@ func TestAPIAllowlistGate_UnlistedRoutes404(t *testing.T) {
 	mux.HandleFunc("/v1/admin/summary", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/v1/library/playlists", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/me/playlists", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	gate := apiAllowlistGate(mux)
@@ -112,7 +112,7 @@ func TestAPIAllowlistGate_UnlistedRoutes404(t *testing.T) {
 	}
 
 	w = httptest.NewRecorder()
-	gate.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/library/playlists", nil))
+	gate.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/me/playlists", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("allowlisted route through gate: code=%d, want 200", w.Code)
 	}
@@ -146,7 +146,7 @@ func TestAuthMiddleware_ExternalAPI_TokensOnly(t *testing.T) {
 	})
 
 	// Invite token works on the published bind.
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/contacts", nil)
 	req = withExternalAPI(req)
 	req.Header.Set("X-Api-Key", "YOUR_EXT_KEY")
 	w := httptest.NewRecorder()
@@ -157,7 +157,7 @@ func TestAuthMiddleware_ExternalAPI_TokensOnly(t *testing.T) {
 
 	// The shared agent key never crosses the public bind.
 	called = false
-	req = httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	req = httptest.NewRequest(http.MethodGet, "/me/contacts", nil)
 	req = withExternalAPI(req)
 	req.Header.Set("Authorization", "Bearer agent-key")
 	w = httptest.NewRecorder()
@@ -168,7 +168,7 @@ func TestAuthMiddleware_ExternalAPI_TokensOnly(t *testing.T) {
 
 	// Nor the admin key.
 	called = false
-	req = httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	req = httptest.NewRequest(http.MethodGet, "/me/contacts", nil)
 	req = withExternalAPI(req)
 	req.Header.Set("Authorization", "Bearer admin-key")
 	w = httptest.NewRecorder()
@@ -180,7 +180,7 @@ func TestAuthMiddleware_ExternalAPI_TokensOnly(t *testing.T) {
 	// Ambient identity is not resolved at all — even a loopback Serve hop
 	// cannot authenticate here; tokens only.
 	called = false
-	req = httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	req = httptest.NewRequest(http.MethodGet, "/me/contacts", nil)
 	req = withExternalAPI(req)
 	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("Tailscale-User-Login", "alice@example.com")
@@ -192,7 +192,7 @@ func TestAuthMiddleware_ExternalAPI_TokensOnly(t *testing.T) {
 
 	// Nothing at all → 401.
 	called = false
-	req = withExternalAPI(httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil))
+	req = withExternalAPI(httptest.NewRequest(http.MethodGet, "/me/contacts", nil))
 	w = httptest.NewRecorder()
 	h(w, req)
 	if called || w.Code != http.StatusUnauthorized {

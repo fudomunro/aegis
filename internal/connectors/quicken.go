@@ -69,7 +69,7 @@ func (s *QuickenStore) Admin() ImportAdmin {
 		FlagName:    "-quicken-store",
 		PathHint:    "a QIF/QFX file or directory",
 		SamplePath:  "~/Downloads/Quicken (QIF / QFX / OFX file or directory)",
-		LibraryPath: "/v1/library/transactions",
+		LibraryPath: "/me/transactions",
 		Panel: ImportPanel{
 			Heading: "Quicken import (read-only)",
 			Title:   "Historical bank exports",
@@ -795,7 +795,7 @@ func (c *QuickenConnector) Capabilities() shared.ServiceCapabilities {
 // SystemInstructions returns the agent hint when Quicken is referenced.
 func (c *QuickenConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	return fmt.Sprintf(`When the user's request involves Quicken files or historical bank exports, use Aegis. Imported QIF/QFX line items are available through GET %s/v1/library/transactions (source service "quicken") merged with live budget data. Statements and PDFs are never stored — metadata only. If the history is missing, ask the operator to import files (Advanced → Quicken import).
+	return fmt.Sprintf(`When the user's request involves Quicken files or historical bank exports, use Aegis. Imported QIF/QFX line items are available through GET %s/me/transactions (source service "quicken") merged with live budget data. Statements and PDFs are never stored — metadata only. If the history is missing, ask the operator to import files (Advanced → Quicken import).
 `, root)
 }
 

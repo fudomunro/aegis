@@ -45,7 +45,7 @@ type SyncIdentity struct {
 type LibraryKind struct {
 	// ID is the short name ("tracks") used in cache keys and logs.
 	ID string
-	// Path is the agent-facing endpoint ("/v1/library/tracks").
+	// Path is the agent-facing endpoint ("/me/tracks").
 	Path string
 	// PermType is the permissions map key and path classifier type.
 	PermType string

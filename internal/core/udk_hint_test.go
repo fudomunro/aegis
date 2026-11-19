@@ -16,7 +16,7 @@ func TestUserDefinedHint_ListsSortedFieldsAndCanonical(t *testing.T) {
 	schema := kinds.UserDefinedKindSchema{
 		ID:              "reading-list",
 		Label:           "reading list",
-		Path:            "/v1/library/reading-list",
+		Path:            "/me/reading-list",
 		Usage:           "books the user is reading",
 		Summary:         "entries with title and author",
 		SyncRule:        "match on title+author",
@@ -30,7 +30,7 @@ func TestUserDefinedHint_ListsSortedFieldsAndCanonical(t *testing.T) {
 
 	hint := srv.library().UserDefinedHint(schema)
 	for _, want := range []string{
-		"/v1/library/reading-list",
+		"/me/reading-list",
 		"Notion Export",
 		"reading list",
 		"Schema-declared fields",

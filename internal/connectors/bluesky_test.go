@@ -169,7 +169,7 @@ func TestBlueskyHandleProxy_NotImplemented(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "/v1/library/photos/share") {
+	if !strings.Contains(w.Body.String(), "/me/photos/share") {
 		t.Fatalf("body = %s", w.Body.String())
 	}
 }
@@ -193,10 +193,10 @@ func TestBlueskyCapabilitiesAndInstructions(t *testing.T) {
 		t.Fatalf("messages op = %+v", caps.Kinds[1].Operations[0])
 	}
 	instr := conn.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(instr, "/v1/library/photos/share") || !strings.Contains(instr, "ownership") {
+	if !strings.Contains(instr, "/me/photos/share") || !strings.Contains(instr, "ownership") {
 		t.Fatalf("instructions = %s", instr)
 	}
-	if !strings.Contains(instr, "/v1/library/messages") || !strings.Contains(instr, "getBlob") {
+	if !strings.Contains(instr, "/me/messages") || !strings.Contains(instr, "getBlob") {
 		t.Fatalf("instructions missing library sync: %s", instr)
 	}
 }

@@ -35,8 +35,8 @@ copy-ledger watermark and expired tokens (410) restart the feed.
 Agent data is the unified library:
 
 ```
-GET /v1/library/events
-GET /v1/library/freebusy
+GET /me/events
+GET /me/freebusy
 ```
 
 Events sync through convergence like every other kind: the group's

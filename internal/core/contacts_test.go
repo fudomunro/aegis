@@ -67,7 +67,7 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req := httptest.NewRequest("GET", "/me/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -109,7 +109,7 @@ func TestHandleLibraryContacts_NoProviders(t *testing.T) {
 		"spotify": connectors.NewSpotifyConnector(srv),
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req := httptest.NewRequest("GET", "/me/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -139,7 +139,7 @@ func TestHandleLibraryContacts_DeniedByPermission(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req := httptest.NewRequest("GET", "/me/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -166,7 +166,7 @@ func TestHandleLibraryContacts_UnauthorizedService(t *testing.T) {
 		"outlook": &fakeContactProvider{err: kinds.ErrUnauthorized},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req := httptest.NewRequest("GET", "/me/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -195,7 +195,7 @@ func TestHandleLibraryContacts_ErrorService(t *testing.T) {
 		"google": &fakeContactProvider{err: errors.New("upstream boom")},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req := httptest.NewRequest("GET", "/me/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -217,7 +217,7 @@ func TestHandleLibraryContacts_ErrorService(t *testing.T) {
 
 func TestHandleLibraryContacts_MethodNotAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	req := httptest.NewRequest("POST", "/v1/library/contacts", nil)
+	req := httptest.NewRequest("POST", "/me/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -286,7 +286,7 @@ func TestPreRequest_ContactsWithoutServiceName(t *testing.T) {
 	if resp.Action != ActionModify {
 		t.Fatalf("action = %s, want modify", resp.Action)
 	}
-	if !strings.Contains(string(resp.RequestBody), "/v1/library/contacts") {
+	if !strings.Contains(string(resp.RequestBody), "/me/contacts") {
 		t.Fatalf("request_body missing contacts library endpoint: %s", resp.RequestBody)
 	}
 }

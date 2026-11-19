@@ -7,7 +7,7 @@ and documents — so the next kind does not rediscover them.
 
 Use it when you are:
 
-- adding a unified `/v1/library/{kind}` dataset,
+- adding a unified `/me/{kind}` dataset,
 - adding a connector provider for an existing kind,
 - or extending a kind with locations / identity / sample fixtures
   (see #91, #89, #76, #16, #4).
@@ -32,7 +32,7 @@ These three names often mean the same underlying concept. Keep them aligned.
 |------|-------|---------|
 | **Library kind ID** | `LibraryKind.ID`, cache keys, logs, metrics `Kind` | `tracks` |
 | **Permission / kind key** | `LibraryKind.PermType`, `Permissions` map, `KindCapability.Name`, `KindForPath` | `tracks` |
-| **Agent path** | `LibraryKind.Path` | `/v1/library/tracks` |
+| **Agent path** | `LibraryKind.Path` | `/me/tracks` |
 
 A connector's **kind capability** (`KindCapability`) advertises what
 that *service* can do for the same key. A library kind is the **unified**
@@ -41,7 +41,7 @@ cross-service view of that key.
 ```
 Agent question
     → pre-request keywords (LibraryKind.Keywords)
-    → GET /v1/library/{id}   (aggregate)
+    → GET /me/{id}   (aggregate)
         → each connector's ListUser… provider
         → merge / match / enrich
         → stamp canonical + copy ledger
@@ -55,7 +55,7 @@ Agent question
 These are non-negotiable (see `AGENTS.md`). New kinds inherit them.
 
 1. **Kind-centric surface; named-service connectors.** Design the kind first
-   (`/v1/library/{kind}`, neutral model, `LibraryKind`). Real providers
+   (`/me/{kind}`, neutral model, `LibraryKind`). Real providers
    (Spotify, Gmail, …) are the connectors that populate it — not generic
    auto-detected blobs. A kind without a named connector (or a user-defined
    source under #15) is a stub, not a feature.

@@ -4,7 +4,7 @@ import "testing"
 
 func TestLibraryKind_MentionsInstructionsCacheKey(t *testing.T) {
 	k := LibraryKind{
-		ID: "widgets", Path: "/v1/library/widgets", Label: "widgets",
+		ID: "widgets", Path: "/me/widgets", Label: "widgets",
 		Usage: "widgets", Summary: "widgets", SyncRule: "merge",
 		ExampleQuestion: "what widgets?",
 		Keywords:        []string{"my widgets"},

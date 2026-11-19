@@ -29,7 +29,7 @@ type GooglePhotosConnector struct {
 	mu sync.Mutex
 	// lastSessionID is the most recent picker session Aegis created or
 	// observed as complete. ListUserPhotos serves that selection so
-	// /v1/library/photos works after the user finishes picking.
+	// /me/photos works after the user finishes picking.
 	lastSessionID string
 }
 
@@ -116,7 +116,7 @@ func (c *GooglePhotosConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Google Photos, use Aegis's unified data API. Do not call Google Photos directly.
 
-GET %s/v1/library/photos — photo metadata across every connected photo service
+GET %s/me/photos — photo metadata across every connected photo service
 
 Google Photos uses the Picker API: the user must explicitly select photos once. Full library sync is not available without Google app verification.
 
@@ -124,7 +124,7 @@ Picker flow (Aegis authenticates you):
 1. POST %s/v1/services/google-photos/picker/sessions — create a session; return picker_uri to the user and ask them to open it
 2. GET %s/v1/services/google-photos/picker/sessions/{id} — poll until media_items_set is true
 3. GET %s/v1/services/google-photos/picker/mediaItems?sessionId={id} — list the selection as neutral Photo metadata
-4. GET %s/v1/library/photos — last completed pick plus other photo services
+4. GET %s/me/photos — last completed pick plus other photo services
 
 Photos are metadata-only. Aegis never downloads or stores image bytes. Use sources[].blob_url for the short-lived download URL (often expires in about an hour).
 

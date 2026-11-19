@@ -288,7 +288,7 @@ func TestMailQuery_FetchByID(t *testing.T) {
 	}
 
 	// The collection endpoint answers the oldest-message question.
-	w = doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?sort=asc&limit=1", "")
+	w = doMessagesReq(t, srv, http.MethodGet, "/me/messages?sort=asc&limit=1", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search http code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -453,7 +453,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	}
 
 	// Library tracks merge ISRC across the fake services.
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -481,7 +481,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	}
 
 	// Messages merge Message-ID across gmail + takeout.
-	req = httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req = httptest.NewRequest("GET", "/me/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
@@ -506,7 +506,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	}
 
 	// Contacts merge identity chains.
-	req = httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req = httptest.NewRequest("GET", "/me/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -536,7 +536,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &sampleTrackPlaylistProvider{tracks: filterTracks(lib.Tracks, "spotify")},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -558,7 +558,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 			tracks: filterTracks(lib.Tracks, "youtube-music"),
 		},
 	}
-	req = httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req = httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)

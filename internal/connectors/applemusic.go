@@ -244,7 +244,7 @@ func (c *AppleMusicConnector) Capabilities() shared.ServiceCapabilities {
 							{Name: "offset", In: "query", Type: "integer", Description: "Page offset"},
 						},
 						Response: shared.ResponseSpec{
-							Description: "Apple Music library playlist page; use GET /v1/library/playlists for neutral Playlist values",
+							Description: "Apple Music library playlist page; use GET /me/playlists for neutral Playlist values",
 							Fields:      []string{"data", "next", "meta.total"},
 						},
 					},
@@ -277,7 +277,7 @@ func (c *AppleMusicConnector) Capabilities() shared.ServiceCapabilities {
 							{Name: "offset", In: "query", Type: "integer", Description: "Page offset"},
 						},
 						Response: shared.ResponseSpec{
-							Description: "Apple Music library song page; use GET /v1/library/tracks for neutral Track values",
+							Description: "Apple Music library song page; use GET /me/tracks for neutral Track values",
 							Fields:      []string{"data", "next", "meta.total"},
 						},
 					},
@@ -293,7 +293,7 @@ func (c *AppleMusicConnector) Capabilities() shared.ServiceCapabilities {
 						Method:      "GET",
 						Path:        "/me/library/albums",
 						Response: shared.ResponseSpec{
-							Description: "Apple Music library album page; use GET /v1/library/albums for neutral Album values",
+							Description: "Apple Music library album page; use GET /me/albums for neutral Album values",
 							Fields:      []string{"data", "next", "meta.total"},
 						},
 					},
@@ -309,7 +309,7 @@ func (c *AppleMusicConnector) Capabilities() shared.ServiceCapabilities {
 						Method:      "GET",
 						Path:        "/me/library/artists",
 						Response: shared.ResponseSpec{
-							Description: "Apple Music library artist page; use GET /v1/library/artists for neutral Artist values",
+							Description: "Apple Music library artist page; use GET /me/artists for neutral Artist values",
 							Fields:      []string{"data", "next", "meta.total"},
 						},
 					},
@@ -325,10 +325,10 @@ func (c *AppleMusicConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Apple Music or their music library, use Aegis's unified data API. Do not call Apple Music directly.
 
-GET %s/v1/library/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
-GET %s/v1/library/tracks — liked/saved tracks
-GET %s/v1/library/albums — saved albums
-GET %s/v1/library/artists — artists
+GET %s/me/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
+GET %s/me/tracks — liked/saved tracks
+GET %s/me/albums — saved albums
+GET %s/me/artists — artists
 
 sources[] records where each item lives for sync/backup — prefer the library over service-specific calls.
 

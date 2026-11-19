@@ -1,7 +1,7 @@
 # Connecting services
 
 OAuth and import guides for each named service. After connecting one music
-service, call `GET /v1/library/playlists` to confirm the library is live.
+service, call `GET /me/playlists` to confirm the library is live.
 
 | Service | Guide |
 |---------|-------|

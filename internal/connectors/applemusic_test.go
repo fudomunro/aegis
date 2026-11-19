@@ -363,7 +363,7 @@ func TestAppleMusicProxy_PlaylistDetail(t *testing.T) {
 func TestAppleMusicSystemInstructions_PointAtLibrary(t *testing.T) {
 	c := NewAppleMusicConnector(newTestHost("https://aegis.example.com"))
 	got := c.SystemInstructions("https://aegis.example.com")
-	for _, want := range []string{"/v1/library/playlists", "/v1/library/tracks", "/v1/services/apple-music/playlists/{id}"} {
+	for _, want := range []string{"/me/playlists", "/me/tracks", "/v1/services/apple-music/playlists/{id}"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("instructions missing %q:\n%s", want, got)
 		}

@@ -87,9 +87,9 @@ func (h *Handlers) RouteHandlers() map[string]http.HandlerFunc {
 	// Cross-kind maintenance reads (copy ledger, merge review, entity
 	// links) are not owned by any kind: fixed registrations here, and the
 	// API-listener deny list names the admin-side ones explicitly.
-	handlers["/v1/library/copies"] = h.HandleLibraryCopies
-	handlers["/v1/library/review"] = h.HandleMergeReview
-	handlers["/v1/library/links"] = h.HandleEntityLinks
-	handlers["/v1/library/links/"] = h.HandleEntityLinks
+	handlers["/me/copies"] = h.HandleLibraryCopies
+	handlers["/me/review"] = h.HandleMergeReview
+	handlers["/me/links"] = h.HandleEntityLinks
+	handlers["/me/links/"] = h.HandleEntityLinks
 	return handlers
 }

@@ -412,7 +412,7 @@ func Run() {
 
 	// Local import stores (issue #393): opened from the connectors
 	// registry. File-based import sources — not operator-facing service
-	// cards; an in-memory entry is injected so /v1/library fan-in sees
+	// cards; an in-memory entry is injected so /me fan-in sees
 	// them as sources while the store is enabled.
 	localStores := map[string]connectors.ImportStore{}
 	for _, spec := range localStoreSpecs {
@@ -593,7 +593,7 @@ func Run() {
 			Schedules:          scheduleStore,
 			ServiceConcurrency: parseServiceConcurrency(*syncServiceConcurrency),
 			DefaultConcurrency: 1,
-			// Ingest changes what /v1/library/* would return; drop cached
+			// Ingest changes what /me/* would return; drop cached
 			// aggregates (and that service's transport entries) instead of
 			// waiting out the TTL. MBID lookups survive (issue #273).
 			OnDone: func(job syncjobs.SyncJob, succeeded bool) {
@@ -823,7 +823,7 @@ type cliModeOptions struct {
 // true when the caller should exit immediately (issue #274).
 
 // ensureLocalStoreService injects a local import store's service card into
-// config so /v1/library fan-in sees it as a source (issue #266).
+// config so /me fan-in sees it as a source (issue #266).
 func ensureLocalStoreService(cfg *Config, d connectors.LocalStoreService) {
 	cfg.EnsureService(Service{
 		ID:          d.ID,

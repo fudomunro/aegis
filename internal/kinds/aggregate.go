@@ -138,7 +138,7 @@ func indexWriteable(h Host, r *http.Request) bool {
 	return p == PrincipalOwner
 }
 
-// Aggregate is the shared GET /v1/library/{kind} pipeline: method check,
+// Aggregate is the shared GET /me/{kind} pipeline: method check,
 // cache, permission-aware fan-out, merge, and JSON response.
 func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request, spec Spec[T]) {
 	if r.Method != http.MethodGet {
@@ -417,7 +417,7 @@ func fetch[T any](h Host, e *Engine, r *http.Request, spec Spec[T], logger *slog
 	return out
 }
 
-// search answers GET /v1/library/{kind}?q= from the search index (issue
+// search answers GET /me/{kind}?q= from the search index (issue
 // #178). A cold index (nothing materialized for this kind+dataset) is
 // bootstrapped from one live fetch first, so results are correct from the
 // first query. Hits pass the same per-service read gate as the aggregate.

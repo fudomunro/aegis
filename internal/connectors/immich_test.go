@@ -27,7 +27,7 @@ func TestImmichConnector_SystemInstructions(t *testing.T) {
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
 		"/v1/services/immich/assets/{id}/original",
-		"/v1/library/photos",
+		"/me/photos",
 		"blob_url",
 		"canonical home",
 	} {

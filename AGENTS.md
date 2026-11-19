@@ -7,7 +7,7 @@ concepts is in [`docs/glossary.md`](docs/glossary.md) (issue #174). This file is
 about how work actually happens here and which product rules must not drift.
 
 Note on the word *agent*: product docs mean the **LLM agent** that calls
-`/v1/library/*`; this file and `AGENTS.md` mean the **coding agent** or
+`/me/*`; this file and `AGENTS.md` mean the **coding agent** or
 maintainer editing the repo. Prefer those labels over a bare “agent”.
 
 ## What this project is
@@ -19,7 +19,7 @@ It does two jobs:
    LLM request and inject instructions that point the agent at Aegis’s
    library APIs (and, only where needed, content/ingest transport).
 2. **Unified library + content transport** — agents call
-   `/v1/library/{kind}` for user data. `/v1/services/{id}/...` is content/ingest
+   `/me/{kind}` for user data. `/v1/services/{id}/...` is content/ingest
    only (photo bytes, full message bodies, playlist items, local import; issue
    #119) — not a general provider-API mirror. Aegis attaches OAuth tokens,
    caches, enforces data grants, and returns neutral models.
@@ -36,7 +36,7 @@ These come from explicit user decisions across sessions. Do not “improve”
 them away.
 
 - **Kind-centric surface; named-service connectors.** The product API is
-  organized around kinds (`/v1/library/{kind}`, neutral models,
+  organized around kinds (`/me/{kind}`, neutral models,
   `LibraryKind`) — including user-defined kinds (#15) — not provider-shaped
   endpoints. Named services (Spotify, YouTube Music, Amazon Music,
   Google Photos/Contacts, Immich, …) remain the first-class **connectors** and
@@ -121,7 +121,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Apps registry + consent grants | `internal/admin/apps/` (store + grant codes), `internal/admin` (`apps_grant.go`, `apps_admin.go`) | Third-party app tokens (issue #131). The admin surface owns registration, consent, and revocation; the hub's auth reads the minted identities |
 | Neutral models + kind data | `internal/kinds` | Models, merge, kind registry metadata, and the converge plans (issue #382); authorization vocabulary is `internal/shared` and stored grant resolution is `internal/core/policy` — never here |
 | Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points) | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; `internal/library` owns the fixed cross-kind routes, kind composition, and agent-facing copy; admin writes stay admin-side |
-| Agent data plane | `internal/library` (+ `library/links`, `library/search`) | Fixed `/v1/library/*` write/maintenance routes, `/v1/services` content transport, kind registry composition, agent-facing instruction copy. The hub constructs `library.Handlers`, mounts its route map behind auth, and implements its `kinds.Host` seam |
+| Agent data plane | `internal/library` (+ `library/links`, `library/search`) | Fixed `/me/*` write/maintenance routes, `/v1/services` content transport, kind registry composition, agent-facing instruction copy. The hub constructs `library.Handlers`, mounts its route map behind auth, and implements its `kinds.Host` seam |
 | Management surface | `internal/admin` (+ `admin/apps`, `admin/scopes`) | `/v1/admin/*`, the admin UI shell, setup flows, admin-owned writes (data grants, apps, data scopes, UDK overlay, connections, ownership), and the admin read models. The hub constructs `admin.Handlers`, mounts its routes behind the admin perimeter, and implements its `admin.Host` seam; the surfaces never import each other |
 | Merge / entity IDs | `internal/kinds` (merge + MBID lookup), `internal/library/links` (entity-link store) | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors` (one file per named service; local import stores share the surface) | Register in the hub's ordered `srv.connectors` list; stores register through `LocalImportStoreSpecs()` (design: `docs/local-import-stores.md`) |
@@ -267,7 +267,7 @@ Principles, not a closed package list. `import_boundary_test.go` and
    hub wires.
 2. **Packages follow audiences and work.** `internal/admin` is the
    management surface (`/v1/admin/*`, admin UI, setup flows, admin-owned
-   writes). `internal/library` is the agent data plane (`/v1/library/*`,
+   writes). `internal/library` is the agent data plane (`/me/*`,
    content transport, read-time enforcement). `internal/syncjobs` is the
    sync domain (queue, runners, freshness, maintenance) that drives the
    data plane in the background and serves no HTTP routes — it sits above
@@ -436,7 +436,7 @@ scope runs everything.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,
   `identity_source`, `path`, `error`). Default JSON in prod.
 - **Neutral models at the library boundary.** Provider quirks stay inside
-  connectors; `/v1/library/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
+  connectors; `/me/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
 - **Grants are data, not comments.** **Data grants** (what the user allows
   an LLM agent or app to use) live in `internal/core/policy` as stored
   `DataGrant` entries; the access-level vocabulary and request rule map are

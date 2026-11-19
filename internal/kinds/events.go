@@ -39,14 +39,14 @@ func newEventsKind(h Host, e *Engine, d Deps) Kind {
 			// Freebusy is the events availability view, not a LibraryKind —
 			// declared as an events subroute so its exposure is declaration
 			// data (issue #312).
-			{Pattern: "/v1/library/freebusy", AppReadable: true, Handler: k.serveFreeBusy, GrantKey: freebusyRouteKey},
+			{Pattern: "/me/freebusy", AppReadable: true, Handler: k.serveFreeBusy, GrantKey: freebusyRouteKey},
 		},
 	}
 	return k
 }
 
 // serve returns the user's calendar events from every connected
-// calendar-capable service: GET /v1/library/events. The route serves full
+// calendar-capable service: GET /me/events. The route serves full
 // events — availability-only access is the separate freebusy route
 // (issue #348).
 func (k *eventsKind) serve(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func (k *eventsKind) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveFreeBusy returns only busy intervals for scheduling apps:
-// GET /v1/library/freebusy (issue #128).
+// GET /me/freebusy (issue #128).
 func (k *eventsKind) serveFreeBusy(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
 	Aggregate(k.h, k.e, w, r, Spec[CalendarEvent]{

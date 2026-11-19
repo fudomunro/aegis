@@ -47,7 +47,7 @@ func TestImmichConnector_LibraryAggregate(t *testing.T) {
 		})
 	}))
 
-	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
+	req := httptest.NewRequest("GET", "/me/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)

@@ -30,7 +30,7 @@ func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
 		srv.library().LibraryHandler("photos"),
 		srv.library().LibraryHandler("events"),
 	} {
-		req := httptest.NewRequest("POST", "/v1/library/x", nil)
+		req := httptest.NewRequest("POST", "/me/x", nil)
 		w := httptest.NewRecorder()
 		h(w, req)
 		if w.Code != http.StatusMethodNotAllowed {
@@ -58,7 +58,7 @@ func TestLibraryTracks_CacheHit(t *testing.T) {
 	}
 	seedLibraryAggregate(t, srv, "tracks", []kinds.Track{{Name: "Cached"}})
 
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -81,7 +81,7 @@ func TestLibraryTracks_ErrorService(t *testing.T) {
 		"spotify": &fakeLikedTrackProvider{err: errors.New("boom")},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -103,7 +103,7 @@ func TestLibraryTracks_ErrorService(t *testing.T) {
 
 func TestLibraryTracks_NoProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -125,7 +125,7 @@ func TestLibraryAlbums_UnauthorizedAndError(t *testing.T) {
 		"youtube-music": &fakeAlbumProvider{err: errors.New("upstream")},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
+	req := httptest.NewRequest("GET", "/me/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
@@ -150,7 +150,7 @@ func TestLibraryAlbums_UnauthorizedAndError(t *testing.T) {
 
 func TestLibraryAlbums_NoProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
+	req := httptest.NewRequest("GET", "/me/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
@@ -172,7 +172,7 @@ func TestLibraryAlbums_SkipsBlockedService(t *testing.T) {
 		"tidal":   &fakeAlbumProvider{albums: []kinds.Album{{Name: "Blocked", Sources: []kinds.AlbumSource{{Service: "tidal", ID: "2"}}}}},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
+	req := httptest.NewRequest("GET", "/me/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
@@ -196,7 +196,7 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 		"spotify": &fakeArtistProvider{err: kinds.ErrUnauthorized},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
+	req := httptest.NewRequest("GET", "/me/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
@@ -242,7 +242,7 @@ func TestLibraryArtists_ErrorService(t *testing.T) {
 		"spotify": &fakeArtistProvider{err: errors.New("nope")},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
+	req := httptest.NewRequest("GET", "/me/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
@@ -272,7 +272,7 @@ func TestLibraryArtists_PermissionDenied(t *testing.T) {
 		"spotify": &fakeArtistProvider{artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "1", "X")}},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
+	req := httptest.NewRequest("GET", "/me/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
@@ -283,7 +283,7 @@ func TestLibraryArtists_PermissionDenied(t *testing.T) {
 
 func TestLibraryArtists_NoProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
+	req := httptest.NewRequest("GET", "/me/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
@@ -345,14 +345,14 @@ func TestLibrarySystemInstructions_ContainEndpoints(t *testing.T) {
 		srv.library().LibraryInstructionsFor("artists"),
 		srv.library().LibraryInstructionsFor("contacts"),
 	} {
-		if !strings.Contains(s, "https://aegis.example.com/v1/library/") {
+		if !strings.Contains(s, "https://aegis.example.com/me/") {
 			t.Fatalf("instructions missing base library path: %s", s)
 		}
 	}
-	if !strings.Contains(srv.library().LibraryInstructionsFor("artists"), "/v1/library/artists") {
+	if !strings.Contains(srv.library().LibraryInstructionsFor("artists"), "/me/artists") {
 		t.Fatal("artists instructions missing endpoint")
 	}
-	if !strings.Contains(srv.library().LibraryInstructionsFor("albums"), "/v1/library/albums") {
+	if !strings.Contains(srv.library().LibraryInstructionsFor("albums"), "/me/albums") {
 		t.Fatal("albums instructions missing endpoint")
 	}
 }
@@ -381,7 +381,7 @@ func TestPreRequest_ArtistsWithoutServiceName(t *testing.T) {
 	if resp.Action != ActionModify {
 		t.Fatalf("action = %s", resp.Action)
 	}
-	if !strings.Contains(string(resp.RequestBody), "/v1/library/artists") {
+	if !strings.Contains(string(resp.RequestBody), "/me/artists") {
 		t.Fatalf("missing artists endpoint: %s", resp.RequestBody)
 	}
 }
@@ -721,7 +721,7 @@ func TestLibraryAlbums_CacheHit(t *testing.T) {
 	}
 	seedLibraryAggregate(t, srv, "albums", []kinds.Album{{Name: "CachedAlbum"}})
 
-	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
+	req := httptest.NewRequest("GET", "/me/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("albums"))(w, req)
@@ -822,7 +822,7 @@ func TestHandleLibraryArtists_ProviderPanicDoesNotKillProcess(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{"spotify": panickingArtistProvider{}}
 
-	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
+	req := httptest.NewRequest("GET", "/me/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("artists"))(w, req)
@@ -846,7 +846,7 @@ func TestLibraryTracks_TruncatedFlag(t *testing.T) {
 		"spotify": &truncatingTrackProvider{},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req := httptest.NewRequest("GET", "/me/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)

@@ -65,10 +65,10 @@ func importTakeoutMbox(t *testing.T, srv *Server) {
 	}
 }
 
-// listTakeoutDocs returns GET /v1/library/documents for the server.
+// listTakeoutDocs returns GET /me/documents for the server.
 func listTakeoutDocs(t *testing.T, srv *Server, query string) kinds.DocumentList {
 	t.Helper()
-	req := httptest.NewRequest("GET", "/v1/library/documents"+query, nil)
+	req := httptest.NewRequest("GET", "/me/documents"+query, nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("documents"))(w, req)
@@ -112,7 +112,7 @@ func TestTakeoutAttachments_ImportListAndByteFetch(t *testing.T) {
 	if src.Service != connectors.TakeoutServiceID || src.Canonical {
 		t.Fatalf("source = %+v, want non-canonical takeout", src)
 	}
-	if !strings.Contains(src.BlobURL, "/v1/library/documents/"+connectors.TakeoutServiceID+"/") {
+	if !strings.Contains(src.BlobURL, "/me/documents/"+connectors.TakeoutServiceID+"/") {
 		t.Fatalf("blob_url = %q", src.BlobURL)
 	}
 
@@ -122,7 +122,7 @@ func TestTakeoutAttachments_ImportListAndByteFetch(t *testing.T) {
 	req.SetPathValue("service", src.Service)
 	req.SetPathValue("id", src.ID)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/{service}/{id}/bytes"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/documents/{service}/{id}/bytes"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("bytes status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -146,12 +146,12 @@ func TestTakeoutAttachments_ImportListAndByteFetch(t *testing.T) {
 	if notes == nil {
 		t.Fatalf("notes.txt missing from %+v", list.Documents)
 	}
-	req2 := httptest.NewRequest("GET", "/v1/library/documents/x/y/text", nil)
+	req2 := httptest.NewRequest("GET", "/me/documents/x/y/text", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	req2.SetPathValue("service", notes.Sources[0].Service)
 	req2.SetPathValue("id", notes.Sources[0].ID)
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/{service}/{id}/text"))(w2, req2)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/documents/{service}/{id}/text"))(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("text status = %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -227,12 +227,12 @@ func TestTakeoutAttachments_BytesRouteGates(t *testing.T) {
 	srv.mail = openTestMailArchive(t)
 	importTakeoutMbox(t, srv)
 
-	req := httptest.NewRequest("GET", "/v1/library/documents/google-takeout/x~2/bytes", nil)
+	req := httptest.NewRequest("GET", "/me/documents/google-takeout/x~2/bytes", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.SetPathValue("service", "google-takeout")
 	req.SetPathValue("id", "x~2")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/{service}/{id}/bytes"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/documents/{service}/{id}/bytes"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("metadata-only key must not read bytes: status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -248,22 +248,22 @@ func TestTakeoutAttachments_BytesRouteGates(t *testing.T) {
 	}
 
 	// Unknown part and method handling on the byte route.
-	req2 := httptest.NewRequest("GET", "/v1/library/documents/google-takeout/nope~9/bytes", nil)
+	req2 := httptest.NewRequest("GET", "/me/documents/google-takeout/nope~9/bytes", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	req2.SetPathValue("service", "google-takeout")
 	req2.SetPathValue("id", "nope~9")
 	w2 := httptest.NewRecorder()
-	srv2.AuthMiddleware(srv2.library().RouteHandler("/v1/library/documents/{service}/{id}/bytes"))(w2, req2)
+	srv2.AuthMiddleware(srv2.library().RouteHandler("/me/documents/{service}/{id}/bytes"))(w2, req2)
 	if w2.Code != http.StatusNotFound {
 		t.Fatalf("missing part status = %d", w2.Code)
 	}
 
-	req3 := httptest.NewRequest("POST", "/v1/library/documents/x/y/bytes", nil)
+	req3 := httptest.NewRequest("POST", "/me/documents/x/y/bytes", nil)
 	req3.Header.Set("Authorization", "Bearer test-key")
 	req3.SetPathValue("service", "google-takeout")
 	req3.SetPathValue("id", "x~2")
 	w3 := httptest.NewRecorder()
-	srv2.AuthMiddleware(srv2.library().RouteHandler("/v1/library/documents/{service}/{id}/bytes"))(w3, req3)
+	srv2.AuthMiddleware(srv2.library().RouteHandler("/me/documents/{service}/{id}/bytes"))(w3, req3)
 	if w3.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("method status = %d", w3.Code)
 	}

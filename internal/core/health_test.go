@@ -122,11 +122,12 @@ func TestAuditRouteFamily(t *testing.T) {
 	}{
 		{"/v1/pre-request", "hook"},
 		{"/v1/admin/summary", "admin"},
-		{"/v1/library/tracks", "library"},
+		{"/me/tracks", "library"},
 		{"/v1/services/spotify/me", "service"},
 		{"/v1/auth/spotify/login", "auth"},
 		{"/v1/apps/token", "apps"},
 		{"/healthz", "observability"},
+		{"/metrics", "observability"},
 		{"/other", "other"},
 	}
 	for _, tc := range cases {
@@ -151,7 +152,7 @@ func TestDeny_RecordsAuthAuditAndProm(t *testing.T) {
 	srv.audit = auditLog
 	srv.prom = metrics.NewPromMetrics("", "")
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/tracks", nil)
 	w := httptest.NewRecorder()
 	srv.deny(w, req, nil, "missing or invalid API key")
 	if w.Code != http.StatusUnauthorized {

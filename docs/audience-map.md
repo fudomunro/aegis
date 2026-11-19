@@ -10,7 +10,7 @@ Companion: [`core-concepts.md`](core-concepts.md).
 
 | Label | Who |
 |-------|-----|
-| **Runtime LLM agent** | Model/tool-loop that consumes pre-request injection and `/v1/library/*` |
+| **Runtime LLM agent** | Model/tool-loop that consumes pre-request injection and `/me/*` |
 | **End user (admin)** | Tailnet owner / homelab operator running Aegis |
 | **Human ops** | Deployer / troubleshooter (Aperture, Docker, logs, flags) |
 | **Developer integrator** | Builds tools/apps against Aegis APIs |
@@ -61,7 +61,7 @@ the shared word “agent”.
 | Surface | Primary audience | Secondary | Language character |
 |---------|------------------|-----------|--------------------|
 | `POST /v1/pre-request` | Aperture (machine) | Runtime LLM agent (via injected text), Human ops (hook-health) | `allow`/`block`/`modify` + `message`. Fail-open on parse errors. |
-| `/v1/library/{kind}` | Runtime LLM agent | Third-party apps (scoped), admin Library tab | Neutral fields (`sources[]`, `canonical`, `truncated`, `entity_id`, `match`). Actionable `EmptyMsg`/`DenyMsg`/`FailMsg`. |
+| `/me/{kind}` | Runtime LLM agent | Third-party apps (scoped), admin Library tab | Neutral fields (`sources[]`, `canonical`, `truncated`, `entity_id`, `match`). Actionable `EmptyMsg`/`DenyMsg`/`FailMsg`. |
 | `/v1/services/{id}/…` | Runtime LLM agent (content/ingest) | Human ops (imports) | Boundary errors: “content/ingest only”. |
 | `/v1/auth/*`, `/v1/apps/*` | End user (browser), Third-party app | Human ops | Short OAuth machine strings; human success pages. |
 | `/v1/admin/*` | Admin UI | Human ops curl, Security auditor | Diagnostic + prescriptive `fix` strings (hook-health is best-in-class). |
@@ -103,7 +103,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 ## 2. Reverse index — audience → surfaces
 
 ### A. Runtime LLM agent
-**Surfaces:** pre-request injection suite (library instructions, SystemInstructions, permission / write-policy / mail / photo notices), `/v1/library/*` + content + mail APIs (response shapes and error strings), guardrail `block` message.
+**Surfaces:** pre-request injection suite (library instructions, SystemInstructions, permission / write-policy / mail / photo notices), `/me/*` + content + mail APIs (response shapes and error strings), guardrail `block` message.
 
 **Strengths:** richest product voice; neutral schema; actionable errors; injection strings stay free of issue numbers and CLI flags.
 
@@ -185,7 +185,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 
 ## 5. Consistency notes for cleanup
 
-1. **Shared lexicon is healthy:** `/v1/library/{kind}`, `sources[]`, `canonical`, `truncated`, `freebusy`, “Aegis owns OAuth”, “does not store media”, “fail-open”, “content/ingest only”.
+1. **Shared lexicon is healthy:** `/me/{kind}`, `sources[]`, `canonical`, `truncated`, `freebusy`, “Aegis owns OAuth”, “does not store media”, “fail-open”, “content/ingest only”.
 2. **Agent injection is the richest product voice** and needs register discipline (keep ops tickets, CLI flags, and issue numbers out).
 3. **Ops diagnosis quality** lives in hook-health `fix` strings and the Immich wizard, not in slog alone.
 4. **Capabilities vs SystemInstructions** are two product dialects (provider-shaped vs library-first). Product rules say capabilities are admin metadata — keep that boundary explicit.

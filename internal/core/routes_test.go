@@ -118,11 +118,11 @@ func TestAPIAllowlist_AgentRoutesAllowed(t *testing.T) {
 		{"GET", "/v1/auth/status"},
 		{"POST", "/v1/apps/token"},
 		{"POST", "/v1/apps/revoke"},
-		{"GET", "/v1/library/playlists"},
-		{"GET", "/v1/library/tracks"},
-		{"GET", "/v1/library/photos"},
-		{"GET", "/v1/library/messages"},
-		{"GET", "/v1/library/messages/google-gmail/m1"},
+		{"GET", "/me/playlists"},
+		{"GET", "/me/tracks"},
+		{"GET", "/me/photos"},
+		{"GET", "/me/messages"},
+		{"GET", "/me/messages/google-gmail/m1"},
 		{"GET", "/v1/services/spotify/v1/me"},
 	}
 	for _, p := range probes {
@@ -182,10 +182,10 @@ func TestRegisterRoutes_FullMuxNoPanic(t *testing.T) {
 	registerRoutes(mux, srv, nil)
 
 	for _, path := range []string{
-		"/v1/library/playlists",
-		"/v1/library/freebusy",
-		"/v1/library/documents/svc/abc/text",
-		"/v1/library/widgets",
+		"/me/playlists",
+		"/me/freebusy",
+		"/me/documents/svc/abc/text",
+		"/me/widgets",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		if _, pattern := mux.Handler(req); pattern == "" {

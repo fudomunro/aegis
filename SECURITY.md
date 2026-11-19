@@ -15,7 +15,7 @@ Aegis serves **two listeners with different perimeters**:
 
 | Listener | Perimeter | Exposure |
 |----------|-----------|----------|
-| **API listener** (`/v1/library/*`, pre-request, content transport, mail agent routes, app-token endpoints) | **The credential** when external access is enabled; the tailnet when it is not | May be public behind TLS |
+| **API listener** (`/me/*`, pre-request, content transport, mail agent routes, app-token endpoints) | **The credential** when external access is enabled; the tailnet when it is not | May be public behind TLS |
 | **Admin listener** (`/v1/admin/*`, `/metrics`, OAuth flows, app consent, mail sync) | **The tailnet** — Tailscale identity or the admin API key | In-tailnet / loopback only. Never public |
 
 ### Tailnet perimeter (admin listener, tailnet-only API)
@@ -281,7 +281,7 @@ from other LAN interfaces.
     `GET /v1/admin/udk/browse` lists directories on the Aegis host and the
     source/extra endpoints accept absolute local paths. Those endpoints
     require an **admin** principal (issue #181). Whatever file is selected can
-    then be read through `/v1/library/{udk}` by authorized agents — so the
+    then be read through `/me/{udk}` by authorized agents — so the
     *selection* is the dangerous step and is no longer on the agent credential.
     Schema packs must not embed secrets in `http_json` headers (rejected at
     load); use named connections / the encrypted token store.

@@ -20,7 +20,7 @@ import (
 
 // GoogleGmailConnector proxies the Gmail API and implements MessageProvider.
 // It lists the user's recent messages as neutral Message values so agents can
-// ask "what email have I received?" through /v1/library/messages. Message
+// ask "what email have I received?" through /me/messages. Message
 // content stays on Gmail (non-Aegis canonical, issue #16). Read-only in
 // this phase — agent write ops are not advertised (issue #61). SMS/WhatsApp
 // are out of scope until a named OAuth-capable connector exists (issue #60).
@@ -171,8 +171,8 @@ func (c *GoogleGmailConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Gmail, email, their inbox, or recent messages, use Aegis's unified data API. Do not call Gmail API directly.
 
-GET %s/v1/library/messages — the user's mail across connected services (subject, snippet, from/to, sent_at, direction, sources[])
-GET %s/v1/library/documents — attachments and life-admin files from mail and other sources (title, mime_type, correspondent, sources[])
+GET %s/me/messages — the user's mail across connected services (subject, snippet, from/to, sent_at, direction, sources[])
+GET %s/me/documents — attachments and life-admin files from mail and other sources (title, mime_type, correspondent, sources[])
 
 sources[] records where each item lives (service + id) for sync. Fetch each message at /v1/services/{sources[].service}/messages/{sources[].id} — never send one service's id to another. Library lists carry snippets only.
 
@@ -569,7 +569,7 @@ func (c *GoogleGmailConnector) HandleListAttachments(w http.ResponseWriter, r *h
 		}
 		if IsGmailQuotaError(err) {
 			shared.WriteJSONError(w, http.StatusTooManyRequests,
-				"Gmail quota exceeded — retry shortly or query the local archive at /v1/library/messages")
+				"Gmail quota exceeded — retry shortly or query the local archive at /me/messages")
 			return
 		}
 		slog.Warn("gmail list attachments failed", "id", messageID, "error", err)
@@ -830,7 +830,7 @@ func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.R
 		}
 		if IsGmailQuotaError(err) {
 			shared.WriteJSONError(w, http.StatusTooManyRequests,
-				"Gmail quota exceeded — retry shortly or query the local archive at /v1/library/messages")
+				"Gmail quota exceeded — retry shortly or query the local archive at /me/messages")
 			return
 		}
 		slog.Warn("gmail get message failed", "id", id, "error", err)
@@ -1245,7 +1245,7 @@ func gmailPartFilename(part gmailMessagePart) string {
 }
 
 // NeutralAttachmentDocument maps one attachment to the neutral Document shape
-// used by /v1/library/documents. Source is google-gmail (same connector as the
+// used by /me/documents. Source is google-gmail (same connector as the
 // parent message); bytes stay on Gmail via sources[].blob_url.
 func (c *GoogleGmailConnector) NeutralAttachmentDocument(raw GoogleGmailMessage, att GmailAttachmentSummary) kinds.Document {
 	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + GoogleGmailServiceID

@@ -8,7 +8,7 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// CopyListResponse is GET /v1/library/copies.
+// CopyListResponse is GET /me/copies.
 type CopyListResponse struct {
 	Copies    []copies.Record `json:"copies"`
 	Total     int             `json:"total"`
@@ -19,7 +19,7 @@ type CopyListResponse struct {
 
 // HandleLibraryCopies lists durable copy-ledger rows (issue #76).
 //
-// GET /v1/library/copies?kind=&service=&status=&entity_key=
+// GET /me/copies?kind=&service=&status=&entity_key=
 func (h *Handlers) HandleLibraryCopies(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")

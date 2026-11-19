@@ -100,7 +100,7 @@ func TestHandlePreRequest_OldestPhotoInCollection(t *testing.T) {
 	content := injectedSystemText(t, resp)
 
 	for _, want := range []string{
-		"/v1/library/photos",
+		"/me/photos",
 		"/v1/services/immich",
 		kinds.PhotoSourceDiscipline(),
 	} {
@@ -115,7 +115,7 @@ func TestHandlePreRequest_DescribeMyOldestPhoto(t *testing.T) {
 	resp := preRequestWithMessage(t, srv, "Describe my oldest photo.")
 	content := injectedSystemText(t, resp)
 
-	if !strings.Contains(content, "/v1/library/photos") {
+	if !strings.Contains(content, "/me/photos") {
 		t.Fatalf("system message missing library photos endpoint:\n%s", content)
 	}
 	if !strings.Contains(content, "Photos Library.photoslibrary") {
@@ -131,7 +131,7 @@ func TestHandlePreRequest_PhotoLibraryHintsAlongsideServiceMatch(t *testing.T) {
 	if !strings.Contains(content, "https://aegis.example.com/v1/services/immich") {
 		t.Fatalf("expected Immich proxy instructions:\n%s", content)
 	}
-	if !strings.Contains(content, "https://aegis.example.com/v1/library/photos") {
+	if !strings.Contains(content, "https://aegis.example.com/me/photos") {
 		t.Fatalf("expected library photos hints even when a service matched:\n%s", content)
 	}
 }

@@ -66,7 +66,7 @@ func (h *Handlers) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Status:   http.StatusNotFound,
 		})
 		shared.WriteJSONError(w, http.StatusNotFound,
-			"service paths are content/ingest only (photo bytes, full message bodies, playlist items, local import); use /v1/library/{kind} for user data")
+			"service paths are content/ingest only (photo bytes, full message bodies, playlist items, local import); use /me/{kind} for user data")
 		return
 	}
 

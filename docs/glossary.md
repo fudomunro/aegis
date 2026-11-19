@@ -39,10 +39,10 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 
 | Prefer | Means | Notes |
 |--------|-------|-------|
-| **Library kind** | One library dataset (playlists, tracks, photos, …) — the registry entry and URL kind for it (`/v1/library/{kind}`) | Code: `LibraryKind`. URL segment: `kind`. Short form **kind** once in context. Do not call this a “data type” |
+| **Library kind** | One library dataset (playlists, tracks, photos, …) — the registry entry and URL kind for it (`/me/{kind}`) | Code: `LibraryKind`. URL segment: `kind`. Short form **kind** once in context. Do not call this a “data type” |
 | **Field type** (or **type**) | Shape of one field: `string` / `integer` / `boolean` | Schema `type:` key, `Parameter.Type`, `UserDefinedField.Type`. Never a “kind” |
 | **Neutral model** | Provider-agnostic response shape (`Playlist`, `Track`, `Contact`, …) with `sources[]` | Provider quirks stay in connectors |
-| **Unified library** | `/v1/library/{kind}` aggregates across services | |
+| **Unified library** | `/me/{kind}` aggregates across services | |
 | **sources[]** | Per-item provenance (service, id, url, `canonical`, `copy`) | Field name unchanged |
 | **Canonical home** (or **canonical**) | Non-Aegis authoritative home for a kind (`canonical_for`) | Avoid “home copy”, “foreign canonical” in product prose |
 | **Entity merge** | Folding music/photo/event rows into one item (ISRC/UPC/MBID/…) | Not for contacts |
@@ -136,7 +136,7 @@ policy or the third-party one-time **grant code** (`aeg_grant_…`).
 
 | Prefer | Means | Notes |
 |--------|-------|-------|
-| **LLM agent** (or **assistant**) | Runtime model/tool-loop that calls `/v1/library/*` | Not the coding agent |
+| **LLM agent** (or **assistant**) | Runtime model/tool-loop that calls `/me/*` | Not the coding agent |
 | **Coding agent** / **maintainer** | Automation or human editing this repo (`AGENTS.md`) | Do not call them just “agents” in product docs |
 | **Pre-request hook** | `POST /v1/pre-request` instruction injection | |
 | **System instructions** | English injected into the LLM request | |

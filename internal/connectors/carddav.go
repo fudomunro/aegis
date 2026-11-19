@@ -84,7 +84,7 @@ func (c *CardDAVConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves CardDAV, Nextcloud contacts, or iCloud Contacts, use Aegis's unified data API. Do not call the DAV server directly.
 
-GET %s/v1/library/contacts — contacts across every connected contact service (name, emails, phones, organization, sources[])
+GET %s/me/contacts — contacts across every connected contact service (name, emails, phones, organization, sources[])
 
 sources[] records where each contact lives (service, id, etag for conflict-safe writes).`, root)
 }
@@ -93,7 +93,7 @@ sources[] records where each contact lives (service, id, etag for conflict-safe 
 func (c *CardDAVConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	_ = remainingPath
 	shared.WriteJSONError(w, http.StatusNotFound,
-		"CardDAV is library-only — use GET /v1/library/contacts")
+		"CardDAV is library-only — use GET /me/contacts")
 }
 
 // ListUserContacts fetches the address book via CardDAV REPORT.

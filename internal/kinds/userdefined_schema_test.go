@@ -56,7 +56,7 @@ func TestUserDefinedKindSchema_NormalizeDefaults(t *testing.T) {
 	if s.PermType != "garden-plants" {
 		t.Errorf("PermType = %q, want garden-plants", s.PermType)
 	}
-	if s.Path != "/v1/library/garden-plants" {
+	if s.Path != "/me/garden-plants" {
 		t.Errorf("Path = %q", s.Path)
 	}
 	if s.DefaultAccess != "" {
@@ -125,7 +125,7 @@ func TestUserDefinedKindSchema_NormalizeRejects(t *testing.T) {
 func TestUserDefinedKindSchema_LibraryKind(t *testing.T) {
 	s := sampleReadingListSchema(t)
 	k := s.LibraryKind()
-	if k.ID != "reading-list" || k.Path != "/v1/library/reading-list" {
+	if k.ID != "reading-list" || k.Path != "/me/reading-list" {
 		t.Fatalf("kind = %+v", k)
 	}
 	if !k.Mentions("what's on my reading list?") {
@@ -243,7 +243,7 @@ func TestUserDefinedKindSchema_RejectsHijacking(t *testing.T) {
 		}},
 		{"path collision", UserDefinedKindSchema{
 			ID:     "my-list",
-			Path:   "/v1/library/links",
+			Path:   "/me/links",
 			Fields: map[string]UserDefinedField{"title": {}},
 		}},
 		{"non-library path", UserDefinedKindSchema{
@@ -280,7 +280,7 @@ func TestUserDefinedKindSchema_RejectsHijacking(t *testing.T) {
 func TestUserDefinedKindSchema_RejectsPathOverride(t *testing.T) {
 	s := UserDefinedKindSchema{
 		ID:     "reading-list",
-		Path:   "/v1/library/tracks",
+		Path:   "/me/tracks",
 		Fields: map[string]UserDefinedField{"title": {}},
 	}
 	if err := s.Normalize(); err == nil {

@@ -92,12 +92,12 @@ func PermissionNotice(p shared.GrantMap) string {
 			strings.Join(denied, ", "))
 	}
 	if p.AllowsKindMethod("freebusy", http.MethodGet) {
-		parts = append(parts, "the freebusy route (/v1/library/freebusy) returns availability only "+
+		parts = append(parts, "the freebusy route (/me/freebusy) returns availability only "+
 			"(start_at, end_at, all_day, status) — prefer it for scheduling; never request titles, "+
 			"attendees, locations, or descriptions")
 	}
 	if p.AllowsKindMethod("transactions/totals", http.MethodGet) {
-		parts = append(parts, "the totals route (/v1/library/transactions/totals) returns category and month totals only "+
+		parts = append(parts, "the totals route (/me/transactions/totals) returns category and month totals only "+
 			"(count, total_amount, by_category, by_month) — never request line items, merchants, or account identifiers from it")
 	}
 	if len(parts) == 0 {

@@ -119,7 +119,7 @@
       "action": "inject",
       "endpoint": "https://api.spotify.com/v1",
       "cache_ttl": "10m",
-      "description": "Lists Spotify playlists, liked tracks, albums, and artists into /v1/library/*. Full playlist items via content transport /v1/services/spotify/playlists/{id}/items.",
+      "description": "Lists Spotify playlists, liked tracks, albums, and artists into /me/*. Full playlist items via content transport /v1/services/spotify/playlists/{id}/items.",
       "canonical_for": [
         "playlists",
         "tracks"
@@ -140,7 +140,7 @@
       "oauth_scopes": [
         "https://www.googleapis.com/auth/youtube.readonly"
       ],
-      "description": "Lists YouTube Music playlists and liked videos into /v1/library/*. Playlist items via content transport. Shares the Google connection."
+      "description": "Lists YouTube Music playlists and liked videos into /me/*. Playlist items via content transport. Shares the Google connection."
     },
     {
       "id": "amazon-music",
@@ -151,7 +151,7 @@
       "action": "inject",
       "endpoint": "https://api.amazonmusic.com/v1",
       "cache_ttl": "15m",
-      "description": "Lists Amazon Music playlists into /v1/library/playlists. Full playlist items via content transport.",
+      "description": "Lists Amazon Music playlists into /me/playlists. Full playlist items via content transport.",
       "connection": "amazon"
     },
     {
@@ -164,7 +164,7 @@
       "action": "inject",
       "endpoint": "https://api.music.apple.com/v1",
       "cache_ttl": "10m",
-      "description": "Lists Apple Music library playlists, tracks, albums, and artists into /v1/library/*. Full playlist items via content transport. Mirror placement matches on ISRC.",
+      "description": "Lists Apple Music library playlists, tracks, albums, and artists into /me/*. Full playlist items via content transport. Mirror placement matches on ISRC.",
       "headers": {
         "X-Apple-Music-Key-Id": "$ENV:APPLE_MUSIC_KEY_ID",
         "X-Apple-Music-Issuer-Id": "$ENV:APPLE_MUSIC_ISSUER_ID",
@@ -252,7 +252,7 @@
       "action": "inject",
       "endpoint": "https://www.googleapis.com/calendar/v3",
       "cache_ttl": "5m",
-      "description": "Lists Google Calendar events as neutral calendar entries so /v1/library/events can answer schedule questions. Event content stays on Google Calendar (non-Aegis canonical). Shares the Google connection.",
+      "description": "Lists Google Calendar events as neutral calendar entries so /me/events can answer schedule questions. Event content stays on Google Calendar (non-Aegis canonical). Shares the Google connection.",
       "canonical_for": [
         "events"
       ],
@@ -273,7 +273,7 @@
       "action": "inject",
       "endpoint": "https://graph.microsoft.com/v1.0",
       "cache_ttl": "5m",
-      "description": "Lists Microsoft 365 / Outlook.com calendar events as neutral calendar entries so /v1/library/events and the free/busy projection can cover the work calendar. Event content stays on Microsoft Graph (non-Aegis canonical). Shares the Microsoft connection. Sync to this service needs Calendars.ReadWrite on the connection.",
+      "description": "Lists Microsoft 365 / Outlook.com calendar events as neutral calendar entries so /me/events and the free/busy projection can cover the work calendar. Event content stays on Microsoft Graph (non-Aegis canonical). Shares the Microsoft connection. Sync to this service needs Calendars.ReadWrite on the connection.",
       "canonical_for": [],
       "connection": "microsoft",
       "oauth_scopes": [
@@ -290,7 +290,7 @@
       "action": "inject",
       "endpoint": "https://graph.microsoft.com/v1.0",
       "cache_ttl": "5m",
-      "description": "Lists Microsoft 365 / Outlook.com address-book entries as neutral contacts so /v1/library/contacts can merge them with Google Contacts on email/phone identity. Contact content stays on Microsoft Graph (non-Aegis canonical). Shares the Microsoft connection. Sync to this service needs Contacts.ReadWrite on the connection.",
+      "description": "Lists Microsoft 365 / Outlook.com address-book entries as neutral contacts so /me/contacts can merge them with Google Contacts on email/phone identity. Contact content stays on Microsoft Graph (non-Aegis canonical). Shares the Microsoft connection. Sync to this service needs Contacts.ReadWrite on the connection.",
       "canonical_for": [],
       "connection": "microsoft",
       "oauth_scopes": [
@@ -308,7 +308,7 @@
       "action": "inject",
       "endpoint": "https://graph.microsoft.com/v1.0",
       "cache_ttl": "5m",
-      "description": "Lists Microsoft 365 / Outlook.com mail as neutral message metadata so /v1/library/messages can answer email questions, and pages the mailbox into the local mail archive. Message bodies stay on Microsoft Graph (non-Aegis canonical). Shares the Microsoft connection.",
+      "description": "Lists Microsoft 365 / Outlook.com mail as neutral message metadata so /me/messages can answer email questions, and pages the mailbox into the local mail archive. Message bodies stay on Microsoft Graph (non-Aegis canonical). Shares the Microsoft connection.",
       "canonical_for": [],
       "connection": "microsoft",
       "oauth_scopes": [
@@ -327,7 +327,7 @@
       "action": "inject",
       "endpoint": "https://gmail.googleapis.com/gmail/v1",
       "cache_ttl": "5m",
-      "description": "Lists Gmail messages as neutral message metadata so /v1/library/messages can answer email questions. Message bodies stay on Gmail (non-Aegis canonical). Shares the Google connection.",
+      "description": "Lists Gmail messages as neutral message metadata so /me/messages can answer email questions. Message bodies stay on Gmail (non-Aegis canonical). Shares the Google connection.",
       "canonical_for": [
         "messages"
       ],
@@ -350,7 +350,7 @@
         "Authorization": "Bearer $ENV:YNAB_PERSONAL_ACCESS_TOKEN"
       },
       "cache_ttl": "5m",
-      "description": "Live YNAB budget transactions for /v1/library/transactions. Prefer a Personal Access Token in headers (Aegis owns the secret). Amounts map from milliunits to signed decimal strings."
+      "description": "Live YNAB budget transactions for /me/transactions. Prefer a Personal Access Token in headers (Aegis owns the secret). Amounts map from milliunits to signed decimal strings."
     },
     {
       "id": "quicken",
@@ -419,7 +419,7 @@
       "action": "inject",
       "endpoint": "https://www.googleapis.com/drive/v3",
       "cache_ttl": "15m",
-      "description": "Google Docs via Drive for /v1/library/documents. Content is HTML/plain-text export (markdown conversion deferred). Files stay on Drive (non-Aegis canonical). Shares the Google connection; drive.readonly covers list + export. Watch OAuth app verification limits (same class as Photos).",
+      "description": "Google Docs via Drive for /me/documents. Content is HTML/plain-text export (markdown conversion deferred). Files stay on Drive (non-Aegis canonical). Shares the Google connection; drive.readonly covers list + export. Watch OAuth app verification limits (same class as Photos).",
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/drive.readonly"
@@ -466,7 +466,7 @@
         "X-DAV-Password": "$ENV:DAV_APP_PASSWORD"
       },
       "cache_ttl": "5m",
-      "description": "CalDAV calendar (Nextcloud, iCloud, Fastmail, Radicale, Baïkal). Lists events as neutral CalendarEvent values with RRULE expansion in the requested window. Credentials are username + app-specific password. Set canonical_for: [\"events\"] if this DAV server is your home copy (and remove it from Google Calendar). Events also feed /v1/library/freebusy.",
+      "description": "CalDAV calendar (Nextcloud, iCloud, Fastmail, Radicale, Baïkal). Lists events as neutral CalendarEvent values with RRULE expansion in the requested window. Credentials are username + app-specific password. Set canonical_for: [\"events\"] if this DAV server is your home copy (and remove it from Google Calendar). Events also feed /me/freebusy.",
       "canonical_for": [
         "events"
       ]
@@ -484,7 +484,7 @@
       "action": "inject",
       "endpoint": "https://api.github.com",
       "cache_ttl": "5m",
-      "description": "GitHub contacts for /v1/library/contacts — organization members and followed users as neutral Contact values (name, email, handle, company). Profile metadata only; no repos, issues, or activity. Shares the GitHub OAuth connection (read:user, read:org).",
+      "description": "GitHub contacts for /me/contacts — organization members and followed users as neutral Contact values (name, email, handle, company). Profile metadata only; no repos, issues, or activity. Shares the GitHub OAuth connection (read:user, read:org).",
       "connection": "github",
       "oauth_scopes": [
         "read:user",
@@ -505,7 +505,7 @@
         "password": "$ENV:IMAP_PASSWORD"
       },
       "cache_ttl": "5m",
-      "description": "IMAP mail source (/v1/library/messages + the local mail archive) for any RFC 3501 server — Dovecot, Cyrus, iCloud, Fastmail, work mail. Endpoint is imaps://host:993 (TLS), imap://host:993 (STARTTLS), or ?tls=none; ?folder= selects the mailbox (default INBOX). Credentials are username + password, stored encrypted. Set canonical_for: [\"messages\"] when this mailbox is your mail home. Sync via POST /v1/admin/mail/sync {\"service\":\"imap-mail\"}.",
+      "description": "IMAP mail source (/me/messages + the local mail archive) for any RFC 3501 server — Dovecot, Cyrus, iCloud, Fastmail, work mail. Endpoint is imaps://host:993 (TLS), imap://host:993 (STARTTLS), or ?tls=none; ?folder= selects the mailbox (default INBOX). Credentials are username + password, stored encrypted. Set canonical_for: [\"messages\"] when this mailbox is your mail home. Sync via POST /v1/admin/mail/sync {\"service\":\"imap-mail\"}.",
       "canonical_for": [
         "messages"
       ]
@@ -524,7 +524,7 @@
         "password": "$ENV:POP3_PASSWORD"
       },
       "cache_ttl": "5m",
-      "description": "POP3 mail source (/v1/library/messages + the local mail archive) for any RFC 1939 server. Endpoint is pop3s://host:995 (TLS), pop3://host:995 (STLS), or ?tls=none. Credentials are username + password, stored encrypted. Read-only: messages are archived, never deleted from the server. Set canonical_for: [\"messages\"] when this mailbox is your mail home. Sync via POST /v1/admin/mail/sync {\"service\":\"pop3-mail\"}.",
+      "description": "POP3 mail source (/me/messages + the local mail archive) for any RFC 1939 server. Endpoint is pop3s://host:995 (TLS), pop3://host:995 (STLS), or ?tls=none. Credentials are username + password, stored encrypted. Read-only: messages are archived, never deleted from the server. Set canonical_for: [\"messages\"] when this mailbox is your mail home. Sync via POST /v1/admin/mail/sync {\"service\":\"pop3-mail\"}.",
       "canonical_for": [
         "messages"
       ]

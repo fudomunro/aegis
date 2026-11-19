@@ -57,34 +57,34 @@ func TestAppPathAllowed_IncludesDerivedKinds(t *testing.T) {
 		}
 	}
 	// freebusy is a non-kind app path (events availability).
-	if !appPathAllowed("/v1/library/freebusy") {
+	if !appPathAllowed("/me/freebusy") {
 		t.Error("app token should read freebusy")
 	}
 	// Document full-text and admin routes stay out of the app scope.
 	for _, p := range []string{
-		"/v1/library/documents/acme/1/text",
+		"/me/documents/acme/1/text",
 		"/v1/admin/summary",
-		"/v1/library/review",
-		"/v1/library/links",
+		"/me/review",
+		"/me/links",
 	} {
 		if appPathAllowed(p) {
 			t.Errorf("app token must not access %s", p)
 		}
 	}
 	// User-defined kinds are not app-readable (documented decision).
-	if appPathAllowed("/v1/library/reading-list") {
+	if appPathAllowed("/me/reading-list") {
 		t.Error("UDK paths must not be app-readable by default")
 	}
 }
 
 func TestAppPathAllowed_ExactOnly(t *testing.T) {
-	if !appPathAllowed("/v1/library/tracks") {
+	if !appPathAllowed("/me/tracks") {
 		t.Error("tracks should be allowed")
 	}
-	if !appPathAllowed("/v1/library/tracks/") {
+	if !appPathAllowed("/me/tracks/") {
 		t.Error("trailing slash should still match")
 	}
-	if appPathAllowed("/v1/library/tracks/extra") {
+	if appPathAllowed("/me/tracks/extra") {
 		t.Error("subpaths must not be app-allowed")
 	}
 }

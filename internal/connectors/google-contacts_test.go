@@ -249,7 +249,7 @@ func TestContactIDFromProxyPath(t *testing.T) {
 func TestGoogleContactsConnector_SystemInstructions(t *testing.T) {
 	conn := NewGoogleContactsConnector(newTestHost("https://aegis.example.com"))
 	instr := conn.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(instr, "/v1/library/contacts") {
+	if !strings.Contains(instr, "/me/contacts") {
 		t.Fatalf("missing library endpoint: %s", instr)
 	}
 	if !strings.Contains(instr, "Do not call Google People API directly") {

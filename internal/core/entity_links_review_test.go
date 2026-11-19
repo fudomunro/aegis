@@ -95,7 +95,7 @@ func TestSourceRefHelpers(t *testing.T) {
 
 func TestHandleMergeReview_MethodNotAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	req := httptest.NewRequest(http.MethodPost, "/v1/library/review", nil)
+	req := httptest.NewRequest(http.MethodPost, "/me/review", nil)
 	w := httptest.NewRecorder()
 	srv.library().HandleMergeReview(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
@@ -168,7 +168,7 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/review", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/review", nil)
 	w := httptest.NewRecorder()
 	srv.library().HandleMergeReview(w, req)
 	if w.Code != http.StatusOK {
@@ -212,7 +212,7 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 			plItem = item
 		}
 	}
-	if plItem.Name == "" || !strings.Contains(plItem.Note, "/v1/library/links") {
+	if plItem.Name == "" || !strings.Contains(plItem.Note, "/me/links") {
 		t.Fatalf("playlist item = %+v", plItem)
 	}
 
@@ -230,7 +230,7 @@ func TestHandleMergeReview_ProviderErrorsStillReturn200(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakeFullLibraryProvider{err: kinds.ErrUnauthorized},
 	}
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/review", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/review", nil)
 	w := httptest.NewRecorder()
 	srv.library().HandleMergeReview(w, req)
 	if w.Code != http.StatusOK {
@@ -256,7 +256,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 
 	// Not configured
 	srv2 := testServerWithBase(&Config{}, "https://aegis.example.com")
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/links", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/links", nil)
 	w := httptest.NewRecorder()
 	srv2.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusNotFound {
@@ -264,7 +264,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	}
 
 	// Method not allowed
-	req = httptest.NewRequest(http.MethodPut, "/v1/library/links", nil)
+	req = httptest.NewRequest(http.MethodPut, "/me/links", nil)
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
@@ -272,7 +272,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	}
 
 	// Invalid JSON
-	req = httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader("{"))
+	req = httptest.NewRequest(http.MethodPost, "/me/links", strings.NewReader("{"))
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusBadRequest {
@@ -280,7 +280,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	}
 
 	// Add requires ≥2 sources
-	req = httptest.NewRequest(http.MethodPost, "/v1/library/links",
+	req = httptest.NewRequest(http.MethodPost, "/me/links",
 		strings.NewReader(`{"kind":"playlist","sources":[{"service":"spotify","id":"only"}]}`))
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
@@ -289,7 +289,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	}
 
 	// GET missing id
-	req = httptest.NewRequest(http.MethodGet, "/v1/library/links/nope", nil)
+	req = httptest.NewRequest(http.MethodGet, "/me/links/nope", nil)
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusNotFound {
@@ -297,7 +297,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	}
 
 	// DELETE missing id
-	req = httptest.NewRequest(http.MethodDelete, "/v1/library/links/nope", nil)
+	req = httptest.NewRequest(http.MethodDelete, "/me/links/nope", nil)
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusNotFound {
@@ -306,7 +306,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 
 	// Create then GET by id
 	body := `{"kind":"playlist","sources":[{"service":"spotify","id":"p1"},{"service":"youtube-music","id":"P1"}]}`
-	req = httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
+	req = httptest.NewRequest(http.MethodPost, "/me/links", strings.NewReader(body))
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusCreated {
@@ -316,7 +316,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	req = httptest.NewRequest(http.MethodGet, "/v1/library/links/"+created.ID, nil)
+	req = httptest.NewRequest(http.MethodGet, "/me/links/"+created.ID, nil)
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusOK {

@@ -23,7 +23,7 @@ import (
 // API, so 1st-degree connections arrive as a file-based export the operator
 // prepares (LinkedIn "Get a copy of your data"). Aegis stores neutral
 // contact metadata only — never profile photos or other media. The local
-// store feeds /v1/library/contacts like other file-based import sources.
+// store feeds /me/contacts like other file-based import sources.
 
 const (
 	LinkedInServiceID   = "linkedin"
@@ -69,7 +69,7 @@ func (s *LinkedInStore) Admin() ImportAdmin {
 		FlagName:    "-linkedin-store",
 		PathHint:    "a LinkedIn data export file or directory",
 		SamplePath:  "~/Downloads/linkedin-export.zip (or Connections.csv extracted from it)",
-		LibraryPath: "/v1/library/contacts",
+		LibraryPath: "/me/contacts",
 		Panel: ImportPanel{
 			Heading: "LinkedIn import (read-only)",
 			Title:   "LinkedIn connections",
@@ -680,7 +680,7 @@ func (c *LinkedInConnector) Capabilities() shared.ServiceCapabilities {
 						Name:        "list_contacts",
 						Description: "Imported LinkedIn connections (permission key: contacts)",
 						Method:      "GET",
-						Path:        "/v1/library/contacts",
+						Path:        "/me/contacts",
 						Response: shared.ResponseSpec{
 							Description: "Neutral contacts with sources[]",
 							Fields:      []string{"contacts", "total"},
@@ -704,7 +704,7 @@ func (c *LinkedInConnector) Capabilities() shared.ServiceCapabilities {
 
 func (c *LinkedInConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	return fmt.Sprintf(`When the user's request involves LinkedIn connections or professional contacts, use Aegis. Imported LinkedIn connections are available through GET %s/v1/library/contacts (source service "linkedin"). Profile photos and other media are never stored — contact metadata only. LinkedIn has no live API here: if connections are missing, ask the operator to import a LinkedIn data export (Advanced → LinkedIn import).
+	return fmt.Sprintf(`When the user's request involves LinkedIn connections or professional contacts, use Aegis. Imported LinkedIn connections are available through GET %s/me/contacts (source service "linkedin"). Profile photos and other media are never stored — contact metadata only. LinkedIn has no live API here: if connections are missing, ask the operator to import a LinkedIn data export (Advanced → LinkedIn import).
 `, root)
 }
 

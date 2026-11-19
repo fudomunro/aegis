@@ -25,13 +25,13 @@ type UserDefinedKindSchema struct {
 	// Version is the schema-format version. Empty is treated as "1".
 	Version string `json:"version,omitempty"`
 	// ID is the short kind name ("reading-list") used in cache keys, logs,
-	// and /v1/library/{id}. Must be unique among built-in and user kinds.
+	// and /me/{id}. Must be unique among built-in and user kinds.
 	ID string `json:"id"`
 	// Label is the human name used in agent instructions ("reading list").
 	Label string `json:"label"`
 	// PermType is the permissions map key. Defaults to ID.
 	PermType string `json:"perm_type,omitempty"`
-	// Path is the agent-facing endpoint. Defaults to "/v1/library/"+ID.
+	// Path is the agent-facing endpoint. Defaults to "/me/"+ID.
 	Path string `json:"path,omitempty"`
 	// Usage is how agents should think about the dataset.
 	Usage string `json:"usage"`
@@ -193,7 +193,7 @@ var userDefinedSchemaFormatVersions = map[string]bool{
 // Keeps ids out of mux-pattern space and readable as a URL segment.
 var userDefinedIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
-// ReservedLibraryPathIDs are /v1/library/{id} segments owned by built-in
+// ReservedLibraryPathIDs are /me/{id} segments owned by built-in
 // routes that are not LibraryKind entries (links, review, …). A UDK id may
 // never claim these paths (issue #15 review: path collision / mux panic).
 var ReservedLibraryPathIDs = map[string]bool{
@@ -246,7 +246,7 @@ func ValidateHTTPJSONHeaders(headers map[string]string) error {
 // startup — issue #15 review):
 //   - id matches userDefinedIDPattern and is not a reserved library path
 //   - perm_type is always the id (no override that could shadow built-ins)
-//   - path is always "/v1/library/" + id (no free-form mux patterns)
+//   - path is always "/me/" + id (no free-form mux patterns)
 func (s *UserDefinedKindSchema) Normalize() error {
 	if s == nil {
 		return fmt.Errorf("nil schema")
@@ -262,7 +262,7 @@ func (s *UserDefinedKindSchema) Normalize() error {
 		return fmt.Errorf("schema id %q must match %s", s.ID, userDefinedIDPattern)
 	}
 	if IsReservedUserDefinedID(s.ID) {
-		return fmt.Errorf("schema id %q is reserved by a built-in kind or /v1/library route", s.ID)
+		return fmt.Errorf("schema id %q is reserved by a built-in kind or /me route", s.ID)
 	}
 	if s.Label == "" {
 		s.Label = s.ID
@@ -273,11 +273,11 @@ func (s *UserDefinedKindSchema) Normalize() error {
 		return fmt.Errorf("schema %q: perm_type %q must equal id (no override)", s.ID, s.PermType)
 	}
 	s.PermType = s.ID
-	// path is not overridable: only /v1/library/{id} is safe for ServeMux.
-	if s.Path != "" && s.Path != "/v1/library/"+s.ID {
-		return fmt.Errorf("schema %q: path %q must be /v1/library/%s", s.ID, s.Path, s.ID)
+	// path is not overridable: only /me/{id} is safe for ServeMux.
+	if s.Path != "" && s.Path != "/me/"+s.ID {
+		return fmt.Errorf("schema %q: path %q must be /me/%s", s.ID, s.Path, s.ID)
 	}
-	s.Path = "/v1/library/" + s.ID
+	s.Path = "/me/" + s.ID
 	if s.Usage == "" {
 		s.Usage = s.Label
 	}

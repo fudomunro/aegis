@@ -87,7 +87,7 @@ in a browser unless that happens.
 **Liked/saved tracks map to the library, not to "loved".** Apple Music can
 *favorite* ("love") a song, but favorites are not enumerable through the
 documented API, so a mirror could never read its own writes back. Aegis uses
-library songs both ways: reading `GET /v1/library/tracks` and writing adds to
+library songs both ways: reading `GET /me/tracks` and writing adds to
 the library. Placement is create-only — a mirror never un-saves.
 
 ## Mirror and backup
@@ -120,10 +120,10 @@ backup current?" answers from freshness checks without re-syncing.
 Agent data is the unified library:
 
 ```
-GET /v1/library/playlists
-GET /v1/library/tracks
-GET /v1/library/albums
-GET /v1/library/artists
+GET /me/playlists
+GET /me/tracks
+GET /me/albums
+GET /me/artists
 ```
 
 Full playlist contents ride the content transport

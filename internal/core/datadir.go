@@ -64,7 +64,7 @@ type DataPaths struct {
 	// mail.Archive is the SQLite+FTS mail archive path. Empty disables the local mail source.
 	MailArchive string
 	// search.Index is the SQLite library search-index path (issue #178).
-	// Empty disables q= on /v1/library/{kind}.
+	// Empty disables q= on /me/{kind}.
 	SearchIndex string
 	// LocalStores maps local import store stems ("quicken", "signal", …)
 	// to their SQLite store paths (issue #393). A missing or empty entry

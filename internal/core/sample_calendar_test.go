@@ -21,10 +21,10 @@ func TestSampleCalendarConnector_LibraryFreeBusy(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors[connectors.SampleCalendarServiceID] = connectors.NewSampleCalendarConnector()
 
-	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
+	req := httptest.NewRequest("GET", "/me/freebusy", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}

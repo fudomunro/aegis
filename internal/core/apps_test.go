@@ -46,7 +46,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
 
 	// Allowed: library events with app token.
-	req := httptest.NewRequest("GET", "/v1/library/events", nil)
+	req := httptest.NewRequest("GET", "/me/events", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
@@ -58,7 +58,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	}
 
 	// Denied: contacts outside scopes.
-	req = httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req = httptest.NewRequest("GET", "/me/contacts", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -99,7 +99,7 @@ func TestAuthMiddleware_AppTokenFreeBusyRouteOnly(t *testing.T) {
 
 	// The events route is a different grant key — denied for this app
 	// (issue #348).
-	req := httptest.NewRequest("GET", "/v1/library/events", nil)
+	req := httptest.NewRequest("GET", "/me/events", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
@@ -108,10 +108,10 @@ func TestAuthMiddleware_AppTokenFreeBusyRouteOnly(t *testing.T) {
 	}
 
 	// The freebusy route serves availability only.
-	req = httptest.NewRequest("GET", "/v1/library/freebusy", nil)
+	req = httptest.NewRequest("GET", "/me/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("freebusy status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -201,10 +201,10 @@ func TestAdminApps_CRUD(t *testing.T) {
 
 func TestAppPathAllowed(t *testing.T) {
 	allowed := []string{
-		"/v1/library/events",
-		"/v1/library/freebusy",
-		"/v1/library/events/",
-		"/v1/library/tracks",
+		"/me/events",
+		"/me/freebusy",
+		"/me/events/",
+		"/me/tracks",
 	}
 	for _, p := range allowed {
 		if !appPathAllowed(p) {
@@ -213,11 +213,11 @@ func TestAppPathAllowed(t *testing.T) {
 	}
 	denied := []string{
 		"/v1/admin/apps",
-		"/v1/library/review",
-		"/v1/library/links",
+		"/me/review",
+		"/me/links",
 		"/v1/services/google-calendar/me/events",
 		"/v1/pre-request",
-		"/v1/library/messages/google-gmail/m1",
+		"/me/messages/google-gmail/m1",
 		"/v1/auth/status",
 	}
 	for _, p := range denied {
@@ -228,7 +228,7 @@ func TestAppPathAllowed(t *testing.T) {
 }
 
 func TestAgentForRequest_AppIdentity(t *testing.T) {
-	req := httptest.NewRequest("GET", "/v1/library/events", nil)
+	req := httptest.NewRequest("GET", "/me/events", nil)
 	req = apps.WithAppIdentity(req, &apps.App{ID: "eco", Name: "E Co", Scopes: shared.GrantMap{"events": shared.AccessRead}})
 	if got := agentForRequest(req); got != "app:eco" {
 		t.Fatalf("agent = %q", got)

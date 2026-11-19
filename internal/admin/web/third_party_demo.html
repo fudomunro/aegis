@@ -354,7 +354,7 @@
     <div id="avail">
       <div class="empty">
         No calendar linked yet. After you allow access, this table fills with
-        busy intervals from <code>GET /v1/library/freebusy</code> — start and
+        busy intervals from <code>GET /me/freebusy</code> — start and
         end times only.
       </div>
     </div>
@@ -372,7 +372,7 @@
 
 POST /v1/apps/token  {"code":"aeg_grant_…"}
 
-GET /v1/library/freebusy
+GET /me/freebusy
 Authorization: Bearer aeg_app_…</div>
 
     <footer>
@@ -460,7 +460,7 @@ Authorization: Bearer aeg_app_…</div>
       function loadFreebusy() {
         setConnected(true);
         setStatus("Connected — loading free/busy…", "ok");
-        return api("/v1/library/freebusy").then(function (res) {
+        return api("/me/freebusy").then(function (res) {
           if (res.status === 401 || res.status === 403) {
             throw new Error("grant no longer valid — toggle Aegis off, then on again");
           }
