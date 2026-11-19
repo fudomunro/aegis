@@ -37,11 +37,11 @@ func (h *Handlers) MailArchiveHints(r *http.Request, msg string) []string {
 	}
 	root := strings.TrimRight(h.BaseURL, "/")
 	return []string{`The user wants the local mail archive (full history search). Prefer:
-GET ` + root + `/v1/library/messages?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&limit=50&sort=desc
-GET ` + root + `/v1/library/messages?sort=asc&limit=1 — oldest archived message(s); use sort=asc for earliest/first/oldest questions
-GET ` + root + `/v1/library/messages/{service}/{id} — one archived message with body
+GET ` + root + `/me/messages?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&limit=50&sort=desc
+GET ` + root + `/me/messages?sort=asc&limit=1 — oldest archived message(s); use sort=asc for earliest/first/oldest questions
+GET ` + root + `/me/messages/{service}/{id} — one archived message with body
 Default sort is newest-first (desc). For "oldest", "earliest", or "first" message questions use sort=asc (and limit=1 when only one answer is needed).
-All ingested sources form one mail collection: results merge on RFC Message-ID into multi-source entries. Live provider rows and archive rows are the same collection — the local archive is a source of ` + root + `/v1/library/messages alongside live services, and full-history queries cover both.`}
+All ingested sources form one mail collection: results merge on RFC Message-ID into multi-source entries. Live provider rows and archive rows are the same collection — the local archive is a source of ` + root + `/me/messages alongside live services, and full-history queries cover both.`}
 }
 
 // mentionsMailArchive detects archive/history-oriented phrasing.

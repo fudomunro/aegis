@@ -70,7 +70,7 @@ func NewPlaceVisit(service, serviceName, id string, v PlaceVisit) PlaceVisit {
 // call when the prompt is vague (issue #125).
 func PhotoSourceDiscipline() string {
 	return "Photo source discipline: obtain photo metadata only through Aegis " +
-		"(/v1/library/photos) and bytes only via sources[].blob_url content transport. " +
+		"(/me/photos) and bytes only via sources[].blob_url content transport. " +
 		"Do not open Photos.app, " +
 		"Photos Library.photoslibrary, Photo Booth, or ~/Pictures as a photo source; " +
 		"do not query Immich at :2283 or via Docker/Postgres; do not read Immich .env " +
@@ -321,6 +321,6 @@ func EmailAttachmentIdentityExtra(messageID string, att AttachmentRef) map[strin
 // (issue #215) — the blob_url export copies point at. Live providers keep
 // their own content-transport URLs.
 func DocumentBytesURL(baseURL, service, id string) string {
-	return strings.TrimRight(baseURL, "/") + "/v1/library/documents/" +
+	return strings.TrimRight(baseURL, "/") + "/me/documents/" +
 		url.PathEscape(service) + "/" + url.PathEscape(id) + "/bytes"
 }

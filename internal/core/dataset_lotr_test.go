@@ -24,8 +24,8 @@ func TestLotRMail_DatasetIsolationInArchive(t *testing.T) {
 
 func TestLotRLibrary_DatasetIsolation(t *testing.T) {
 	srv := twoScopeServerWithLotR(t)
-	shire := callLibrary(t, srv, "YOUR_SHIRE_KEY", "/v1/library/contacts")
-	gondor := callLibrary(t, srv, "YOUR_GONDOR_KEY", "/v1/library/contacts")
+	shire := callLibrary(t, srv, "YOUR_SHIRE_KEY", "/me/contacts")
+	gondor := callLibrary(t, srv, "YOUR_GONDOR_KEY", "/me/contacts")
 	if strings.Contains(shire, "Boromir") {
 		t.Fatalf("shire contacts leaked gondor: %s", shire)
 	}

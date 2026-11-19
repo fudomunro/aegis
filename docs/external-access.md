@@ -76,7 +76,7 @@ Tailnet ──────────► │  Admin listener                   
 
 | Listener | Serves | Auth | Exposure |
 |----------|--------|------|----------|
-| **API** | **Allowlist only**: `POST /v1/pre-request`, `/v1/library/*`, `/v1/services/*`, `GET /v1/auth/status`, `POST /v1/apps/token`, `POST /v1/apps/revoke`, `/healthz`, `/readyz` | **Invite token, app token only** under external access. No ambient identity, no agent key | May be public behind TLS |
+| **API** | **Allowlist only**: `POST /v1/pre-request`, `/me/*`, `/v1/services/*`, `GET /v1/auth/status`, `POST /v1/apps/token`, `POST /v1/apps/revoke`, `/healthz`, `/readyz` | **Invite token, app token only** under external access. No ambient identity, no agent key | May be public behind TLS |
 | **Admin** | Admin tier: `/v1/admin` and `/v1/admin/*` (API + SPA shell), the admin SPA routes (`/`, `/home`, `/library`, `/services`, `/advanced`), `/metrics`, `/v1/auth/*` OAuth login/callback, `GET`/`POST /v1/apps/authorize`, mail ingest (`/v1/admin/mail/*`). **Plus the agent-tier routes above**, for tailnet callers | Tailnet identity (existing admin rules) or admin API key for admin tier; tailnet identity or agent key for agent tier | Tailnet or loopback only |
 
 **The API listener route set is an allowlist, not a blocklist.** A route that
@@ -261,7 +261,7 @@ server {
     # routes, auth/status, app token redeem, health) is the authority —
     # keep the edge in front of the same set so admin routes never appear.
     location /v1/pre-request   { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
-    location /v1/library/      { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
+    location /me/           { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
     location /v1/services/     { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
     location /v1/auth/status   { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
     location /v1/apps/token    { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
@@ -295,7 +295,7 @@ IP.
 - **Fail-open** on provider fetch/parse errors. Authentication and
   authorization still fail closed (401/403).
 - **Kind-centric surface.** External principals call the same
-  `/v1/library/{kind}` as agents; grants narrow visibility, they do not
+  `/me/{kind}` as agents; grants narrow visibility, they do not
   invent a second API.
 - **App tokens.** Same shape; external access is what finally makes
   third-party reachability practical.

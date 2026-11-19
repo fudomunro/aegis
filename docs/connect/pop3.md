@@ -54,7 +54,7 @@ overlap without re-downloading).
 Agent data is the unified library:
 
 ```
-GET /v1/library/messages
+GET /me/messages
 ```
 
 Library lists carry snippets only — beyond the compressed archive copy,

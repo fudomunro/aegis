@@ -100,7 +100,7 @@ func TestDemoLockdown_BlocksMutationsAndOAuth(t *testing.T) {
 		method, path string
 		want         int
 	}{
-		{http.MethodGet, "/v1/library/contacts", http.StatusOK},
+		{http.MethodGet, "/me/contacts", http.StatusOK},
 		{http.MethodGet, "/v1/admin/summary", http.StatusOK},
 		{http.MethodPost, "/v1/admin/mail/sync", http.StatusForbidden},
 		{http.MethodPost, "/v1/admin/data-grants", http.StatusForbidden},

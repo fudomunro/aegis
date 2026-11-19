@@ -26,8 +26,8 @@ var adminWriteCases = []struct {
 	{"apps-create", http.MethodPost, "/v1/admin/apps", `{"name":"evil","scopes":{"tracks":"read"}}`},
 	{"udk-source", http.MethodPut, "/v1/admin/udk/kinds/k/sources/s", `{"path":"/etc/passwd"}`},
 	{"udk-extra", http.MethodPost, "/v1/admin/udk/kinds/k/extra", `{"path":"/etc/passwd"}`},
-	{"photos-share", http.MethodPost, "/v1/library/photos/share", `{"service":"immich","id":"p1"}`},
-	{"links-create", http.MethodPost, "/v1/library/links", `{"kind":"playlist","sources":[]}`},
+	{"photos-share", http.MethodPost, "/me/photos/share", `{"service":"immich","id":"p1"}`},
+	{"links-create", http.MethodPost, "/me/links", `{"kind":"playlist","sources":[]}`},
 	{"mail-sync", http.MethodPost, "/v1/admin/mail/sync", `{}`},
 	{"apps-authorize", http.MethodPost, "/v1/apps/authorize", `{"client_id":"x","redirect_uri":"https://example.com/cb","scopes":{"tracks":"read"}}`},
 	{"auth-revoke", http.MethodDelete, "/v1/auth/spotify", ""},
@@ -241,7 +241,7 @@ func TestAuthMiddleware_AgentKeyStillReadsLibrary(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}
 	w := httptest.NewRecorder()
-	req := adminRequest(http.MethodGet, "/v1/library/playlists", "agent-key", "")
+	req := adminRequest(http.MethodGet, "/me/playlists", "agent-key", "")
 	srv.AuthMiddleware(handler)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("agent key library read = %d, want 200", w.Code)
@@ -254,7 +254,7 @@ func TestAuthMiddleware_AdminKeyStillReadsLibrary(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}
 	w := httptest.NewRecorder()
-	req := adminRequest(http.MethodGet, "/v1/library/playlists", "admin-key", "")
+	req := adminRequest(http.MethodGet, "/me/playlists", "admin-key", "")
 	srv.AuthMiddleware(handler)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("admin key library read = %d, want 200", w.Code)
@@ -269,7 +269,7 @@ func TestAuthMiddleware_SoloAdminKeyWithoutAgentKey(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}
 	w := httptest.NewRecorder()
-	req := adminRequest(http.MethodGet, "/v1/library/playlists", "admin-key", "")
+	req := adminRequest(http.MethodGet, "/me/playlists", "admin-key", "")
 	srv.AuthMiddleware(handler)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("admin-only key on library = %d, want 200", w.Code)

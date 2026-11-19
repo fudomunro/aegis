@@ -36,17 +36,17 @@ func TestLoadUserDefinedKinds_FromExamplePack(t *testing.T) {
 	if !ok {
 		t.Fatalf("reading-list not registered: %v", loaded)
 	}
-	if schema.Path != "/v1/library/reading-list" {
+	if schema.Path != "/me/reading-list" {
 		t.Errorf("path = %q", schema.Path)
 	}
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udks = reg
 	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: shared.AccessRead})
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/reading-list"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/reading-list"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -117,7 +117,7 @@ func TestServer_UDKRouteAndAggregate(t *testing.T) {
 
 	schema, _ := reg.Get("reading-list")
 	handler := srv.library().RouteHandler(schema.Path)
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(handler)(w, req)
@@ -138,7 +138,7 @@ func TestServer_UDKRouteAndAggregate(t *testing.T) {
 	}
 
 	handlers := srv.library().RouteHandlers()
-	if _, ok := handlers["/v1/library/reading-list"]; !ok {
+	if _, ok := handlers["/me/reading-list"]; !ok {
 		t.Error("UDK route not registered in libraryRouteHandlers")
 	}
 	kinds := srv.library().AllLibraryKinds()
@@ -169,7 +169,7 @@ func TestServer_UDKDeniedWhenNotEnabled(t *testing.T) {
 	srv.library().RegisterUserDefinedKinds()
 	schema, _ := reg.Get("secret-log")
 	handler := srv.library().RouteHandler(schema.Path)
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/secret-log", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/secret-log", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(handler)(w, req)

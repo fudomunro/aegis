@@ -18,7 +18,7 @@ func TestCardDAVConnector_CapabilitiesAndInstructions(t *testing.T) {
 		t.Fatalf("caps = %+v", caps)
 	}
 	instr := c.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(instr, "/v1/library/contacts") {
+	if !strings.Contains(instr, "/me/contacts") {
 		t.Fatalf("instructions = %s", instr)
 	}
 	w := httptest.NewRecorder()
@@ -50,7 +50,7 @@ func TestCalDAVConnector_CapabilitiesAndInstructions(t *testing.T) {
 		t.Fatalf("caps = %+v", caps)
 	}
 	instr := c.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(instr, "/v1/library/events") || !strings.Contains(instr, "freebusy") {
+	if !strings.Contains(instr, "/me/events") || !strings.Contains(instr, "freebusy") {
 		t.Fatalf("instructions = %s", instr)
 	}
 	w := httptest.NewRecorder()

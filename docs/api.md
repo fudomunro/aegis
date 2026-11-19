@@ -27,12 +27,12 @@ Injection is idempotent: if the same instruction block is already present, Aegis
 returns `allow` and leaves the body unchanged. Unrecognized body shapes fail open
 (`allow`) and are counted in hook health as `unrecognized_body_shape`.
 
-When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Aegis injects instructions for the unified library endpoint so agents can answer across every connected service. The same applies to liked songs ("what songs have I liked?") via `/v1/library/tracks`.
+When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Aegis injects instructions for the unified library endpoint so agents can answer across every connected service. The same applies to liked songs ("what songs have I liked?") via `/me/tracks`.
 
 ## Unified library
 
 ```
-GET /v1/library/playlists
+GET /me/playlists
 Authorization: Bearer <api-key> # or tailnet identity in auto/tailnet mode
 ```
 
@@ -106,19 +106,19 @@ Tracks carry unified `artists` / `album` objects. Cross-service matching prefers
 **Playlists** have no catalog IDs. Same-name playlists still merge (`match: "name"`), but users can confirm identity explicitly:
 
 ```
-GET /v1/library/links
-POST /v1/library/links {"kind":"playlist","sources":[{"service":"spotify","id":"…"},{"service":"youtube-music","id":"…"}]}
-DELETE /v1/library/links/{id}
+GET /me/links
+POST /me/links {"kind":"playlist","sources":[{"service":"spotify","id":"…"},{"service":"youtube-music","id":"…"}]}
+DELETE /me/links/{id}
 ```
 
 Linked playlists merge even when names differ (`match: "link"`). Links persist in `entity_links.json` under the [data directory](configuration.md) (`-link-file` overrides). Creating and deleting links is a library write: the calling key needs a write data grant for the linked kind.
 
-**Merge review:** `GET /v1/library/review` lists multi-source entities joined by **name only** (no shared ISRC/UPC/MBID/link) so they can be checked or explicitly linked.
+**Merge review:** `GET /me/review` lists multi-source entities joined by **name only** (no shared ISRC/UPC/MBID/link) so they can be checked or explicitly linked.
 
 ## Migration from name-key merge
 
 1. Library responses now include `match` (`isrc` / `upc` / `mbid` / `link` / `name`) and `entity_id` when known.
-2. Name-only joins still happen; they are marked `match: "name"` and appear in `/v1/library/review`.
+2. Name-only joins still happen; they are marked `match: "name"` and appear in `/me/review`.
 3. Prefer durable IDs for identity; treat name merges as provisional until reviewed or linked.
 4. Clients that only compared display names should prefer `entity_id` + `sources[]` instead.
 
@@ -142,7 +142,7 @@ For messages, when the local mail archive knows both, `by_service` also includes
 
 ## Pagination and filters
 
-Every `GET /v1/library/{kind}` (built-in and user-defined) shares one agent-facing page window so large libraries stay inside an LLM context:
+Every `GET /me/{kind}` (built-in and user-defined) shares one agent-facing page window so large libraries stay inside an LLM context:
 
 | Request | Meaning |
 |---------|---------|
@@ -156,7 +156,7 @@ Every `GET /v1/library/{kind}` (built-in and user-defined) shares one agent-faci
 | `truncated` | Upstream page-cap incompleteness (see below) — **not** “more pages in this response.” |
 | `synced` / `by_service` | Multi-source merge flag and per-service fetch status (unchanged). |
 
-Time filters are always **`after` / `before`** (inclusive lower / exclusive upper). Kind-specific filters stay kind-specific (`tag`, `account`, `currency`, `locality`, `kind`, …). Mail **`from` / `to` are sender/recipient addresses only** — never time bounds. `GET /v1/library/messages` takes the full mail query set (`q`, `from`, `to`, `after`, `before`, `label`, `sort=asc|desc`, `include_body`); without query parameters it returns the capped collection overview, and any explicit filter or `sort` walks the full archive with the same `limit` + `cursor` paging.
+Time filters are always **`after` / `before`** (inclusive lower / exclusive upper). Kind-specific filters stay kind-specific (`tag`, `account`, `currency`, `locality`, `kind`, …). Mail **`from` / `to` are sender/recipient addresses only** — never time bounds. `GET /me/messages` takes the full mail query set (`q`, `from`, `to`, `after`, `before`, `label`, `sort=asc|desc`, `include_body`); without query parameters it returns the capped collection overview, and any explicit filter or `sort` walks the full archive with the same `limit` + `cursor` paging.
 
 Walk the full set by repeating the request with `next_cursor` until it is omitted. Do not stop at the first page and do not treat a short page as “that’s everything” when `next_cursor` is present.
 
@@ -165,8 +165,8 @@ Walk the full set by repeating the request with `next_cursor` until it is omitte
 Kinds that declare a search spec accept a free-text **`q`** parameter:
 
 ```
-GET /v1/library/tracks?q=purple+rain
-GET /v1/library/documents?q=lease&after=2024-01-01
+GET /me/tracks?q=purple+rain
+GET /me/documents?q=lease&after=2024-01-01
 ```
 
 - **Matching:** case-insensitive token AND over the kind's searchable fields (title, artists, tags, …). The final token is prefix-matched (`rain` finds “Raining Blood”). Operator characters are stripped — no phrase or boolean syntax.
@@ -174,7 +174,7 @@ GET /v1/library/documents?q=lease&after=2024-01-01
 - **Freshness:** `q` reads the local search index, which is written from owner-tier library fetches. The first query for a kind materializes the index from one live fetch at full owner detail; a fetch made under a reduced view (a freebusy-route or places/city-route fetch) never refreshes it, so those rows always carry the detail the owner would see. A complete list fetch — every source answered and none truncated — also drops rows for items a source no longer returns, so deleted items stop matching `q`. A degraded or truncated fetch only upserts and never deletes. A query may not see provider changes made since the last owner-tier write. Read-path redaction still ensures no caller gets more than its data grants allow.
 - **Enforcement:** identical to the list surface — data grants, app scopes, and data-scope dataset partitions all apply to search hits. A kind without a search spec answers `q` with `400`.
 - **Storage:** the index holds neutral item metadata (enough to return hits without a refetch) under the data directory; no media bytes.
-- **Messages are the exception:** `q` on `GET /v1/library/messages` is a full-history query (subject, snippet, and archived body text) merged with live provider rows in the same identity space as the list endpoint — not a search-index lookup. See Messages below.
+- **Messages are the exception:** `q` on `GET /me/messages` is a full-history query (subject, snippet, and archived body text) merged with live provider rows in the same identity space as the list endpoint — not a search-index lookup. See Messages below.
 
 ## Sync completeness
 
@@ -187,7 +187,7 @@ Aegis aims to surface a user’s **full** library, not a prefix. Two layers matt
 | Gap | Why | How it is reported |
 |-----|-----|--------------------|
 | **Google Photos full library** | Library API reads require Google app verification; unverified apps get 403. Aegis uses the Picker API instead — only the user’s last selection. | Empty library until a pick; system instructions tell agents to run the picker flow. Not a `truncated` flag — the library is intentionally a selection, not a full dump. |
-| **YouTube Music albums** | No public saved-albums API. | `/v1/library/albums` simply has no YouTube source. |
+| **YouTube Music albums** | No public saved-albums API. | `/me/albums` simply has no YouTube source. |
 | **Amazon Music** | No public developer REST API; playlist pagination may return an unfollowed `nextToken`. | When `nextToken` is present and not followed, `truncated` is set rather than claiming completeness. |
 | **Playlist track bodies** | Library playlist entries carry `track_count` and metadata, not every track object. | `track_count` is authoritative; fetch items via content transport `GET /v1/services/{id}/playlists/{playlistId}/items`. |
 | **Cross-service entity resolution** | Tracks merge on ISRC when present; name+artist is the fallback. Artist MBIDs / playlist links not yet implemented. | Partial — name joins marked `match: "name"`. |
@@ -197,7 +197,7 @@ Aegis aims to surface a user’s **full** library, not a prefix. Two layers matt
 ## Unified liked tracks
 
 ```
-GET /v1/library/tracks
+GET /me/tracks
 Authorization: Bearer <api-key> # or tailnet identity in auto/tailnet mode
 ```
 
@@ -233,8 +233,8 @@ Cross-service merge prefers shared **ISRC** (`entity_id`, `match: "isrc"`), then
 ## Unified albums and artists
 
 ```
-GET /v1/library/albums
-GET /v1/library/artists
+GET /me/albums
+GET /me/artists
 Authorization: Bearer <api-key> # or tailnet identity in auto/tailnet mode
 ```
 
@@ -275,7 +275,7 @@ Contacts that share any of those keys are merged into one entity with multiple
 `sources[]` (union-find, so A~email B and B~phone C form one contact).
 
 ```
-GET /v1/library/contacts
+GET /me/contacts
 Authorization: Bearer <api-key> # or tailnet identity in auto/tailnet mode
 ```
 
@@ -340,7 +340,7 @@ Cross-service merge uses a **content hash** when a provider supplies one
 never an identity — two different `IMG_0001.jpg` files must not merge.
 
 ```
-GET /v1/library/photos
+GET /me/photos
 Authorization: Bearer <api-key> # or tailnet identity in auto/tailnet mode
 ```
 
@@ -349,7 +349,7 @@ Connectors opt in by implementing `PhotoProvider` (`ListUserPhotos`).
 Permission key: `photos` (paths `/photos/*`, `/mediaItems/*`, `/picker/*`, and
 `/me/photos` on the service proxy).
 
-**Photo share:** `POST /v1/library/photos/share` publishes one photo
+**Photo share:** `POST /me/photos/share` publishes one photo
 to a share target (for example Bluesky) and returns a PoC ownership claim.
 Library writes are authorized by the calling key's data grant — sharing
 requires a `photos` write grant. See
@@ -416,7 +416,7 @@ Each occurrence of a recurring event is its own entry — instances of one
 series share a UID, so the start is what distinguishes them.
 
 ```
-GET /v1/library/events
+GET /me/events
 Authorization: Bearer <api-key> # or tailnet identity in auto/tailnet mode
 ```
 
@@ -470,7 +470,7 @@ service proxy).
 ```
 
 Organizer/attendee `Contact` values use the same identity matching as
-`/v1/library/contacts` and `Photo.people[]` (email → phone → handle → name).
+`/me/contacts` and `Photo.people[]` (email → phone → handle → name).
 
 ## Messages as a kind
 
@@ -538,12 +538,12 @@ Message-IDs or send times stay distinct.
 **Gmail and Google Takeout are sources of one mail collection.** Live Gmail,
 Gmail archive sync, and Takeout import all feed the same identity space:
 either ingest order is safe, a Message-ID match attaches another `sources[]`
-entry instead of creating a second message, and `GET /v1/library/messages`
+entry instead of creating a second message, and `GET /me/messages`
 presents the merged collection — one retrieval surface for list, search, and
 fetch.
 
 ```
-GET /v1/library/messages
+GET /me/messages
 Authorization: Bearer <api-key> # or tailnet identity in auto/tailnet mode
 ```
 
@@ -554,7 +554,7 @@ Permission key: `messages` (paths `/messages/*`, `/me/messages`, `/threads/*`,
 `/me/threads`, `/users/me/messages`, and `/gmail*` on the service proxy).
 
 Participant `Contact` values use the same identity matching as
-`/v1/library/contacts` and calendar attendees (email → phone → handle → name).
+`/me/contacts` and calendar attendees (email → phone → handle → name).
 
 **Query filters** (same semantics the archive search always had):
 
@@ -577,7 +577,7 @@ matched through one copy (archived or live) keeps every `sources[]` entry.
 **Fetch one message** with body at the kind subroute:
 
 ```
-GET /v1/library/messages/{service}/{id}
+GET /me/messages/{service}/{id}
 ```
 
 Returns the merged identity entry — sibling copies (Gmail archive + Takeout)
@@ -592,7 +592,7 @@ service content transport when bytes from the provider are needed.
 ## Transactions as a kind
 
 ```
-GET /v1/library/transactions
+GET /me/transactions
 Authorization: Bearer <api-key> # or tailnet identity in auto/tailnet mode
 ```
 
@@ -657,7 +657,7 @@ YNAB — Aegis does not invent split amounts.
 
 ## Location history (places)
 
-`GET /v1/library/places` returns **visits and trips** (time windows + place),
+`GET /me/places` returns **visits and trips** (time windows + place),
 not a firehose of GPS points. Query filters: `after`, `before`, `locality`,
 `kind` (`visit` | `trip`).
 
@@ -689,7 +689,7 @@ metadata only.
 
 ## Documents as a kind
 
-`GET /v1/library/documents` returns life-admin paperwork — receipts,
+`GET /me/documents` returns life-admin paperwork — receipts,
 warranties, leases, insurance policies, tax letters, medical letters, and
 mail attachments — as neutral **Document** metadata. Files stay on the source
 service (Paperless-ngx, Google Docs/Drive, and Gmail attachments on the same
@@ -739,12 +739,12 @@ Query filters: `q`, `tag`, `after`, `before`.
 | Access | List | Text endpoint |
 |--------|------|---------------|
 | `metadata` | title, dates, tags, correspondent, document_type, people[], sources[] — **no excerpt** | denied |
-| `read` / `read-write` | same + short `excerpt` | `GET /v1/library/documents/{service}/{id}/text` |
+| `read` / `read-write` | same + short `excerpt` | `GET /me/documents/{service}/{id}/text` |
 
 The text endpoint is a separate gate so `metadata` (or “read the list”) never
 implies reading content. Archived export copies additionally serve raw
 attachment bytes (octet streams, `Content-Type` from the part) at
-`GET /v1/library/documents/{service}/{id}/bytes` — the `blob_url` those
+`GET /me/documents/{service}/{id}/bytes` — the `blob_url` those
 sources carry — gated like text. Prefer `canonical` / `blob_url` on
 `sources[]` for the real file. Out of scope: upload/edit, Aegis-side OCR or
 file storage, and per-tag allow/deny (design spike).
@@ -756,7 +756,7 @@ GET/POST /v1/services/{service_id}/{path}
 Authorization: Bearer <api-key> # or tailnet identity in auto/tailnet mode
 ```
 
-After this is **not** a general service API. Library (`/v1/library/{kind}`) is the only data surface. `/v1/services` stays open only for user-data content the library cannot include or for ingesting a local export:
+After this is **not** a general service API. Library (`/me/{kind}`) is the only data surface. `/v1/services` stays open only for user-data content the library cannot include or for ingesting a local export:
 
 | Allowed | Why |
 |---------|-----|
@@ -842,7 +842,7 @@ GET /v1/admin/apps/{id} — inspect an app
 PATCH /v1/admin/apps/{id} — update {"name","scopes","disabled"}
 DELETE /v1/admin/apps/{id} — revoke an app
 POST /v1/admin/apps/{id}/rotate — issue a new token; the old one dies
-POST /v1/library/photos/share — publish one photo to a share target (admin; see connect/bluesky.md)
+POST /me/photos/share — publish one photo to a share target (admin; see connect/bluesky.md)
 ```
 
 Public brand assets (no auth;) are served from the process root:
@@ -868,7 +868,7 @@ setup wizard. Aperture setup and hook health live under **Advanced**.
 
 The **Library** tab loads datasets via `/v1/admin/library/{kind}` so browsing
 the admin UI does not inflate Home access counts. Agents still use
-`/v1/library/{kind}`; those requests are the ones the Home map counts.
+`/me/{kind}`; those requests are the ones the Home map counts.
 
 The **Home** tab (default) is a live SVG overview of how data moves. Aperture
 is drawn as a container around Aegis; Aegis nests the token vault and

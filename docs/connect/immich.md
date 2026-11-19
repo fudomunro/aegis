@@ -54,18 +54,18 @@ API key. Proxy paths under `/assets/*` and `/search/metadata` are classified
 as the `photos` permission.
 
 ```
-GET /v1/library/photos
+GET /me/photos
 GET /v1/services/immich/assets/{id}/original # content transport only
 GET /v1/services/immich/assets/{id}/thumbnail
 ```
 
 Asset search (`POST /search/metadata`) is not agent API — use
-`/v1/library/photos`. This is the reference pattern for other local/foreign
+`/me/photos`. This is the reference pattern for other local/foreign
 stores: configure `endpoint` + static `headers`, implement a library provider,
 mark `canonical_for`, and never cache content bytes in Aegis.
 
 **Photo source discipline:** pre-request injection for photo
-questions always includes `/v1/library/photos` and a hard rule to use only
+questions always includes `/me/photos` and a hard rule to use only
 Aegis URLs — not Photos.app / `Photos Library.photoslibrary` / Photo Booth /
 `~/Pictures`, not Immich at `:2283`, and not Immich Docker/Postgres. Keep
 photo service `aliases` broad enough (`photo`, `picture`, `photos`) that

@@ -37,7 +37,7 @@ fields to `unknown` without failing.
 Agent data is the unified library:
 
 ```
-GET /v1/library/messages
+GET /me/messages
 GET /v1/services/microsoft-mail/messages/{id}   # full body when the snippet is not enough
 ```
 

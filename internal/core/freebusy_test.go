@@ -56,10 +56,10 @@ func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
 
-	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
+	req := httptest.NewRequest("GET", "/me/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -81,7 +81,7 @@ func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 
 func TestHandleLibraryEvents_FreeBusyKeyDenied(t *testing.T) {
 	// Grant map keys are routes (issue #348): a freebusy-only key cannot
-	// reach /v1/library/events at all.
+	// reach /me/events at all.
 	cfg := &Config{
 		typePolicies: policy.DataGrants{"freebusy": {Default: shared.AccessRead}},
 		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
@@ -89,7 +89,7 @@ func TestHandleLibraryEvents_FreeBusyKeyDenied(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
 
-	req := httptest.NewRequest("GET", "/v1/library/events", nil)
+	req := httptest.NewRequest("GET", "/me/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
@@ -110,7 +110,7 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
 
-	req := httptest.NewRequest("GET", "/v1/library/events", nil)
+	req := httptest.NewRequest("GET", "/me/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("events"))(w, req)
@@ -127,7 +127,7 @@ func TestPermissionNotice_FreeBusy(t *testing.T) {
 	notice := library.PermissionNotice(p)
 	// Deny-by-default map: the notice is an allow list (player is simply
 	// outside it), with the freebusy route caveat attached.
-	for _, want := range []string{"only these library routes are available", "freebusy", "availability only", "/v1/library/freebusy"} {
+	for _, want := range []string{"only these library routes are available", "freebusy", "availability only", "/me/freebusy"} {
 		if !strings.Contains(notice, want) {
 			t.Fatalf("notice missing %q: %s", want, notice)
 		}
@@ -136,7 +136,7 @@ func TestPermissionNotice_FreeBusy(t *testing.T) {
 
 func TestLibraryRouteHandlers_IncludesFreeBusy(t *testing.T) {
 	handlers := (&Server{}).library().RouteHandlers()
-	if _, ok := handlers["/v1/library/freebusy"]; !ok {
+	if _, ok := handlers["/me/freebusy"]; !ok {
 		t.Fatal("freebusy route not registered")
 	}
 }
@@ -153,10 +153,10 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ok", "Busy", "2026-03-02T10:00:00Z", "2026-03-02T11:00:00Z", false),
 	}}
 
-	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
+	req := httptest.NewRequest("GET", "/me/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -177,7 +177,7 @@ func TestEventsProviderTargets_Collects(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
 	targets, denied := kinds.Collect[kinds.CalendarEvent, kinds.CalendarEventProvider](srv,
-		httptest.NewRequest(http.MethodGet, "/v1/library/freebusy", nil), "events",
+		httptest.NewRequest(http.MethodGet, "/me/freebusy", nil), "events",
 		func(p kinds.CalendarEventProvider) func(context.Context) ([]kinds.CalendarEvent, bool, error) {
 			return p.ListCalendarEvents
 		})

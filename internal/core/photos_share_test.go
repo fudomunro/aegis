@@ -96,7 +96,7 @@ func testPhotoShareServer(t *testing.T, sourceWrite, targetWrite bool) (*Server,
 func postPhotoShare(t *testing.T, srv *Server, body map[string]any) *httptest.ResponseRecorder {
 	t.Helper()
 	raw, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/library/photos/share", bytes.NewReader(raw))
+	req := httptest.NewRequest("POST", "/me/photos/share", bytes.NewReader(raw))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().HandlePhotoShare)(w, req)
@@ -209,7 +209,7 @@ func TestHandlePhotoShare_RejectsBadInput(t *testing.T) {
 		})
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/photos/share", nil)
+	req := httptest.NewRequest("GET", "/me/photos/share", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().HandlePhotoShare)(w, req)

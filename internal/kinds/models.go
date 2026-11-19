@@ -282,7 +282,7 @@ type PhotoShareClaim struct {
 	Note string `json:"note,omitempty"`
 }
 
-// PhotoShareResponse is the agent-facing result of POST /v1/library/photos/share.
+// PhotoShareResponse is the agent-facing result of POST /me/photos/share.
 type PhotoShareResponse struct {
 	// TargetService is the share destination connector ID.
 	TargetService string `json:"target_service"`
@@ -327,7 +327,7 @@ type CalendarEvent struct {
 	// Organizer is the event organizer as a Contact, when known.
 	Organizer *Contact `json:"organizer,omitempty"`
 	// Attendees are invitees as Contact values (same identity matching as
-	// /v1/library/contacts and Photo.people[]).
+	// /me/contacts and Photo.people[]).
 	Attendees []Contact `json:"attendees,omitempty"`
 	// EntityID is a durable cross-service id when a provider supplies one
 	// (Google Calendar iCalUID). Preferred over title+time matching.
@@ -582,7 +582,7 @@ type DocumentList struct {
 }
 
 // DocumentText is the full extracted text of one document (issue #143).
-// Returned only by GET /v1/library/documents/{service}/{id}/text, gated
+// Returned only by GET /me/documents/{service}/{id}/text, gated
 // separately so metadata access never implies reading content.
 type DocumentText struct {
 	// Service is the connector ID that holds the document.

@@ -5,7 +5,7 @@ archive** (SQLite FTS5 + gzip provider payloads). This is a query mirror, not
 a new home copy — Gmail remains canonical for the mailbox. The
 archive is another **source of the user mail collection**: Gmail archive sync
 and Google Takeout import both land here, merge on RFC Message-ID into
-multi-source `sources[]`, and feed `GET /v1/library/messages`.
+multi-source `sources[]`, and feed `GET /me/messages`.
 Optimize for Aegis/agents: search and fetch by id without paging Gmail every turn.
 
 Mail retrieval is **one surface — the library API**. The archive is a
@@ -20,8 +20,8 @@ entry with `body`.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/library/messages` | Merged collection: live providers + archive rows. Query filters: `q`, `from`/`to` (addresses), `after`/`before`, `label`, `sort=asc\|desc`, `include_body`, `limit`, `cursor` |
-| `GET /v1/library/messages/{service}/{id}` | One message as the merged identity entry, `body` included (archived copy); live rows the collection shows are fetchable too |
+| `GET /me/messages` | Merged collection: live providers + archive rows. Query filters: `q`, `from`/`to` (addresses), `after`/`before`, `label`, `sort=asc\|desc`, `include_body`, `limit`, `cursor` |
+| `GET /me/messages/{service}/{id}` | One message as the merged identity entry, `body` included (archived copy); live rows the collection shows are fetchable too |
 | `GET /v1/admin/mail/status` | Message counts, last sync time/error, page cursors (admin) |
 | `POST /v1/admin/mail/sync` | Ingest a bounded batch; body `{"service","max_messages","query","reset_cursor"}` (admin) |
 
@@ -52,11 +52,11 @@ curl -X POST "$AEGIS/v1/admin/mail/sync" -H "Authorization: Bearer $ADMIN_KEY" \
  -d '{"max_messages":200}'
 
 ## Search history — agent or admin
-curl "$AEGIS/v1/library/messages?q=invoice&from=ada&after=2024-01-01&include_body=1" \
+curl "$AEGIS/me/messages?q=invoice&from=ada&after=2024-01-01&include_body=1" \
  -H "Authorization: Bearer $KEY"
 
 ## Oldest message
-curl "$AEGIS/v1/library/messages?sort=asc&limit=1" -H "Authorization: Bearer $KEY"
+curl "$AEGIS/me/messages?sort=asc&limit=1" -H "Authorization: Bearer $KEY"
 ```
 
 `mail-archive.db` is local state (like `tokens.json`) and lives under the

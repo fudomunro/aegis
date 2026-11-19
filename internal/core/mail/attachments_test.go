@@ -107,7 +107,7 @@ func TestAttachmentDocuments_FromStoredPayload(t *testing.T) {
 	if src.Service != connectors.TakeoutServiceID || src.Canonical {
 		t.Fatalf("takeout copy must be non-canonical: %+v", src)
 	}
-	wantBlob := "https://aegis.example.com/v1/library/documents/" + connectors.TakeoutServiceID +
+	wantBlob := "https://aegis.example.com/me/documents/" + connectors.TakeoutServiceID +
 		"/msgid:cert-1@example.com~2/bytes"
 	if src.BlobURL != wantBlob {
 		t.Fatalf("blob_url = %q, want %q", src.BlobURL, wantBlob)

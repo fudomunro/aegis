@@ -20,7 +20,7 @@ func (h *Handlers) requireMailArchive(w http.ResponseWriter) *mail.Archive {
 }
 
 // MailSyncRequest is the body for admin mail ingest (issue #311: agent
-// retrieval lives on /v1/library/messages; ingest stays admin).
+// retrieval lives on /me/messages; ingest stays admin).
 type MailSyncRequest struct {
 	// Service to ingest. Empty defaults to google-gmail when configured.
 	// "google-takeout" syncs the read-only Takeout export path.

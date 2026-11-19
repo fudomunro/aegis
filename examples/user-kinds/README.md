@@ -18,7 +18,7 @@ cp -R examples/user-kinds/reading-list <data-dir>/user-kinds/
 export AEGIS_USER_KINDS_DIR=$PWD/examples/user-kinds
 ```
 
-Restart Aegis and call `GET /v1/library/<pack-id>`.
+Restart Aegis and call `GET /me/<pack-id>`.
 
 ## Own-repo note
 

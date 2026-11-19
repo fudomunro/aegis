@@ -19,7 +19,7 @@ import (
 var BuiltinLibraryKinds = []LibraryKind{
 	{
 		ID:              "playlists",
-		Path:            "/v1/library/playlists",
+		Path:            "/me/playlists",
 		PermType:        "playlists",
 		Label:           "playlists",
 		Usage:           "playlists or their music library",
@@ -46,7 +46,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 	},
 	{
 		ID:              "tracks",
-		Path:            "/v1/library/tracks",
+		Path:            "/me/tracks",
 		PermType:        "tracks",
 		Label:           "liked tracks",
 		Usage:           "songs they like, saved tracks, or favorites",
@@ -79,7 +79,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 	},
 	{
 		ID:              "albums",
-		Path:            "/v1/library/albums",
+		Path:            "/me/albums",
 		PermType:        "albums",
 		Label:           "saved albums",
 		Usage:           "albums they saved or their album library",
@@ -108,7 +108,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 	},
 	{
 		ID:              "artists",
-		Path:            "/v1/library/artists",
+		Path:            "/me/artists",
 		PermType:        "artists",
 		Label:           "followed artists",
 		Usage:           "artists they follow or favorite artists",
@@ -138,7 +138,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 	},
 	{
 		ID:              "contacts",
-		Path:            "/v1/library/contacts",
+		Path:            "/me/contacts",
 		PermType:        "contacts",
 		Label:           "contacts",
 		Usage:           "people, contacts, or their address book",
@@ -166,12 +166,12 @@ var BuiltinLibraryKinds = []LibraryKind{
 	},
 	{
 		ID:              "photos",
-		Path:            "/v1/library/photos",
+		Path:            "/me/photos",
 		PermType:        "photos",
 		Label:           "photos",
 		Usage:           "photos, pictures, or their photo library",
 		Summary:         "all user photos from every connected photo service in one neutral list (taken_at, dimensions, mime_type, filename, people[] as Contact identities, sources[] with canonical blob location). Google Photos contributes the user's last picker selection.",
-		SyncRule:        "Photos with the same content hash or the same taken_at plus dimensions are synced into one entry with multiple sources[]. people[] entries merge with the same contact identity matching used by /v1/library/contacts. Photo bytes are never stored in Aegis. Google Photos uses the Picker API: the user must pick photos once before they appear here.",
+		SyncRule:        "Photos with the same content hash or the same taken_at plus dimensions are synced into one entry with multiple sources[]. people[] entries merge with the same contact identity matching used by /me/contacts. Photo bytes are never stored in Aegis. Google Photos uses the Picker API: the user must pick photos once before they appear here.",
 		ExampleQuestion: "what photos do I have?",
 		Keywords: []string{
 			"my photos", "photo library", "my pictures", "picture library",
@@ -201,7 +201,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 	},
 	{
 		ID:              "events",
-		Path:            "/v1/library/events",
+		Path:            "/me/events",
 		PermType:        "events",
 		Label:           "calendar events",
 		Usage:           "calendar events, meetings, appointments, or their schedule",
@@ -228,12 +228,12 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed:  true,
 		SyncParticipant:   true,
 		DefaultNone:       false,
-		ExtraInstructions: " For scheduling or availability-only questions use GET {root}/v1/library/freebusy — busy intervals only (start_at, end_at, all_day); never includes titles or attendees.",
+		ExtraInstructions: " For scheduling or availability-only questions use GET {root}/me/freebusy — busy intervals only (start_at, end_at, all_day); never includes titles or attendees.",
 		Search:            &SearchSpec{Fields: []string{"title", "description", "location", "calendar_name"}, TitleField: "title"},
 	},
 	{
 		ID:              "messages",
-		Path:            "/v1/library/messages",
+		Path:            "/me/messages",
 		PermType:        "messages",
 		Label:           "messages",
 		Usage:           "emails, messages, inbox, mail, or recent correspondence between people (not app notifications)",
@@ -262,12 +262,12 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed:  true,
 		DefaultNone:       false,
 		OptimisticCopies:  true,
-		ExtraInstructions: " Find mail on the same list endpoint: GET {root}/v1/library/messages?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&label=…&sort=asc|desc&include_body=1 — q searches subject, snippet, and archived body text; from/to are addresses, never time bounds; use sort=asc for oldest/earliest/first message questions; include_body=1 fills body. Fetch one message with body at GET {root}/v1/library/messages/{sources[].service}/{sources[].id}.",
+		ExtraInstructions: " Find mail on the same list endpoint: GET {root}/me/messages?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&label=…&sort=asc|desc&include_body=1 — q searches subject, snippet, and archived body text; from/to are addresses, never time bounds; use sort=asc for oldest/earliest/first message questions; include_body=1 fills body. Fetch one message with body at GET {root}/me/messages/{sources[].service}/{sources[].id}.",
 		Search:            &SearchSpec{Fields: []string{"subject", "snippet"}, TitleField: "subject"},
 	},
 	{
 		ID:              "transactions",
-		Path:            "/v1/library/transactions",
+		Path:            "/me/transactions",
 		PermType:        "transactions",
 		Label:           "transactions",
 		Usage:           "transactions, charges, spending, bank activity, budget line items, or money history",
@@ -303,7 +303,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 	},
 	{
 		ID:              "places",
-		Path:            "/v1/library/places",
+		Path:            "/me/places",
 		PermType:        "places",
 		Label:           "places",
 		Usage:           "where I was, location history, visits, trips, places I've been, travel chronology, time at a place, or residence/absence timelines",
@@ -341,11 +341,11 @@ var BuiltinLibraryKinds = []LibraryKind{
 	},
 	{
 		ID:              "documents",
-		Path:            "/v1/library/documents",
+		Path:            "/me/documents",
 		PermType:        "documents",
 		Label:           "documents",
 		Usage:           "documents, receipts, warranties, leases, insurance policies, tax letters, medical letters, or paperwork",
-		Summary:         "user documents from every connected source in one neutral list (title, mime_type, created_at, modified_at, correspondent, document_type, tags[], excerpt when read is allowed, people[] as Contact identities, sources[] with blob_url on the canonical source). Document bytes stay on the source service. Full text is only at GET /v1/library/documents/{service}/{id}/text.",
+		Summary:         "user documents from every connected source in one neutral list (title, mime_type, created_at, modified_at, correspondent, document_type, tags[], excerpt when read is allowed, people[] as Contact identities, sources[] with blob_url on the canonical source). Document bytes stay on the source service. Full text is only at GET /me/documents/{service}/{id}/text.",
 		SyncRule:        "Documents merge on durable entity_id (content checksum, then archive serial) when present; otherwise same title + created_at (match=title_created). metadata access returns titles/dates/tags only — no excerpt or text. Aegis does not store or OCR document files.",
 		ExampleQuestion: "where is my lease?",
 		Keywords: []string{

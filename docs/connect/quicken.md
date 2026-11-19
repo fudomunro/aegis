@@ -13,7 +13,7 @@ store media).
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/library/transactions` | Neutral transactions from the import store (source `quicken`) |
+| `GET /me/transactions` | Neutral transactions from the import store (source `quicken`) |
 | `GET /v1/services/quicken/import/status` | Row count |
 | `POST /v1/services/quicken/import` | `{"path": "/path/to/file-or-dir"}` |
 

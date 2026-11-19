@@ -15,7 +15,7 @@ should live.
 A user defines a **source and schema** for personal data; Aegis exposes it on
 the same kind-centric surface as built-ins:
 
-- `GET /v1/library/{kind}`
+- `GET /me/{kind}`
 - neutral list (`name`, `fields`, `sources[]`)
 - kind-owned permissions (opt-in by default)
 - pre-request keyword injection
@@ -143,7 +143,7 @@ kinds.UserDefinedItem         pre-request hints / admin / flow
 kinds.Aggregate  (same pipeline as playlists/tracks/…)
     │
     ▼
-GET /v1/library/{id}
+GET /me/{id}
 ```
 
 | Layer | UDK responsibility |
@@ -165,8 +165,8 @@ do not invent a second proxy path.
 - **Packs cannot self-enable.** `default_access` is informational only; a data
   grant must name the kind (admin UI / `PUT /v1/admin/data-grants`).
 - `id` must match `^[a-z][a-z0-9-]*$` and must not collide with built-in library
-  kinds or `/v1/library` reserved segments (`links`, `review`, `copies`, …).
-  `perm_type` is always the id; `path` is always `/v1/library/{id}`.
+  kinds or `/me` reserved segments (`links`, `review`, `copies`, …).
+  `perm_type` is always the id; `path` is always `/me/{id}`.
 - Empty / `none` keeps the kind hidden until the admin enables it — same as
   places (#142).
 - Provider overrides do not apply: UDK sources are not OAuth services.
@@ -191,7 +191,7 @@ export AEGIS_USER_KINDS_DIR=$PWD/examples/user-kinds
 # or copy examples/user-kinds/reading-list into <data-dir>/user-kinds/
 ./aegis -addr 127.0.0.1:8080 -api-key dev-key -token-pass dev-pass
 curl -s -H "Authorization: Bearer dev-key" \
-  http://localhost:8080/v1/library/reading-list | jq .
+  http://localhost:8080/me/reading-list | jq .
 ```
 
 Expected: three merged rows (ISBN pair, name pair, singleton), `match` labels

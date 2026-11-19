@@ -21,7 +21,7 @@ curl -s -X PUT https://aegis.example.ts.net/v1/admin/data-grants \
 Then:
 
 ```bash
-curl -s https://aegis.example.ts.net/v1/library/reading-list | jq .
+curl -s https://aegis.example.ts.net/me/reading-list | jq .
 ```
 
 ## What this proves

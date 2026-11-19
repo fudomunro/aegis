@@ -29,21 +29,21 @@ knowledge of the story — only from what the API returns.
 First command to run now (copy exactly):
 
   curl -sS -H "X-Api-Key: <persona key>" \
-    "<demo base URL>/v1/library/messages?sort=asc&limit=3"
+    "<demo base URL>/me/messages?sort=asc&limit=3"
 
 Account: <persona label>. <blurb>
 Synthetic demo data. Read-only.
 
 Endpoints (send X-Api-Key on every request):
-  GET /v1/library/messages?q=&from=&to=&after=&before=&sort=asc|desc&limit=
-  GET /v1/library/contacts
-  GET /v1/library/events
-  GET /v1/library/places
-  GET /v1/library/photos
-  GET /v1/library/tracks, /playlists, /albums, /artists
-  GET /v1/library/transactions
-  GET /v1/library/documents
-  GET /v1/library/documents/{service}/{id}/text
+  GET /me/messages?q=&from=&to=&after=&before=&sort=asc|desc&limit=
+  GET /me/contacts
+  GET /me/events
+  GET /me/places
+  GET /me/photos
+  GET /me/tracks, /playlists, /albums, /artists
+  GET /me/transactions
+  GET /me/documents
+  GET /me/documents/{service}/{id}/text
 
 Rules:
 - Only call this Aegis API — no other data sources.

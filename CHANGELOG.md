@@ -131,6 +131,19 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Library API base path is `/me` (issue #421).** The kind-centric surface
+  moves from `/v1/library/{kind}` to `/me/{kind}` — it is the user's own
+  data, so it now reads as such (`/me/tracks`, `/me/messages`,
+  `/me/photos/share`, `/me/links`, …). Every route, agent instruction,
+  admin-UI hint, and doc example follows; the fixed cross-kind entries
+  (`links`, `review`, `copies`) and the user-defined-kind path default
+  move with it. This is a clean cut with no `/v1/library` alias — old
+  agent calls 404 and need the new base path. The concept vocabulary is
+  unchanged: **library kind**, **unified library**, `LibraryKind`, and
+  the `internal/library` package all keep their names — only the URL
+  moved. Watch the prefix when matching: `/me/` (not `/me`, which would
+  also swallow `/metrics`).
+
 - **Local import store spec registry (issue #393).** Signal, Quicken,
   Timeline, and LinkedIn now register through one connectors-side
   declaration (`LocalImportStoreSpecs()`) instead of per-store wiring

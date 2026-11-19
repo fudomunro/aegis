@@ -32,7 +32,7 @@ func (c *YNABConnector) Onboarding() shared.OnboardingSpec {
 			Name:        YNABServiceName,
 			Action:      "inject",
 			CacheTTL:    "5m",
-			Description: "Live YNAB budget transactions for /v1/library/transactions. Amounts map from milliunits to signed decimal strings.",
+			Description: "Live YNAB budget transactions for /me/transactions. Amounts map from milliunits to signed decimal strings.",
 			Aliases:     []string{"ynab", "you need a budget", "budget"},
 			// One personal access token, injected as Authorization. YNAB
 			// also accepts X-YNAB-Token; the save path normalizes to Bearer.
@@ -56,7 +56,7 @@ func (c *YNABConnector) Onboarding() shared.OnboardingSpec {
 		Guides: []shared.OnboardingGuide{
 			{
 				ID: ynabGuideID,
-				Body: "Live budget line items for `GET /v1/library/transactions`. " +
+				Body: "Live budget line items for `GET /me/transactions`. " +
 					"Create a Personal Access Token in YNAB → Account Settings → Developer Settings. " +
 					"Stored in `service_connections.json` — never shown again after save. " +
 					"[YNAB API docs](https://api.ynab.com/)",
@@ -128,7 +128,7 @@ func (c *YNABConnector) OnboardingStatus(ctx context.Context) shared.OnboardingS
 	status.Summary = append(status.Summary, ynabLibrarySummary(c.host.LibraryReadable("transactions")))
 	if res.OK {
 		status.Hints = append(status.Hints,
-			fmt.Sprintf("Connected — %d budget(s) visible. Try GET /v1/library/transactions.", res.Metrics["budget_count"]))
+			fmt.Sprintf("Connected — %d budget(s) visible. Try GET /me/transactions.", res.Metrics["budget_count"]))
 	}
 	return status
 }

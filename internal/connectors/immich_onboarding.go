@@ -807,7 +807,7 @@ func (c *ImmichConnector) immichGuidedSteps(status *shared.OnboardingStatus, con
 		}
 		if !failed {
 			verifyOK = true
-			verifyDetail = "Checklist looks good — agents can use /v1/library/photos."
+			verifyDetail = "Checklist looks good — agents can use /me/photos."
 		} else {
 			verifyDetail = "Some checks failed — see below."
 		}
@@ -859,7 +859,7 @@ func immichNextStepFrom(steps []shared.OnboardingStepState, probe *shared.ProbeR
 			return "Click Run checks and fix anything still red."
 		}
 	}
-	return "Immich setup is complete. Agents can list photos via /v1/library/photos."
+	return "Immich setup is complete. Agents can list photos via /me/photos."
 }
 
 // immichStampSummary inspects one listing for the canonical + proxy stamp.

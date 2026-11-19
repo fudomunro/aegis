@@ -61,7 +61,7 @@ func TestHandleEntityLinks_HTTP(t *testing.T) {
 
 	// Create
 	body := `{"kind":"playlist","sources":[{"service":"spotify","id":"p1"},{"service":"youtube-music","id":"P1"}],"note":"n"}`
-	req := httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/me/links", strings.NewReader(body))
 	w := httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusCreated {
@@ -73,7 +73,7 @@ func TestHandleEntityLinks_HTTP(t *testing.T) {
 	}
 
 	// List
-	req = httptest.NewRequest(http.MethodGet, "/v1/library/links", nil)
+	req = httptest.NewRequest(http.MethodGet, "/me/links", nil)
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusOK {
@@ -81,7 +81,7 @@ func TestHandleEntityLinks_HTTP(t *testing.T) {
 	}
 
 	// Delete
-	req = httptest.NewRequest(http.MethodDelete, "/v1/library/links/"+created.ID, nil)
+	req = httptest.NewRequest(http.MethodDelete, "/me/links/"+created.ID, nil)
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusOK {
@@ -103,7 +103,7 @@ func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
 	srv.links = st
 
 	body := `{"kind":"playlist","sources":[{"service":"spotify","id":"p1"},{"service":"youtube-music","id":"P1"}]}`
-	req := httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/me/links", strings.NewReader(body))
 	w := httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusForbidden {
@@ -111,7 +111,7 @@ func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
 	}
 
 	cfg.typePolicies = policy.DataGrants{"playlists": {Default: shared.AccessFull}}
-	req = httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
+	req = httptest.NewRequest(http.MethodPost, "/me/links", strings.NewReader(body))
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusCreated {
@@ -124,7 +124,7 @@ func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
 
 	// The write grant governs delete too (kind comes from the stored link).
 	cfg.typePolicies = policy.DataGrants{"playlists": {Default: shared.AccessRead}}
-	req = httptest.NewRequest(http.MethodDelete, "/v1/library/links/"+created.ID, nil)
+	req = httptest.NewRequest(http.MethodDelete, "/me/links/"+created.ID, nil)
 	w = httptest.NewRecorder()
 	srv.library().HandleEntityLinks(w, req)
 	if w.Code != http.StatusForbidden {

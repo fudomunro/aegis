@@ -6,7 +6,7 @@ import (
 )
 
 func TestMessageFilters_Parse(t *testing.T) {
-	req := httptest.NewRequest("GET", "/v1/library/messages?q=hello&from=ada%40example.com&to=bob&after=2024-01-01&before=2024-02-01&label=INBOX&label=UNREAD&sort=asc&include_body=1", nil)
+	req := httptest.NewRequest("GET", "/me/messages?q=hello&from=ada%40example.com&to=bob&after=2024-01-01&before=2024-02-01&label=INBOX&label=UNREAD&sort=asc&include_body=1", nil)
 	f := ParseMessageFilters(req)
 	if f.Q != "hello" || f.From != "ada@example.com" || f.To != "bob" {
 		t.Fatalf("filters = %+v", f)
@@ -24,7 +24,7 @@ func TestMessageFilters_Parse(t *testing.T) {
 		t.Fatal("filters with values must not be empty")
 	}
 
-	req = httptest.NewRequest("GET", "/v1/library/messages?include_body=true", nil)
+	req = httptest.NewRequest("GET", "/me/messages?include_body=true", nil)
 	f = ParseMessageFilters(req)
 	if !f.IncludeBody || !f.QueryMode() {
 		t.Fatalf("include_body=true not parsed: %+v", f)
@@ -33,7 +33,7 @@ func TestMessageFilters_Parse(t *testing.T) {
 		t.Fatal("include_body needs bodies")
 	}
 
-	req = httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req = httptest.NewRequest("GET", "/me/messages", nil)
 	f = ParseMessageFilters(req)
 	if !f.Empty() || f.QueryMode() || f.NeedBody() {
 		t.Fatalf("bare request flags = %+v", f)

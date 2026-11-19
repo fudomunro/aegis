@@ -147,7 +147,7 @@ type ImportAdmin struct {
 	// SamplePath tells the operator where a typical export lives.
 	SamplePath string
 	// LibraryPath is the agent library route this store feeds,
-	// e.g. "/v1/library/transactions".
+	// e.g. "/me/transactions".
 	LibraryPath string
 	// BareResult returns the import result without the {result,status}
 	// envelope (Timeline's historical response shape).
@@ -198,7 +198,7 @@ type ImportStoreStatus struct {
 }
 
 // LocalStoreService is the service card a local import store injects into
-// config so /v1/library fan-in sees it as a source (issue #266). Declared
+// config so /me fan-in sees it as a source (issue #266). Declared
 // beside the store so registration and naming read one table.
 type LocalStoreService struct {
 	ID          string

@@ -370,10 +370,11 @@ func TestGoogleGmailConnector_HandleProxy_Unauthorized(t *testing.T) {
 }
 
 func TestGoogleGmailConnector_SystemInstructions_MentionLibrary(t *testing.T) {
-	conn := NewGoogleGmailConnector(newTestHost("https://aegis.example.com"))
-	instr := conn.SystemInstructions("https://aegis.example.com")
+	root := "https://aegis.example.com"
+	conn := NewGoogleGmailConnector(newTestHost(root))
+	instr := conn.SystemInstructions(root)
 	for _, want := range []string{
-		"/v1/library/messages",
+		"/me/messages", // the Aegis library list — the /me base path
 		"/messages/{id}",
 		"/threads/{id}",
 		"Gmail",
@@ -384,7 +385,11 @@ func TestGoogleGmailConnector_SystemInstructions_MentionLibrary(t *testing.T) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)
 		}
 	}
-	if strings.Contains(instr, "/me/messages") {
+	// The library is the list surface; the service transport is
+	// detail-only (issue #119). Every /me/messages mention must be the
+	// library URL — a bare one is Gmail's own message-list path, which
+	// the /me base path now collides with by name only.
+	if strings.Contains(strings.ReplaceAll(instr, root+"/me/messages", ""), "/me/messages") {
 		t.Fatalf("must not advertise message list proxy (issue #119):\n%s", instr)
 	}
 }

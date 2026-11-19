@@ -45,7 +45,7 @@ func TestCompileClientIPHeader(t *testing.T) {
 }
 
 func TestClientIP_NoTrustedProxiesIgnoresForwarded(t *testing.T) {
-	r := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+	r := httptest.NewRequest(http.MethodGet, "/me/tracks", nil)
 	r.RemoteAddr = "203.0.113.9:41000"
 	r.Header.Set("X-Real-IP", "6.6.6.6")
 	r.Header.Set("X-Forwarded-For", "6.6.6.6, 7.7.7.7")

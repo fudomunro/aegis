@@ -41,7 +41,7 @@ canonical home to the other write-capable members: writes use `If-Match` /
 etags so a newer remote edit is never overwritten — a member-side edit
 surfaces as a conflict to accept or reject. Per-item etag watermarks land in
 the copy ledger for incremental sync. Mirrored CalDAV
-events feed `GET /v1/library/freebusy`.
+events feed `GET /me/freebusy`.
 
 **iCloud** needs an app-specific password (appleid.apple.com → App-Specific
 Passwords); endpoint is `https://contacts.icloud.com` /

@@ -402,8 +402,8 @@ func TestGoogleCalendarConnector_SystemInstructions_MentionLibrary(t *testing.T)
 	conn := NewGoogleCalendarConnector(newTestHost("https://aegis.example.com"))
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
-		"/v1/library/events",
-		"/v1/library/freebusy",
+		"/me/events",
+		"/me/freebusy",
 		"Google Calendar",
 		"Do not call Google Calendar API directly",
 	} {

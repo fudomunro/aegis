@@ -118,7 +118,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 		}}},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/transactions", nil)
+	req := httptest.NewRequest("GET", "/me/transactions", nil)
 	w := httptest.NewRecorder()
 	srv.library().LibraryHandler("transactions")(w, req)
 	if w.Code != http.StatusOK {
@@ -136,10 +136,10 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 	}
 
 	// The totals route returns the summary and no line items (issue #348).
-	req2 := httptest.NewRequest("GET", "/v1/library/transactions/totals", nil)
+	req2 := httptest.NewRequest("GET", "/me/transactions/totals", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/transactions/totals"))(w2, req2)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/transactions/totals"))(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -168,7 +168,7 @@ func TestHandleLibraryTransactions_Filters(t *testing.T) {
 			{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Sources: []kinds.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "2"}}},
 		}},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/transactions?after=2024-03-08", nil)
+	req := httptest.NewRequest("GET", "/me/transactions?after=2024-03-08", nil)
 	w := httptest.NewRecorder()
 	srv.library().LibraryHandler("transactions")(w, req)
 	if w.Code != http.StatusOK {
@@ -376,7 +376,7 @@ func TestYNABCapabilitiesAndInstructions(t *testing.T) {
 		t.Fatalf("ops = %d", len(caps.Kinds[0].Operations))
 	}
 	s := c.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(s, "/v1/library/transactions") {
+	if !strings.Contains(s, "/me/transactions") {
 		t.Fatalf("instructions = %q", s)
 	}
 	if !strings.Contains(s, "signed decimal") {

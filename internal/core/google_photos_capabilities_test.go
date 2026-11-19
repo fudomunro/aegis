@@ -19,7 +19,7 @@ func TestAlbumServiceName_AndPhotosInstructions(t *testing.T) {
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	instr := srv.library().LibraryInstructionsFor("photos")
-	if !strings.Contains(instr, "/v1/library/photos") {
+	if !strings.Contains(instr, "/me/photos") {
 		t.Fatalf("photos instructions missing endpoint: %s", instr)
 	}
 

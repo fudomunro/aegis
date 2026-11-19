@@ -28,16 +28,16 @@ func linkGrantKey(kind string) string {
 
 // HandleEntityLinks manages explicit cross-service identity links:
 //
-//	GET    /v1/library/links
-//	POST   /v1/library/links          {"kind":"playlist","sources":[{"service","id"},...],"note"?}
-//	DELETE /v1/library/links/{id}
+//	GET    /me/links
+//	POST   /me/links          {"kind":"playlist","sources":[{"service","id"},...],"note"?}
+//	DELETE /me/links/{id}
 func (h *Handlers) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 	if h.Links == nil {
 		shared.WriteJSONError(w, http.StatusNotFound, "entity links not configured")
 		return
 	}
 
-	path := strings.TrimPrefix(r.URL.Path, "/v1/library/links")
+	path := strings.TrimPrefix(r.URL.Path, "/me/links")
 	path = strings.Trim(path, "/")
 
 	switch {
@@ -126,7 +126,7 @@ type MergeReviewResponse struct {
 }
 
 // HandleMergeReview returns multi-source entities joined by name (not by
-// ISRC/UPC/MBID/explicit link). GET /v1/library/review
+// ISRC/UPC/MBID/explicit link). GET /me/review
 func (h *Handlers) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -248,7 +248,7 @@ func (h *Handlers) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 					Match:   pl.Match,
 					Name:    pl.Name,
 					Sources: PlaylistSourceRefs(pl),
-					Note:    "joined by name — POST /v1/library/links to confirm or split by renaming",
+					Note:    "joined by name — POST /me/links to confirm or split by renaming",
 				})
 			}
 			appendItems(batch)

@@ -51,7 +51,7 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 		}},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
+	req := httptest.NewRequest("GET", "/me/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
@@ -76,7 +76,7 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 
 func TestHandleLibraryPhotos_NoProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
+	req := httptest.NewRequest("GET", "/me/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
@@ -99,7 +99,7 @@ func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 			kinds.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
+	req := httptest.NewRequest("GET", "/me/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
@@ -120,7 +120,7 @@ func TestHandleLibraryPhotos_UnauthorizedService(t *testing.T) {
 		}},
 		"icloud": &fakePhotoProvider{err: kinds.ErrUnauthorized},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
+	req := httptest.NewRequest("GET", "/me/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
@@ -148,7 +148,7 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 		}},
 		"icloud": &fakePhotoProvider{err: errors.New("upstream boom")},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
+	req := httptest.NewRequest("GET", "/me/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
@@ -171,7 +171,7 @@ func TestHandleLibraryPhotos_MethodNotAllowed(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-photos", Name: "Google Photos", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{"google-photos": &fakePhotoProvider{}}
-	req := httptest.NewRequest("POST", "/v1/library/photos", nil)
+	req := httptest.NewRequest("POST", "/me/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("photos"))(w, req)
@@ -234,7 +234,7 @@ func TestPreRequest_InjectsPhotoLibraryHint(t *testing.T) {
 	if resp.Action != ActionModify {
 		t.Fatalf("action = %q, want modify: %s", resp.Action, w.Body.String())
 	}
-	if !strings.Contains(string(resp.RequestBody), "/v1/library/photos") {
+	if !strings.Contains(string(resp.RequestBody), "/me/photos") {
 		t.Fatalf("request_body missing photos library endpoint: %s", resp.RequestBody)
 	}
 }
@@ -423,7 +423,7 @@ func TestGooglePhotosConnector_SystemInstructions_MentionPicker(t *testing.T) {
 	conn := connectors.NewGooglePhotosConnector(srv)
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
-		"/v1/library/photos",
+		"/me/photos",
 		"/picker/sessions",
 		"Picker API",
 		"Aegis authenticates you",

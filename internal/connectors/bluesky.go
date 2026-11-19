@@ -63,9 +63,9 @@ func (c *BlueskyConnector) Capabilities() shared.ServiceCapabilities {
 				Operations: []shared.Operation{
 					{
 						Name:        "share_photo",
-						Description: "Publish one photo to Bluesky and return a content-hash claim (permission key: photos write). Prefer POST /v1/library/photos/share over raw xrpc.",
+						Description: "Publish one photo to Bluesky and return a content-hash claim (permission key: photos write). Prefer POST /me/photos/share over raw xrpc.",
 						Method:      "POST",
-						Path:        "/v1/library/photos/share",
+						Path:        "/me/photos/share",
 						Parameters: []shared.Parameter{
 							{Name: "source_service", In: "body", Type: "string", Description: "Photo source connector ID (e.g. immich)", Required: true},
 							{Name: "source_id", In: "body", Type: "string", Description: "Service-local photo/asset ID", Required: true},
@@ -96,7 +96,7 @@ func (c *BlueskyConnector) Capabilities() shared.ServiceCapabilities {
 			},
 			{
 				Name:        "messages",
-				Description: "Bluesky notifications (likes, replies, mentions, follows) as neutral messages for /v1/library/messages.",
+				Description: "Bluesky notifications (likes, replies, mentions, follows) as neutral messages for /me/messages.",
 				Operations: []shared.Operation{
 					{
 						Name:        "list_notifications",
@@ -124,14 +124,14 @@ func (c *BlueskyConnector) SystemInstructions(baseURL string) string {
 	return fmt.Sprintf(`When the user's request involves Bluesky (sharing photos, their feed images, their posts, or their contacts), use Aegis's unified data API. Do not call Bluesky/AT Protocol directly. Aegis owns the Bluesky handle and app password — never ask the user for them.
 
 Share photos (proof of concept for photo ownership claims):
-1. Resolve a photo via GET %s/v1/library/photos (or ask for source_service + source_id).
-2. POST %s/v1/library/photos/share with {"source_service":"immich","source_id":"...","caption":"..." }.
+1. Resolve a photo via GET %s/me/photos (or ask for source_service + source_id).
+2. POST %s/me/photos/share with {"source_service":"immich","source_id":"...","caption":"..." }.
 3. Return the post_url to the user and keep claim.sha256 / claim.post_uri as the ownership evidence.
 
 Library (metadata only; bytes stay on Bluesky):
-- GET %s/v1/library/photos — Bluesky image posts from the user's feed.
-- GET %s/v1/library/messages — the user's own posts and replies (not reposts or likes/follows).
-- GET %s/v1/library/contacts — the user's Bluesky following list (handles).
+- GET %s/me/photos — Bluesky image posts from the user's feed.
+- GET %s/me/messages — the user's own posts and replies (not reposts or likes/follows).
+- GET %s/me/contacts — the user's Bluesky following list (handles).
 - Image bytes: use sources[].blob_url (Aegis getBlob transport); do not scrape cdn.bsky.app directly.
 
 Aegis does not store photo bytes. The share downloads the original from the canonical photo service, hashes it (claim.sha256), posts a copy to Bluesky, and discards the local buffer. claim is a PoC — content hash + public post — not a cryptographic proof.
@@ -161,7 +161,7 @@ func (c *BlueskyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 
 	logger.Info("bluesky proxy path not implemented; prefer library/share endpoints")
 	shared.WriteJSONError(w, http.StatusNotFound,
-		"bluesky proxy path not implemented in this PoC — use POST /v1/library/photos/share or GET /v1/library/{photos,messages}")
+		"bluesky proxy path not implemented in this PoC — use POST /me/photos/share or GET /me/{photos,messages}")
 }
 
 func (c *BlueskyConnector) handleGetBlob(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {

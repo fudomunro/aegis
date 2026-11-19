@@ -272,7 +272,7 @@ func TestSignalCapabilitiesAndInstructions(t *testing.T) {
 		t.Fatalf("kinds = %+v", names)
 	}
 	s := c.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(s, "Signal") || !strings.Contains(s, "/v1/library/messages") {
+	if !strings.Contains(s, "Signal") || !strings.Contains(s, "/me/messages") {
 		t.Fatalf("instructions = %q", s)
 	}
 }

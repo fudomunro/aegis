@@ -5,7 +5,7 @@ import "strings"
 // IsAgentContentPath reports whether a canonical service-proxy path is a
 // justified agent-facing transport under issue #119.
 //
-// Library (/v1/library/{kind}) is the only data-list surface. A /v1/services
+// Library (/me/{kind}) is the only data-list surface. A /v1/services
 // path stays open only when it delivers user-data content that library lists
 // omit (bytes, full bodies, item detail) or ingests a local export the user
 // already owns. Provider-shaped list mirrors, playback control, catalog
@@ -38,7 +38,7 @@ func IsAgentContentPath(canonical string) bool {
 	case detailSegment(canonical, "/playlists/"):
 		return true
 	// Document file bytes / previews — library lists carry metadata + excerpt
-	// only; full text is gated on /v1/library/documents/{service}/{id}/text.
+	// only; full text is gated on /me/documents/{service}/{id}/text.
 	// Bare /documents/{id} is not content transport (it includes OCR text).
 	case strings.HasSuffix(canonical, "/download"),
 		strings.HasSuffix(canonical, "/preview"),

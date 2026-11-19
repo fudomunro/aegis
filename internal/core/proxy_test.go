@@ -62,7 +62,7 @@ func TestHandleServiceProxy_RejectsNonContentPaths(t *testing.T) {
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("%s: status = %d, want 404, body=%s", path, w.Code, w.Body.String())
 		}
-		if !strings.Contains(w.Body.String(), "/v1/library/") {
+		if !strings.Contains(w.Body.String(), "/me/") {
 			t.Fatalf("%s: body should point at library, got %s", path, w.Body.String())
 		}
 	}

@@ -4,7 +4,7 @@ Admin surface — the agent key is refused; use the admin key or a tailnet
 admin login:
 
 ```
-POST /v1/library/photos/share
+POST /me/photos/share
 Authorization: Bearer <admin-key> # or tailnet admin login
 Content-Type: application/json
 
@@ -40,7 +40,7 @@ to Bluesky, and creates an `app.bsky.feed.post` with an images embed. Response:
 ```
 
 The share is also recorded in the copy ledger (`provenance: "share"`), so
-`GET /v1/library/copies` and `sources[].copy` can surface the breadcrumb.
+`GET /me/copies` and `sources[].copy` can surface the breadcrumb.
 
 **Limits (PoC):** Bluesky image embeds cap at 1 MB. The claim is a content
 hash plus a public post locator — not a cryptographic proof (no signature or
@@ -51,12 +51,12 @@ credential and exchanges it for a session. Permissions: source needs
 
 The connector also **syncs library metadata** (bytes stay on Bluesky):
 
-- `GET /v1/library/photos` includes the user's Bluesky image posts
+- `GET /me/photos` includes the user's Bluesky image posts
  (`sources[].blob_url` is the Aegis `getBlob` proxy — not a permanent CDN link).
-- `GET /v1/library/messages` includes **only the user's own posts and
+- `GET /me/messages` includes **only the user's own posts and
  replies** (`channel: "social"`, `direction: "outbound"`). Reposts, likes,
  follows, and other people's content are excluded.
-- `GET /v1/library/contacts` includes the user's Bluesky **following list**
+- `GET /me/contacts` includes the user's Bluesky **following list**
  as contacts (handle + display name + DID).
 - Proxy reads: `GET /v1/services/bluesky/xrpc/com.atproto.sync.getBlob`,
  `app.bsky.feed.getAuthorFeed`, `app.bsky.graph.getFollows`.

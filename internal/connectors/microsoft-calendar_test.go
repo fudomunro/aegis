@@ -149,7 +149,7 @@ func TestMicrosoftCalendar_StatusMapping(t *testing.T) {
 func TestMicrosoftCalendar_SystemInstructions_MentionLibraryOnly(t *testing.T) {
 	c := NewMicrosoftCalendarConnector(newTestHost(""))
 	s := c.SystemInstructions("https://aegis.example.com")
-	for _, want := range []string{"/v1/library/events", "/v1/library/freebusy", "Microsoft"} {
+	for _, want := range []string{"/me/events", "/me/freebusy", "Microsoft"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("instructions missing %q: %s", want, s)
 		}

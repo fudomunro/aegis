@@ -113,7 +113,7 @@ func TestHandleAdminUDK_StatusBrowseAndSelect(t *testing.T) {
 	shared.MarkKindDefaultNone("reading-list")
 	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: shared.AccessRead})
 	handler := srv.library().RouteHandler(schema.Path)
-	req = httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
+	req = httptest.NewRequest(http.MethodGet, "/me/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(handler)(w, req)

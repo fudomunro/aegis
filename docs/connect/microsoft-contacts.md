@@ -35,7 +35,7 @@ deletes), and expired tokens (410) restart the feed.
 Agent data is the unified library:
 
 ```
-GET /v1/library/contacts
+GET /me/contacts
 ```
 
 Contacts sync through convergence: the group's **canonical home** fans out

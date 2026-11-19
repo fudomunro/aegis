@@ -594,7 +594,8 @@ func auditRouteFamily(r *http.Request) string {
 		return "hook"
 	case strings.HasPrefix(p, "/v1/admin"):
 		return "admin"
-	case strings.HasPrefix(p, "/v1/library"):
+	// "/me/" not "/me": a bare prefix would also swallow /metrics.
+	case strings.HasPrefix(p, "/me/"):
 		return "library"
 	case strings.HasPrefix(p, "/v1/services"):
 		return "service"

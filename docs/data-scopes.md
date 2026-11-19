@@ -130,12 +130,12 @@ hashes on load. Admin lifecycle: `GET`/`POST /v1/admin/data-scopes`,
 
 For scopes A and B with datasets `a` and `b`:
 
-1. GET `/v1/library/*` with A’s key never returns rows sourced only from `b`.
-2. `/v1/library/messages` (list, filtered search, and fetch) with A’s key never return `b` rows.
+1. GET `/me/*` with A’s key never returns rows sourced only from `b`.
+2. `/me/messages` (list, filtered search, and fetch) with A’s key never return `b` rows.
 3. A cache fill under A is never served to B — including two principals that
    share a dataset but hold different grants.
 4. Services bound to `b` are invisible to A (no 403 oracle) — including
-   `/v1/services/{id}/...`, `/v1/library/documents/{service}/{id}/text`, and
+   `/v1/services/{id}/...`, `/me/documents/{service}/{id}/text`, and
    pre-request matching/blocking.
 5. Default scope (empty dataset) keeps today’s “see everything” behavior.
 6. `read_only` scopes cannot invoke mutating agent routes.

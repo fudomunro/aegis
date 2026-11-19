@@ -231,7 +231,7 @@ func TestTimelineConnector_CapabilitiesAndDisabled(t *testing.T) {
 		t.Fatal("instructions")
 	}
 	w := httptest.NewRecorder()
-	conn.HandleProxy(w, httptest.NewRequest("GET", "/v1/library/places", nil), "/places")
+	conn.HandleProxy(w, httptest.NewRequest("GET", "/me/places", nil), "/places")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("proxy = %d", w.Code)
 	}

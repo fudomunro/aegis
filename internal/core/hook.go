@@ -161,7 +161,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Surface matching unified library endpoints alongside service proxy hints.
-	// Issue #125: photo questions that named a service still need /v1/library/photos
+	// Issue #125: photo questions that named a service still need /me/photos
 	// (and the no-bypass policy); do not gate library hints on zero service matches.
 	libraryInstructions := s.library().LibraryHintsForMessage(r, payload.UserMessage)
 	// Local mail archive search is a separate surface from live provider listing.
@@ -213,7 +213,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		} else {
 			instruction := fmt.Sprintf(
 				"When working with %s, use Aegis's unified library endpoints "+
-					"(/v1/library/{kind}) for the user's data. Do not call %s directly. "+
+					"(/me/{kind}) for the user's data. Do not call %s directly. "+
 					"Service provenance lives in sources[] for sync — not a separate services API.",
 				svc.Name, svc.Name,
 			)

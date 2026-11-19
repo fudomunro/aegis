@@ -51,7 +51,7 @@ func (c *YouTubeMusicConnector) Capabilities() shared.ServiceCapabilities {
 				Name:        "tracks",
 				Description: "Music videos and tracks — liked, search results",
 				Operations: []shared.Operation{
-					{Name: "read_liked", Description: "List liked YouTube videos as neutral tracks (paginated; music-only filtering lives on /v1/library/tracks)", Method: "GET", Path: "/me/liked",
+					{Name: "read_liked", Description: "List liked YouTube videos as neutral tracks (paginated; music-only filtering lives on /me/tracks)", Method: "GET", Path: "/me/liked",
 						Parameters: []shared.Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
@@ -87,7 +87,7 @@ func (c *YouTubeMusicConnector) Capabilities() shared.ServiceCapabilities {
 			},
 			{
 				Name:        "artists",
-				Description: "Followed artists / subscribed channels (feeds /v1/library/artists)",
+				Description: "Followed artists / subscribed channels (feeds /me/artists)",
 				Operations: []shared.Operation{
 					{Name: "read_followed", Description: "List followed artists via channel subscriptions (paginated). Permission key: artists.", Method: "GET", Path: "/me/subscriptions",
 						Parameters: []shared.Parameter{
@@ -140,9 +140,9 @@ func (c *YouTubeMusicConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves YouTube Music or their music library, use Aegis's unified data API. Do not call YouTube directly.
 
-GET %s/v1/library/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
-GET %s/v1/library/tracks — liked/saved music tracks (YouTube likes are filtered to music-shaped videos)
-GET %s/v1/library/artists — followed artists / subscribed music channels
+GET %s/me/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
+GET %s/me/tracks — liked/saved music tracks (YouTube likes are filtered to music-shaped videos)
+GET %s/me/artists — followed artists / subscribed music channels
 
 sources[] records where each item lives for sync/backup — prefer the library over service-specific calls.
 

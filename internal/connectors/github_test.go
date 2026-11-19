@@ -405,7 +405,7 @@ func TestGitHubConnector_CapabilitiesAndInstructions(t *testing.T) {
 		t.Fatalf("capabilities = %+v", caps)
 	}
 	inst := conn.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(inst, "/v1/library/contacts") {
+	if !strings.Contains(inst, "/me/contacts") {
 		t.Errorf("instructions missing library path: %s", inst)
 	}
 	if !strings.Contains(inst, "GitHub") {

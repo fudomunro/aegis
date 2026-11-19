@@ -56,9 +56,9 @@ func registerRoutes(mux *http.ServeMux, srv *Server, fakeUpstream *connectors.Fa
 	// write level unlocks them); the admin credential stays reserved for
 	// policy edits, OAuth, and app registration.
 	// Photo share / ownership-claim PoC (issue #20).
-	mux.HandleFunc("POST /v1/library/photos/share", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandlePhotoShare)))
-	mux.HandleFunc("POST /v1/library/links", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandleEntityLinks)))
-	mux.HandleFunc("DELETE /v1/library/links/", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandleEntityLinks)))
+	mux.HandleFunc("POST /me/photos/share", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandlePhotoShare)))
+	mux.HandleFunc("POST /me/links", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandleEntityLinks)))
+	mux.HandleFunc("DELETE /me/links/", srv.AuthMiddleware(withBodyLimit(shared.MaxAdminBodyBytes, srv.library().HandleEntityLinks)))
 
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.library().HandleServiceProxy)))
 

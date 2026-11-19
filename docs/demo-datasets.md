@@ -73,13 +73,13 @@ question is answerable from the pack alone.
 
 | Prompt | Surfaces |
 |--------|----------|
-| What is the earliest message in my mail? | `/v1/library/messages?sort=asc` |
-| Who is coming with me on the journey? | `/v1/library/contacts` (Sam, Merry, Pippin) |
+| What is the earliest message in my mail? | `/me/messages?sort=asc` |
+| Who is coming with me on the journey? | `/me/contacts` (Sam, Merry, Pippin) |
 | Summarize Gandalf’s instructions before Bree. | mail search + body |
-| Where did I travel between leaving Bag End and Rivendell? | `/v1/library/places` |
-| What photos do I have from the road? | `/v1/library/photos` |
-| What is on my packing list? | `/v1/library/documents` |
-| What did I spend before leaving the Shire? | `/v1/library/transactions` |
+| Where did I travel between leaving Bag End and Rivendell? | `/me/places` |
+| What photos do I have from the road? | `/me/photos` |
+| What is on my packing list? | `/me/documents` |
+| What did I spend before leaving the Shire? | `/me/transactions` |
 
 **Gondor key**
 
@@ -87,9 +87,9 @@ question is answerable from the pack alone.
 |--------|----------|
 | What happened around the Hornburg? | events + places + mail |
 | Who wrote to me about the council? | mail from Elrond / Boromir |
-| List songs in my war playlist. | `/v1/library/playlists` + tracks |
-| When was the coronation? | `/v1/library/events` |
-| What did the proclamation say? | `/v1/library/documents` text |
+| List songs in my war playlist. | `/me/playlists` + tracks |
+| When was the coronation? | `/me/events` |
+| What did the proclamation say? | `/me/documents` text |
 
 **Isolation checks** (run with either key)
 

@@ -198,7 +198,7 @@ func TestGoogleDriveCapabilitiesAndInstructions(t *testing.T) {
 		t.Fatalf("caps = %+v", caps)
 	}
 	instr := c.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(instr, "/v1/library/documents") {
+	if !strings.Contains(instr, "/me/documents") {
 		t.Fatalf("instructions missing library path: %s", instr)
 	}
 	if !strings.Contains(instr, "plain text") && !strings.Contains(instr, "HTML") {

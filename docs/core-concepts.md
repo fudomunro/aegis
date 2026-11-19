@@ -37,7 +37,7 @@ the most weight in product language.
 |---------|----------------|
 | **Library kind** (short: kind) | product + code |
 | **Neutral model** (`Playlist`, `Track`, `Contact`, `Photo`, …) | product + code |
-| **Unified library** (`/v1/library/{kind}`) | product |
+| **Unified library** (`/me/{kind}`) | product |
 | `sources[]` / multi-source merge | product + code |
 | **Canonical / canonical_for** (non-Aegis home) | product + code |
 | **Entity resolution / merge** (ISRC/UPC/MBID/name) | product + code |
@@ -120,7 +120,7 @@ paths; the three nouns still read as one concept to newcomers.
 
 ### 2.2 “Agent” (runtime LLM) vs coding agent
 
-Product language uses “agent” for the LLM that calls `/v1/library/*`.
+Product language uses “agent” for the LLM that calls `/me/*`.
 Repository language uses `AGENTS.md` and “coding agent” for the automation that
 edits the repo. Same word, two audiences (see audience map §F).
 
@@ -169,7 +169,7 @@ names what is granted, not the axis it is keyed by; do not write “kind grant�
 
 `ServiceCapabilities` / `Operation` still describe provider-shaped paths
 (`/me/player`, `/search`). `SystemInstructions` teach library-first
-(`/v1/library/{kind}`). Product rules say capabilities are admin metadata, not
+(`/me/{kind}`). Product rules say capabilities are admin metadata, not
 agent discovery — but the English in both looks agent-consumable.
 
 ### 2.7 Content transport vocabulary
@@ -215,7 +215,7 @@ After the overlap call-outs above, the stable concepts.
 | **Fail-open** | Fetch/parse/match failures pass through; hook returns `allow` on errors. Never invent fail-closed. | `AGENTS.md`, `handler.go`, `internal/kinds/librarykind.go` |
 | **Aegis owns OAuth** | Agents never see tokens or authorize services. Tokens encrypted on disk; proxy auto-refreshes. | `tokens.go`, `oauth.go`, `SECURITY.md` |
 | **Aegis does not store media** | Canonical bytes stay on the source service. Library is metadata; content transport is ephemeral. | `SECURITY.md`, `immich.go`, `google-photos.go` |
-| **Kind-centric surface** | Product API is organized around library kinds (`/v1/library/{kind}`), not provider-shaped endpoints. | `AGENTS.md`, `internal/kinds` |
+| **Kind-centric surface** | Product API is organized around library kinds (`/me/{kind}`), not provider-shaped endpoints. | `AGENTS.md`, `internal/kinds` |
 | **Named-service connectors** | Spotify, Gmail, Immich, … are first-class adapters and match targets, not generic scrapers. | `internal/connectors/`, `run.go` |
 | **Connections (not per-surface OAuth)** | Surfaces reference top-level `connections` entries. | `connections.go`, `aegis.example.json` |
 | **Content/ingest only** | `/v1/services/{id}/…` is photo bytes, full message bodies, playlist items, local import — not a provider API mirror. | `internal/core/agentpaths.go`, `proxy.go` |
@@ -227,7 +227,7 @@ After the overlap call-outs above, the stable concepts.
 |---------|------------|-----------|
 | **LibraryKind** | Kind-registry metadata for one unified dataset (id, path, label, usage, instructions, empty/deny/fail messages). | `internal/kinds/librarykind.go`, `internal/kinds/librarykinds.go` |
 | **Neutral model** | Provider-agnostic structs (`Playlist`, `Track`, `Contact`, `Photo`, `CalendarEvent`, `Message`, `Transaction`, `PlaceVisit`) plus per-item `*Source`. | `internal/kinds/models.go` |
-| **Unified library** | Aggregate endpoints under `/v1/library/{kind}` that fan in every connected provider and merge. | `internal/kinds` (aggregate pipeline) |
+| **Unified library** | Aggregate endpoints under `/me/{kind}` that fan in every connected provider and merge. | `internal/kinds` (aggregate pipeline) |
 | **sources[]** | Per-item provenance list: service, service_name, id, url, `canonical`, `copy`. | `models.go` (each `*Source`) |
 | **canonical_for / sources[].canonical** | Configured non-Aegis home for a kind; stamped onto items for write routing. | `config.go:83`, `canonical.go`, `models.go` |
 | **Entity merge / entity_id** | Fold provider rows into one neutral item via ISRC/UPC/MBID/ical_UID preferred over name. | `internal/kinds/merge.go`, `entity_links.go` |
@@ -235,7 +235,7 @@ After the overlap call-outs above, the stable concepts.
 | **CopyInfo / copy ledger** | Best-effort record of mirrored/backup copies (issue #76). | `copy_ledger.go`, `models.go:812` |
 | **Mirror** | Deliberate copy of a playlist/liked tracks to another service — a queued `mirror`/`repair` job; consistency comes from convergence. | `internal/library/mirror.go`, `internal/syncjobs/mirror_runner.go` |
 | **Truncated** | Response flag when a list is incomplete upstream (page cap); agents must check before claiming completeness. Independent of `next_cursor` paging (issue #185). | `kind.go` instructions, `internal/kinds` |
-| **next_cursor** | Opaque continue token for `/v1/library/{kind}` pages (`limit` default 100 / max 500). Omitted at end of the filtered set. | `types/page.go` |
+| **next_cursor** | Opaque continue token for `/me/{kind}` pages (`limit` default 100 / max 500). Omitted at end of the filtered set. | `types/page.go` |
 | **User-defined kind (UDK)** | Schema pack under `user-kinds/` loaded into the same library pipeline; never self-enables or shadows built-ins. Product concept is “user-defined kind”; the file/directory is a schema pack. | `internal/kinds/userdefined_schema.go`, `docs/user-defined-kinds.md` |
 | **Disclosure routes** | `freebusy`, `transactions/totals`, `places/city`, `documents/metadata`, … — each serves exactly one reduced shape. | `internal/kinds/<kind>.go` route encoders |
 | **Provider interfaces** | `PlaylistProvider`, `PhotoProvider`, `TransactionProvider`, … implemented by connectors. | `internal/kinds/providers.go` |

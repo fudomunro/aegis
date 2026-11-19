@@ -24,7 +24,7 @@ other media are never stored — contact metadata only.
 Repo collaborators, issues/PRs participants, and activity are out of scope
 for this connection; the maturity catalog declares those gaps.
 
-Contacts feed the unified `GET /v1/library/contacts` alongside Google
+Contacts feed the unified `GET /me/contacts` alongside Google
 Contacts, CardDAV, and LinkedIn imports, and participate in cross-type
 identity matching (email → handle → name) so GitHub people can be matched to
 photos, messages, and events.

@@ -17,7 +17,7 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// PhotoShareRequest is the agent-facing body for POST /v1/library/photos/share.
+// PhotoShareRequest is the agent-facing body for POST /me/photos/share.
 type PhotoShareRequest struct {
 	// SourceService is the photo source connector ID (e.g. "immich").
 	SourceService string `json:"source_service"`
@@ -38,7 +38,7 @@ type PhotoShareRequest struct {
 // handler fetches the original from the canonical source for this request
 // only, hashes it, publishes, and drops the buffer.
 //
-// POST /v1/library/photos/share
+// POST /me/photos/share
 func (h *Handlers) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")

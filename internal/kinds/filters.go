@@ -11,7 +11,7 @@ import (
 // endpoints and the connector-family import stores parse and apply these,
 // so they live beside the models they filter (issue #266).
 
-// TransactionFilters are agent-facing list filters for GET /v1/library/transactions.
+// TransactionFilters are agent-facing list filters for GET /me/transactions.
 type TransactionFilters struct {
 	After    string // inclusive lower bound on posted_at (date or RFC3339)
 	Before   string // exclusive upper bound on posted_at (date or RFC3339)
@@ -104,7 +104,7 @@ func (f TransactionFilters) Matches(t Transaction) bool {
 	return true
 }
 
-// PlaceVisitFilters is the query filter set for GET /v1/library/places.
+// PlaceVisitFilters is the query filter set for GET /me/places.
 type PlaceVisitFilters struct {
 	After    string
 	Before   string
@@ -113,7 +113,7 @@ type PlaceVisitFilters struct {
 }
 
 // ParsePlaceVisitFilters reads after, before, locality, and kind query params.
-// The issue's API shape is GET /v1/library/places?after=&before=&locality=.
+// The issue's API shape is GET /me/places?after=&before=&locality=.
 func ParsePlaceVisitFilters(r *http.Request) PlaceVisitFilters {
 	q := r.URL.Query()
 	return PlaceVisitFilters{
@@ -186,7 +186,7 @@ func (f PlaceVisitFilters) CacheKeySuffix() string {
 	return b.String()
 }
 
-// MessageFilters are agent-facing list filters for GET /v1/library/messages
+// MessageFilters are agent-facing list filters for GET /me/messages
 // (issue #311). They carry the unified retrieval surface's query semantics —
 // the same parameter meanings the mail archive search always had: q is
 // free-text, from/to are sender/recipient addresses only (never time bounds),

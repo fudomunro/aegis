@@ -84,7 +84,7 @@ func TestLibraryAggregate_PagesShareOneFetch(t *testing.T) {
 	srv := countingTrackServer(provider.tracks, provider)
 
 	var seen []string
-	path := "/v1/library/tracks?limit=10"
+	path := "/me/tracks?limit=10"
 	for pages := 0; ; pages++ {
 		if pages > 10 {
 			t.Fatal("cursor loop did not terminate")
@@ -100,7 +100,7 @@ func TestLibraryAggregate_PagesShareOneFetch(t *testing.T) {
 			}
 			break
 		}
-		path = "/v1/library/tracks?limit=10&cursor=" + resp.NextCursor
+		path = "/me/tracks?limit=10&cursor=" + resp.NextCursor
 		_ = w
 	}
 	if got := provider.calls.Load(); got != 1 {
@@ -117,14 +117,14 @@ func TestLibraryAggregate_RepeatedRequestIsCacheHit(t *testing.T) {
 	provider := &countingTrackProvider{tracks: nTracks(3)}
 	srv := countingTrackServer(provider.tracks, provider)
 
-	resp, w := getTracksPage(t, srv, "/v1/library/tracks")
+	resp, w := getTracksPage(t, srv, "/me/tracks")
 	if w.Header().Get("X-Aegis-Cache") != "miss" {
 		t.Fatalf("first request cache header = %q", w.Header().Get("X-Aegis-Cache"))
 	}
 	if resp.Total != 3 {
 		t.Fatalf("total = %d", resp.Total)
 	}
-	_, w2 := getTracksPage(t, srv, "/v1/library/tracks")
+	_, w2 := getTracksPage(t, srv, "/me/tracks")
 	if w2.Header().Get("X-Aegis-Cache") != "hit" {
 		t.Fatalf("second request cache header = %q", w2.Header().Get("X-Aegis-Cache"))
 	}
@@ -147,7 +147,7 @@ func TestLibraryAggregate_SingleflightParallel(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+			req := httptest.NewRequest("GET", "/me/tracks", nil)
 			req.Header.Set("Authorization", "Bearer test-key")
 			w := httptest.NewRecorder()
 			srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)

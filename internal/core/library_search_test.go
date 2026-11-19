@@ -59,7 +59,7 @@ func TestLibrarySearch_QueryHitsIndexedItems(t *testing.T) {
 
 	// A bare list fetch materializes the index (write-behind, off the
 	// response path — wait for it before asserting index state).
-	w, _ := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/v1/library/contacts")
+	w, _ := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/me/contacts")
 	if w.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -69,7 +69,7 @@ func TestLibrarySearch_QueryHitsIndexedItems(t *testing.T) {
 		t.Fatalf("index count = %d err=%v, want 2", n, err)
 	}
 
-	w, resp := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/v1/library/contacts?q=grace")
+	w, resp := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/me/contacts?q=grace")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -78,7 +78,7 @@ func TestLibrarySearch_QueryHitsIndexedItems(t *testing.T) {
 	}
 
 	// Multi-token queries AND together.
-	w, resp = searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/v1/library/contacts?q=grace+lovelace")
+	w, resp = searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/me/contacts?q=grace+lovelace")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -95,7 +95,7 @@ func TestLibrarySearch_ColdIndexBootstrapsFromFetch(t *testing.T) {
 	})
 
 	// First-ever query with an empty index: one live fetch materializes it.
-	w, resp := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/v1/library/contacts?q=katherine")
+	w, resp := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/me/contacts?q=katherine")
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -113,7 +113,7 @@ func TestLibrarySearch_DisabledIndex(t *testing.T) {
 		Sources: []kinds.ContactSource{{Service: "google", ID: "g1"}},
 	})
 	srv.search = nil
-	w, _ := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/v1/library/contacts?q=ada")
+	w, _ := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/me/contacts?q=ada")
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -121,7 +121,7 @@ func TestLibrarySearch_DisabledIndex(t *testing.T) {
 
 func TestLibrarySearch_UnsupportedKindRejectsQ(t *testing.T) {
 	srv := searchTestServer(t)
-	req := httptest.NewRequest("GET", "/v1/library/contacts?q=x", nil)
+	req := httptest.NewRequest("GET", "/me/contacts?q=x", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	kinds.Aggregate(srv, srv.library().Engine(), w, req, kinds.Spec[kinds.Contact]{
@@ -146,7 +146,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	shire := &scopes.Scope{ID: "shire", Dataset: "shire", Grants: readAllGrants()}
 	gondor := &scopes.Scope{ID: "gondor", Dataset: "gondor", Grants: readAllGrants()}
 
-	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req := httptest.NewRequest("GET", "/me/contacts", nil)
 	req = scopes.WithDataScope(req, shire)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -156,7 +156,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	}
 	srv.library().WaitIndex()
 
-	req = scopes.WithDataScope(httptest.NewRequest("GET", "/v1/library/contacts?q=frodo", nil), shire)
+	req = scopes.WithDataScope(httptest.NewRequest("GET", "/me/contacts?q=frodo", nil), shire)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -182,7 +182,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	req = scopes.WithDataScope(httptest.NewRequest("GET", "/v1/library/contacts?q=frodo", nil), gondor)
+	req = scopes.WithDataScope(httptest.NewRequest("GET", "/me/contacts?q=frodo", nil), gondor)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -218,7 +218,7 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 
 	// Index both rows via a fetch that includes only readable services, then
 	// write the denied one behind the scenes to prove query-time filtering.
-	w, _ := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/v1/library/contacts")
+	w, _ := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/me/contacts")
 	if w.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -233,14 +233,14 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w, resp := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/v1/library/contacts?q=secret")
+	w, resp := searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/me/contacts?q=secret")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", w.Code, w.Body.String())
 	}
 	if resp.Total != 0 {
 		t.Fatalf("denied service leaked into search: %+v", resp.Contacts)
 	}
-	w, resp = searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/v1/library/contacts?q=ada")
+	w, resp = searchRequest(t, srv, srv.library().LibraryHandler("contacts"), "/me/contacts?q=ada")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -265,10 +265,10 @@ func TestLibrarySearch_MetadataRouteStripsExcerpt(t *testing.T) {
 		}},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/documents/metadata?q=medical", nil)
+	req := httptest.NewRequest("GET", "/me/documents/metadata?q=medical", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/metadata"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/documents/metadata"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -300,7 +300,7 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 		Name:    "Ada Lovelace",
 		Sources: []kinds.ContactSource{{Service: "google", ID: "g1"}},
 	})
-	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req := httptest.NewRequest("GET", "/me/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("contacts"))(w, req)
@@ -421,7 +421,7 @@ func TestLibrarySearch_FreeBusyRouteKeepsOwnerRows(t *testing.T) {
 	}
 
 	// A first query materializes the index at owner tier.
-	before := eventsQuery(t, srv, "test-key", "/v1/library/events?q=appointment")
+	before := eventsQuery(t, srv, "test-key", "/me/events?q=appointment")
 	if len(before) != 1 || before[0].Title != "Doctor appointment" {
 		t.Fatalf("owner baseline = %+v", before)
 	}
@@ -431,10 +431,10 @@ func TestLibrarySearch_FreeBusyRouteKeepsOwnerRows(t *testing.T) {
 	}
 
 	// A freebusy-route listing must not rewrite those rows.
-	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
+	req := httptest.NewRequest("GET", "/me/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/freebusy"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("freebusy list status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -443,7 +443,7 @@ func TestLibrarySearch_FreeBusyRouteKeepsOwnerRows(t *testing.T) {
 	}
 
 	srv.cache.Clear()
-	after := eventsQuery(t, srv, "test-key", "/v1/library/events?q=appointment")
+	after := eventsQuery(t, srv, "test-key", "/me/events?q=appointment")
 	if len(after) != 1 || after[0].Title != "Doctor appointment" {
 		t.Fatalf("owner ?q= changed after freebusy fetch: before=%+v after=%+v", before, after)
 	}
@@ -475,17 +475,17 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 	srv.apps = store
 	_, appToken := createTestApp(t, store, "reader", shared.GrantMap{"documents/metadata": shared.AccessRead})
 
-	before := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical")
+	before := documentsQuery(t, srv, "test-key", "/me/documents?q=medical")
 	if len(before) != 1 || before[0].Excerpt != "sensitive excerpt" {
 		t.Fatalf("owner baseline = %+v", before)
 	}
 
 	// A metadata-scoped app sees titles only; its fetch must not demote the
 	// stored row to that view.
-	req := httptest.NewRequest("GET", "/v1/library/documents/metadata", nil)
+	req := httptest.NewRequest("GET", "/me/documents/metadata", nil)
 	req.Header.Set("Authorization", "Bearer "+appToken)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/documents/metadata"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/documents/metadata"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("app list status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -494,7 +494,7 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 	}
 
 	srv.cache.Clear()
-	after := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical")
+	after := documentsQuery(t, srv, "test-key", "/me/documents?q=medical")
 	if len(after) != 1 || after[0].Excerpt != "sensitive excerpt" {
 		t.Fatalf("owner ?q= returned a reduced payload: before=%+v after=%+v", before, after)
 	}
@@ -512,7 +512,7 @@ func TestLibrarySearch_CompleteFetchDropsDeletedItems(t *testing.T) {
 	}}
 	srv.connectors = map[string]connectors.ServiceConnector{"paperless": provider}
 
-	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 2 {
+	if docs := documentsQuery(t, srv, "test-key", "/me/documents"); len(docs) != 2 {
 		t.Fatalf("list = %+v", docs)
 	}
 	srv.library().WaitIndex()
@@ -521,17 +521,17 @@ func TestLibrarySearch_CompleteFetchDropsDeletedItems(t *testing.T) {
 	// its row instead of upserting around it.
 	provider.documents = provider.documents[:1]
 	srv.cache.Clear()
-	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 1 {
+	if docs := documentsQuery(t, srv, "test-key", "/me/documents"); len(docs) != 1 {
 		t.Fatalf("list after delete = %+v", docs)
 	}
 	srv.library().WaitIndex()
 
 	srv.cache.Clear()
-	if hits := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=lease"); len(hits) != 0 {
+	if hits := documentsQuery(t, srv, "test-key", "/me/documents?q=lease"); len(hits) != 0 {
 		t.Fatalf("deleted item still matches q=: %+v", hits)
 	}
 	srv.cache.Clear()
-	if hits := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical"); len(hits) != 1 {
+	if hits := documentsQuery(t, srv, "test-key", "/me/documents?q=medical"); len(hits) != 1 {
 		t.Fatalf("survivor missing from q=: %+v", hits)
 	}
 }
@@ -548,7 +548,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 	}}
 	srv.connectors = map[string]connectors.ServiceConnector{"paperless": provider}
 
-	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 2 {
+	if docs := documentsQuery(t, srv, "test-key", "/me/documents"); len(docs) != 2 {
 		t.Fatalf("list = %+v", docs)
 	}
 	srv.library().WaitIndex()
@@ -556,7 +556,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 	// A failing provider tells us nothing about deletions: rows stay.
 	provider.err = errors.New("upstream boom")
 	srv.cache.Clear()
-	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
+	req := httptest.NewRequest("GET", "/me/documents", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("documents"))(w, req)
@@ -568,7 +568,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 		t.Fatalf("degraded fetch deleted rows: count=%d", n)
 	}
 	srv.cache.Clear()
-	if hits := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=lease"); len(hits) != 1 {
+	if hits := documentsQuery(t, srv, "test-key", "/me/documents?q=lease"); len(hits) != 1 {
 		t.Fatalf("degraded fetch dropped a hit: %+v", hits)
 	}
 
@@ -577,7 +577,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 	provider.truncated = true
 	provider.documents = provider.documents[:1]
 	srv.cache.Clear()
-	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 1 {
+	if docs := documentsQuery(t, srv, "test-key", "/me/documents"); len(docs) != 1 {
 		t.Fatalf("truncated list = %+v", docs)
 	}
 	srv.library().WaitIndex()
@@ -585,7 +585,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 		t.Fatalf("truncated fetch deleted rows: count=%d", n)
 	}
 	srv.cache.Clear()
-	if hits := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=lease"); len(hits) != 1 {
+	if hits := documentsQuery(t, srv, "test-key", "/me/documents?q=lease"); len(hits) != 1 {
 		t.Fatalf("truncated fetch dropped a hit: %+v", hits)
 	}
 }

@@ -28,7 +28,7 @@ func TestServiceVisible(t *testing.T) {
 }
 
 func TestDataScopeRequestView(t *testing.T) {
-	r := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	r := httptest.NewRequest("GET", "/me/tracks", nil)
 	if DataScopeFrom(r) != nil || Dataset(r) != "" {
 		t.Fatal("no view attached is the owner principal")
 	}

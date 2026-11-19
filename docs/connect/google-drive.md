@@ -21,6 +21,6 @@ replace it later). Watch OAuth app verification limits, same class as Photos.
 
 | What | Format |
 |------|--------|
-| `GET /v1/library/documents/{service}/{id}/text` | `text/plain` export |
+| `GET /me/documents/{service}/{id}/text` | `text/plain` export |
 | `GET /v1/services/google-drive/files/{id}/export?mimeType=text/html` | HTML (structure-preserving intermediate for a later markdown pass) |
 

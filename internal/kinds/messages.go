@@ -12,7 +12,7 @@ import (
 const MailArchiveSourceID = "mail-archive"
 
 // libraryArchiveMessageCap bounds archive rows feeding the collection
-// overview on GET /v1/library/messages. Filtered queries walk the full
+// overview on GET /me/messages. Filtered queries walk the full
 // archive instead (issue #311).
 const libraryArchiveMessageCap = 200
 
@@ -118,7 +118,7 @@ func newMessagesKind(h Host, e *Engine, d Deps) Kind {
 			// One message with body: the kind-owned fetch subroute (issue
 			// #311). Not app-readable — bodies are content, not list
 			// metadata.
-			{Pattern: "/v1/library/messages/{service}/{id}", Handler: k.serveOne},
+			{Pattern: "/me/messages/{service}/{id}", Handler: k.serveOne},
 		},
 	}
 	return k
@@ -134,7 +134,7 @@ func (k *messagesKind) HasProviders(h Host) bool {
 
 // serve returns the user's messages from every connected message-capable
 // service and the local mail archive (Gmail sync + Takeout), merged into
-// one collection: GET /v1/library/messages. Query filters (q, from, to,
+// one collection: GET /me/messages. Query filters (q, from, to,
 // after, before, label, sort, include_body) walk the full history instead
 // of the overview window (issue #311).
 func (k *messagesKind) serve(w http.ResponseWriter, r *http.Request) {
@@ -201,7 +201,7 @@ func (k *messagesKind) serve(w http.ResponseWriter, r *http.Request) {
 
 // serveOne returns one message with body from the local mail archive,
 // sibling sources merged into the same identity entry the collection
-// endpoint serves: GET /v1/library/messages/{service}/{id}
+// endpoint serves: GET /me/messages/{service}/{id}
 func (k *messagesKind) serveOne(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -213,7 +213,7 @@ func (k *messagesKind) serveOne(w http.ResponseWriter, r *http.Request) {
 	serviceID := r.PathValue("service")
 	id := r.PathValue("id")
 	if serviceID == "" || id == "" {
-		shared.WriteJSONError(w, http.StatusNotFound, "expected /v1/library/messages/{service}/{id}")
+		shared.WriteJSONError(w, http.StatusNotFound, "expected /me/messages/{service}/{id}")
 		return
 	}
 

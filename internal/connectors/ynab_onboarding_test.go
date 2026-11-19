@@ -38,7 +38,7 @@ func TestYNABOnboarding_Spec(t *testing.T) {
 		t.Fatalf("guides = %+v", spec.Guides)
 	}
 	want := []string{
-		"Live budget line items for `GET /v1/library/transactions`.",
+		"Live budget line items for `GET /me/transactions`.",
 		"Create a Personal Access Token in YNAB → Account Settings → Developer Settings.",
 		"Stored in `service_connections.json` — never shown again after save.",
 		"[YNAB API docs](https://api.ynab.com/)",

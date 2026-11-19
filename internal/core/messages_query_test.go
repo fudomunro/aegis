@@ -41,7 +41,7 @@ func TestMessagesQuery_FullHistoryPaging(t *testing.T) {
 	srv := mailTestServer(t, a)
 
 	// The overview stays the capped window and admits it.
-	w := doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages", "")
+	w := doMessagesReq(t, srv, http.MethodGet, "/me/messages", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("overview code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -55,7 +55,7 @@ func TestMessagesQuery_FullHistoryPaging(t *testing.T) {
 	pages := 0
 	cursor := ""
 	for {
-		path := "/v1/library/messages?sort=asc&limit=50"
+		path := "/me/messages?sort=asc&limit=50"
 		if cursor != "" {
 			path += "&cursor=" + cursor
 		}
@@ -89,7 +89,7 @@ func TestMessagesQuery_FullHistoryPaging(t *testing.T) {
 	}
 
 	// Newest-first queries reach the same full set.
-	w = doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?sort=desc&limit=500", "")
+	w = doMessagesReq(t, srv, http.MethodGet, "/me/messages?sort=desc&limit=500", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("desc code = %d", w.Code)
 	}
@@ -121,7 +121,7 @@ func TestMessagesQuery_MergedIdentitySpace(t *testing.T) {
 
 	// q matches only the archived body; the live copy must survive as a
 	// source of the same identity entry.
-	w := doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?q=vault", "")
+	w := doMessagesReq(t, srv, http.MethodGet, "/me/messages?q=vault", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -145,7 +145,7 @@ func TestMessagesQuery_MergedIdentitySpace(t *testing.T) {
 	if msg.Body != "" {
 		t.Fatalf("list leaked body: %+v", msg)
 	}
-	w = doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?q=vault&include_body=1", "")
+	w = doMessagesReq(t, srv, http.MethodGet, "/me/messages?q=vault&include_body=1", "")
 	list = decodeMessageList(t, w.Body.String())
 	if list.Messages[0].Body == "" {
 		t.Fatalf("include_body missing body: %+v", list.Messages[0])
@@ -180,7 +180,7 @@ func TestMessagesQuery_FiltersLiveRows(t *testing.T) {
 		{"before=2024-06-02T00:00:00Z", []string{"g1"}},
 		{"from=ada&after=2024-06-02", nil},
 	} {
-		path := "/v1/library/messages"
+		path := "/me/messages"
 		if tc.query != "" {
 			path += "?" + tc.query
 		}
@@ -230,10 +230,10 @@ func TestMessagesFetch_LiveFallback(t *testing.T) {
 	}
 
 	// Method gate on the fetch subroute.
-	req := httptest.NewRequest("POST", "/v1/library/messages/google-gmail/live-9", strings.NewReader(""))
+	req := httptest.NewRequest("POST", "/me/messages/google-gmail/live-9", strings.NewReader(""))
 	req.Header.Set("Authorization", "Bearer test-key")
 	rec := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/messages/{service}/{id}"))(rec, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/messages/{service}/{id}"))(rec, req)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("post fetch code = %d", rec.Code)
 	}
@@ -253,9 +253,9 @@ func TestMessagesQuery_CacheSeparatesFilters(t *testing.T) {
 	}
 	srv := mailTestServer(t, a)
 
-	w := doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?q=alpha", "")
+	w := doMessagesReq(t, srv, http.MethodGet, "/me/messages?q=alpha", "")
 	first := decodeMessageList(t, w.Body.String())
-	w = doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?q=beta", "")
+	w = doMessagesReq(t, srv, http.MethodGet, "/me/messages?q=beta", "")
 	second := decodeMessageList(t, w.Body.String())
 	if first.Total != 1 || second.Total != 1 {
 		t.Fatalf("first=%d second=%d", first.Total, second.Total)
@@ -268,7 +268,7 @@ func TestMessagesQuery_CacheSeparatesFilters(t *testing.T) {
 // TestMessagesFetch_RawSubpathRetired: provider-shaped raw payloads left the
 // library surface (issue #311).
 func TestMessagesFetch_RawSubpathRetired(t *testing.T) {
-	if apiRouteAllowed("GET", "/v1/library/messages/google-gmail/m1/raw") {
+	if apiRouteAllowed("GET", "/me/messages/google-gmail/m1/raw") {
 		t.Fatal("raw subpath must not be an agent route")
 	}
 	if apiRouteAllowed("GET", "/v1/mail/search") || apiRouteAllowed("GET", "/v1/mail/messages/a/b") {

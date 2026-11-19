@@ -133,7 +133,7 @@ func (c *OwnTracksConnector) Capabilities() shared.ServiceCapabilities {
 
 func (c *OwnTracksConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	return "OwnTracks visit history is aggregated at " + root + "/v1/library/places (visit windows with place names; coordinates require the precise permission). Prefer that endpoint over scraping Recorder paths."
+	return "OwnTracks visit history is aggregated at " + root + "/me/places (visit windows with place names; coordinates require the precise permission). Prefer that endpoint over scraping Recorder paths."
 }
 
 // HandleProxy forwards Recorder API paths through the shared connector

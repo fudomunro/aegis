@@ -55,7 +55,7 @@ func TestLibraryTracks_PagesWithoutDuplicatesOrGaps(t *testing.T) {
 	cursor := ""
 	pages := 0
 	for {
-		url := "/v1/library/tracks?limit=100"
+		url := "/me/tracks?limit=100"
 		if cursor != "" {
 			url += "&cursor=" + cursor
 		}
@@ -102,7 +102,7 @@ func TestLibraryTracks_InvalidCursorIs400(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &pagingTrackProvider{tracks: pagingTracks(1)},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/tracks?cursor=not-a-cursor", nil)
+	req := httptest.NewRequest("GET", "/me/tracks?cursor=not-a-cursor", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -118,7 +118,7 @@ func TestLibraryTracks_LimitClampsAndCachesPerWindow(t *testing.T) {
 		"spotify": &pagingTrackProvider{tracks: pagingTracks(10)},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/tracks?limit=9999", nil)
+	req := httptest.NewRequest("GET", "/me/tracks?limit=9999", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w, req)
@@ -139,7 +139,7 @@ func TestLibraryTracks_LimitClampsAndCachesPerWindow(t *testing.T) {
 	// Default page of a larger set must leave next_cursor set.
 	srv.connectors["spotify"] = &pagingTrackProvider{tracks: pagingTracks(150)}
 	srv.cache.Clear()
-	req2 := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req2 := httptest.NewRequest("GET", "/me/tracks", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("tracks"))(w2, req2)

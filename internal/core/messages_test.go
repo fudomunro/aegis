@@ -51,7 +51,7 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 		"outlook-mail": &fakeMessageProvider{messages: []kinds.Message{b}},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req := httptest.NewRequest("GET", "/me/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
@@ -94,7 +94,7 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 			newMessage("google-gmail", "Gmail", "g1", kinds.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
 		}},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req := httptest.NewRequest("GET", "/me/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
@@ -112,7 +112,7 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 
 func TestHandleLibraryMessages_NoProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}, "https://aegis.example.com")
-	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req := httptest.NewRequest("GET", "/me/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
@@ -135,7 +135,7 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 			newMessage("google-gmail", "Gmail", "g1", kinds.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
 		}},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req := httptest.NewRequest("GET", "/me/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
@@ -150,7 +150,7 @@ func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{err: kinds.ErrUnauthorized},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req := httptest.NewRequest("GET", "/me/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
@@ -172,7 +172,7 @@ func TestHandleLibraryMessages_ErrorService(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{err: errors.New("boom")},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req := httptest.NewRequest("GET", "/me/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
@@ -190,7 +190,7 @@ func TestHandleLibraryMessages_ErrorService(t *testing.T) {
 
 func TestHandleLibraryMessages_MethodNotAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	req := httptest.NewRequest("POST", "/v1/library/messages", strings.NewReader("{}"))
+	req := httptest.NewRequest("POST", "/me/messages", strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
@@ -204,14 +204,14 @@ func TestLibraryKindMessages_Registered(t *testing.T) {
 	if k == nil {
 		t.Fatal("messages library kind not registered")
 	}
-	if k.Path != "/v1/library/messages" || k.PermType != "messages" {
+	if k.Path != "/me/messages" || k.PermType != "messages" {
 		t.Fatalf("kind = %+v", k)
 	}
 	if !k.Mentions("check my email") {
 		t.Fatal("expected messages keyword match")
 	}
 	handlers := (&Server{}).library().RouteHandlers()
-	if _, ok := handlers["/v1/library/messages"]; !ok {
+	if _, ok := handlers["/me/messages"]; !ok {
 		t.Fatal("messages route not registered")
 	}
 }
@@ -220,12 +220,12 @@ func TestLibraryMessagesInstructions_MentionEndpoint(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	instr := srv.library().LibraryInstructionsFor("messages")
 	for _, want := range []string{
-		"/v1/library/messages",
+		"/me/messages",
 		"messages",
 		"canonical",
 		"sort=asc",
 		"include_body",
-		"/v1/library/messages/{sources[].service}/{sources[].id}",
+		"/me/messages/{sources[].service}/{sources[].id}",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)

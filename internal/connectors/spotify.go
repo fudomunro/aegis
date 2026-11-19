@@ -176,10 +176,10 @@ func (c *SpotifyConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Spotify or their music library, use Aegis's unified data API. Do not call Spotify directly.
 
-GET %s/v1/library/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
-GET %s/v1/library/tracks — liked/saved tracks (name, artists, album, sources[])
-GET %s/v1/library/albums — saved albums
-GET %s/v1/library/artists — followed artists
+GET %s/me/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
+GET %s/me/tracks — liked/saved tracks (name, artists, album, sources[])
+GET %s/me/albums — saved albums
+GET %s/me/artists — followed artists
 
 sources[] records where each item lives for sync/backup — prefer the library over service-specific calls.
 

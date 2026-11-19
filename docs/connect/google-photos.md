@@ -25,10 +25,10 @@ GET /v1/services/google-photos/picker/sessions/{id}
  → poll until media_items_set is true
 
 GET /v1/services/google-photos/picker/mediaItems?sessionId={id}
- → neutral Photo[] (also cached as the last pick for /v1/library/photos)
+ → neutral Photo[] (also cached as the last pick for /me/photos)
 ```
 
-`/v1/library/photos` returns the **last completed Google Photos pick** (empty
+`/me/photos` returns the **last completed Google Photos pick** (empty
 until the user has picked once). Metadata only — Aegis still never downloads
 or stores image bytes; `blob_url` values expire in about an hour.
 

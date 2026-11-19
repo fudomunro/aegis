@@ -34,7 +34,7 @@ People choose Immich when they want to:
 **Why wire Immich into Aegis?** Aegis is the agent-facing layer. Once Immich is the
 *local canonical* photo home:
 
-- Agents can use the unified library (`GET /v1/library/photos`) and ask about “my photos”
+- Agents can use the unified library (`GET /me/photos`) and ask about “my photos”
   without an Immich login or API key.
 - Aegis stores **metadata only** — the image and video bytes stay on Immich and are
   fetched through a short proxy path when needed.
@@ -237,7 +237,7 @@ Related product docs: [README — Immich](api.md),
 
 ```mermaid
 flowchart LR
-  Agent["Agent / curl"] -->|"GET /v1/library/photos"| Aegis
+  Agent["Agent / curl"] -->|"GET /me/photos"| Aegis
   Agent -->|"/v1/services/immich/..."| Aegis
   Aegis -->|"X-API-Key (from config)"| Immich["Immich :2283/api"]
   Immich -->|"search/metadata JSON"| Aegis
@@ -250,7 +250,7 @@ flowchart LR
 
 Two paths matter:
 
-1. **Unified library** — `GET /v1/library/photos` fans out to every `PhotoProvider`
+1. **Unified library** — `GET /me/photos` fans out to every `PhotoProvider`
    (Immich, Google Photos, …), merges on real identity, stamps canonical sources.
 2. **Service proxy** — `/v1/services/immich/...` attaches the Immich API key and
    forwards, with binary passthrough for downloads.
@@ -378,7 +378,7 @@ to file if it fails.
 ### 3.1 Library listing
 
 ```bash
-curl -sS -H "$AUTH" "$AEGIS/v1/library/photos" | jq '{
+curl -sS -H "$AUTH" "$AEGIS/me/photos" | jq '{
   total, truncated,
   by_service,
   sample: .photos[0]
@@ -400,7 +400,7 @@ endpoint + key, then re-run.
 ### 3.2 Canonical stamp
 
 ```bash
-curl -sS -H "$AUTH" "$AEGIS/v1/library/photos" \
+curl -sS -H "$AUTH" "$AEGIS/me/photos" \
   | jq '[.photos[].sources[] | select(.service=="immich")][0]'
 ```
 
@@ -427,7 +427,7 @@ identity input (good — keep it).
 Pick one asset id from the library response:
 
 ```bash
-ID=$(curl -sS -H "$AUTH" "$AEGIS/v1/library/photos" \
+ID=$(curl -sS -H "$AUTH" "$AEGIS/me/photos" \
   | jq -r '[.photos[].sources[] | select(.service=="immich")][0].id')
 
 # Original bytes — should be a real image/video
@@ -460,7 +460,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" -H "$AUTH" -H "Content-Type: applicati
   "$AEGIS/v1/services/immich/search/metadata"
 ```
 
-**Pass when:** status is **404**. Use `GET /v1/library/photos` for listing.
+**Pass when:** status is **404**. Use `GET /me/photos` for listing.
 
 ### 3.4 Admin map / flow
 
@@ -484,7 +484,7 @@ Temporarily break the key (wrong value, or remove `headers`), restart or clear
 cache if needed, then:
 
 ```bash
-curl -sS -H "$AUTH" "$AEGIS/v1/library/photos" | jq '.by_service.immich'
+curl -sS -H "$AUTH" "$AEGIS/me/photos" | jq '.by_service.immich'
 curl -sS -o /dev/null -w "%{http_code}\n" -H "$AUTH" \
   "$AEGIS/v1/services/immich/assets/$ID/original"
 ```
@@ -506,7 +506,7 @@ Immich listing uses `POST /search/metadata` with `size: 250` and follows
 (`libraryPageCap = 200` pages → at most **50 000** assets per service per call).
 
 ```bash
-curl -sS -H "$AUTH" "$AEGIS/v1/library/photos" | jq '{
+curl -sS -H "$AUTH" "$AEGIS/me/photos" | jq '{
   total,
   truncated,
   immich: .by_service.immich
@@ -530,7 +530,7 @@ compare its `count` to Immich’s full library.
 With Immich **and** Google Photos (or two Immich-sourced fixtures) visible:
 
 ```bash
-curl -sS -H "$AUTH" "$AEGIS/v1/library/photos" | jq '
+curl -sS -H "$AUTH" "$AEGIS/me/photos" | jq '
   [.photos[] | select((.sources|length) > 1) | {
     filename, taken_at, width, height,
     services: [.sources[].service],

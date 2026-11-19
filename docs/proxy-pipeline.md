@@ -56,7 +56,7 @@ only, so provider-shaped list mirrors never reach a connector at all.
 | Bluesky | hand-rolled | `getBlob` is binary, `getAuthorFeed` needs session auth and a feed-shaping step, and the remaining xrpc GETs are session-authenticated pass-through. Three shapes in one route table; no shared pipeline would be more than a dispatch. |
 | Signal, Quicken, Timeline | local | No upstream. SQLite stores under the data directory; `HandleProxy` serves import status and imported lists. |
 | Sample Calendar | local | In-memory fixture, library-only. |
-| CalDAV, CardDAV | library-only | `HandleProxy` is an intentional 404 pointing at `/v1/library/{events,contacts}`. DAV transport lives in `dav.go` behind the library surface. |
+| CalDAV, CardDAV | library-only | `HandleProxy` is an intentional 404 pointing at `/me/{events,contacts}`. DAV transport lives in `dav.go` behind the library surface. |
 
 ## Deliberate behavior the shared pipeline adds
 

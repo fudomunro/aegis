@@ -32,8 +32,8 @@ func newPlacesKind(h Host, e *Engine, d Deps) Kind {
 		provides: providerProvides[PlaceVisitProvider],
 		routes: []Route{
 			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve, GrantKey: placesRouteKey},
-			{Pattern: "/v1/library/places/names", AppReadable: true, Handler: k.serveNames, GrantKey: placesNamesRouteKey},
-			{Pattern: "/v1/library/places/city", AppReadable: true, Handler: k.serveCity, GrantKey: placesCityRouteKey},
+			{Pattern: "/me/places/names", AppReadable: true, Handler: k.serveNames, GrantKey: placesNamesRouteKey},
+			{Pattern: "/me/places/city", AppReadable: true, Handler: k.serveCity, GrantKey: placesCityRouteKey},
 		},
 	}
 	return k
@@ -61,20 +61,20 @@ func (k *placesKind) HasProviders(h Host) bool {
 }
 
 // serve returns visits and trips with full detail including coordinates:
-// GET /v1/library/places. Query filters: after, before, locality, kind
+// GET /me/places. Query filters: after, before, locality, kind
 // (issue #142).
 func (k *placesKind) serve(w http.ResponseWriter, r *http.Request) {
 	k.serveShape(w, r, placesRouteKey, placeFull)
 }
 
 // serveNames returns visits with place names and addresses but no
-// coordinates: GET /v1/library/places/names (issue #348).
+// coordinates: GET /me/places/names (issue #348).
 func (k *placesKind) serveNames(w http.ResponseWriter, r *http.Request) {
 	k.serveShape(w, r, placesNamesRouteKey, placeNames)
 }
 
 // serveCity returns locality, country, and the visit/trip window only:
-// GET /v1/library/places/city (issue #348).
+// GET /me/places/city (issue #348).
 func (k *placesKind) serveCity(w http.ResponseWriter, r *http.Request) {
 	k.serveShape(w, r, placesCityRouteKey, placeCity)
 }

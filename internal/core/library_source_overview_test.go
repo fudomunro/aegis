@@ -143,7 +143,7 @@ func TestHandleLibraryPlaylists_SourceOverviewFields(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req := httptest.NewRequest("GET", "/me/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("playlists"))(w, req)

@@ -96,19 +96,19 @@ func doMessagesReq(t *testing.T, srv *Server, method, path, body string) *httpte
 // doMessagesFetchReq issues the messages fetch subroute request.
 func doMessagesFetchReq(t *testing.T, srv *Server, service, id string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest("GET", "/v1/library/messages/"+service+"/"+id, nil)
+	req := httptest.NewRequest("GET", "/me/messages/"+service+"/"+id, nil)
 	req.SetPathValue("service", service)
 	req.SetPathValue("id", id)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.library().RouteHandler("/v1/library/messages/{service}/{id}"))(w, req)
+	srv.AuthMiddleware(srv.library().RouteHandler("/me/messages/{service}/{id}"))(w, req)
 	return w
 }
 
 func TestMailHTTPRequiresAuth(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req := httptest.NewRequest("GET", "/me/messages", nil)
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
 	if w.Code != http.StatusUnauthorized {
@@ -127,7 +127,7 @@ func TestMailHTTPQueryAndFetch(t *testing.T) {
 
 	srv := mailTestServer(t, a)
 
-	w := doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?q=quarterly&include_body=1", "")
+	w := doMessagesReq(t, srv, http.MethodGet, "/me/messages?q=quarterly&include_body=1", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -140,7 +140,7 @@ func TestMailHTTPQueryAndFetch(t *testing.T) {
 	}
 
 	// Without include_body the list carries metadata only (issue #311).
-	w = doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?q=quarterly", "")
+	w = doMessagesReq(t, srv, http.MethodGet, "/me/messages?q=quarterly", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -169,7 +169,7 @@ func TestMailHTTPQueryAndFetch(t *testing.T) {
 		t.Fatalf("missing code = %d", w.Code)
 	}
 
-	w = doMessagesReq(t, srv, http.MethodPost, "/v1/library/messages", "")
+	w = doMessagesReq(t, srv, http.MethodPost, "/me/messages", "")
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("search post code = %d", w.Code)
 	}
@@ -192,7 +192,7 @@ func TestMailHTTPDisabledAndDenied(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("denied code = %d body=%s", w.Code, w.Body.String())
 	}
-	w = doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages", "")
+	w = doMessagesReq(t, srv, http.MethodGet, "/me/messages", "")
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("list denied code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -251,7 +251,7 @@ func (s *stubNoSyncConnector) HandleProxy(http.ResponseWriter, *http.Request, st
 func TestMailArchiveHints(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/messages", nil)
+	req := httptest.NewRequest(http.MethodGet, "/me/messages", nil)
 	if hints := srv.library().MailArchiveHints(req, "search my email archive for invoices"); len(hints) == 0 {
 		t.Fatal("expected archive hints")
 	}
@@ -276,7 +276,7 @@ func TestMailArchiveHints(t *testing.T) {
 		if strings.Contains(hint, "/v1/mail/") {
 			t.Fatalf("hint still names retired routes: %s", hint)
 		}
-		if !strings.Contains(hint, "/v1/library/messages") {
+		if !strings.Contains(hint, "/me/messages") {
 			t.Fatalf("hint missing library path: %s", hint)
 		}
 	}

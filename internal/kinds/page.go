@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Shared agent-facing pagination for GET /v1/library/{kind} (issue #185).
+// Shared agent-facing pagination for GET /me/{kind} (issue #185).
 // Every built-in and user-defined kind uses the same request/response contract:
 //
 //	request:  limit (default 100, max 500), cursor (opaque)

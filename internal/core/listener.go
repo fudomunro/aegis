@@ -81,7 +81,7 @@ func apiAllowlistGate(next http.Handler) http.Handler {
 // "Model"). Everything else answers 404 there and is served only by the
 // admin listener. Library entries are read-only: writes (photo share,
 // entity-link mutations) stay admin-side even though they share the
-// /v1/library prefix. Mail retrieval is part of the library surface (issue
+// /me prefix. Mail retrieval is part of the library surface (issue
 // #311); mail ingest stays admin-side.
 func apiRouteAllowed(method, path string) bool {
 	switch {
@@ -99,7 +99,7 @@ func apiRouteAllowed(method, path string) bool {
 		// inside the proxy.
 		return method == http.MethodGet || method == http.MethodHead ||
 			method == http.MethodPost
-	case strings.HasPrefix(path, "/v1/library/"):
+	case strings.HasPrefix(path, "/me/"):
 		// Library writes are grant-decided: photo share and entity-link
 		// mutations join the API surface and the request key's write data
 		// grant authorizes them. Merge review and the copy ledger expose
@@ -108,16 +108,16 @@ func apiRouteAllowed(method, path string) bool {
 		// allow side derives from the kind Route declarations (issue #312);
 		// an unlisted multi-segment path is not an agent route.
 		switch {
-		case path == "/v1/library/photos/share" && method == http.MethodPost,
-			path == "/v1/library/links" && method == http.MethodPost,
-			strings.HasPrefix(path, "/v1/library/links/") && method == http.MethodDelete:
+		case path == "/me/photos/share" && method == http.MethodPost,
+			path == "/me/links" && method == http.MethodPost,
+			strings.HasPrefix(path, "/me/links/") && method == http.MethodDelete:
 			return true
 		}
 		if method != http.MethodGet && method != http.MethodHead {
 			return false
 		}
-		if path == "/v1/library/review" || strings.HasPrefix(path, "/v1/library/review/") ||
-			path == "/v1/library/copies" || strings.HasPrefix(path, "/v1/library/copies/") {
+		if path == "/me/review" || strings.HasPrefix(path, "/me/review/") ||
+			path == "/me/copies" || strings.HasPrefix(path, "/me/copies/") {
 			return false
 		}
 		return libraryAgentReadable(path)
@@ -136,10 +136,10 @@ func libraryAgentReadable(path string) bool {
 			return true
 		}
 	}
-	if path == "/v1/library/links" || strings.HasPrefix(path, "/v1/library/links/") {
+	if path == "/me/links" || strings.HasPrefix(path, "/me/links/") {
 		return true
 	}
-	seg := strings.TrimPrefix(path, "/v1/library/")
+	seg := strings.TrimPrefix(path, "/me/")
 	if seg != "" && !strings.Contains(seg, "/") {
 		return !kinds.IsReservedUserDefinedID(seg)
 	}

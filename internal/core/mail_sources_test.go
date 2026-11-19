@@ -169,7 +169,7 @@ func TestMailSources_LibraryIncludesArchiveCollection(t *testing.T) {
 	path := takeoutMboxWithShared(t)
 	importTakeout(t, a, path, false)
 
-	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
+	req := httptest.NewRequest("GET", "/me/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.library().LibraryHandler("messages"))(w, req)
