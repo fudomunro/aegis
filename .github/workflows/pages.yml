@@ -19,11 +19,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy site
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  # Build and upload in their own job so the deploy step does not race
+  # artifact metadata: deploy-pages immediately after upload in the same
+  # job intermittently sees "No artifacts named github-pages".
+  build:
+    name: Build site
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,5 +48,13 @@ jobs:
         with:
           path: site
 
+  deploy:
+    name: Deploy site
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
