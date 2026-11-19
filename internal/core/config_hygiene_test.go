@@ -226,3 +226,66 @@ func TestSetServiceConnection_WritesSecretAndEntry(t *testing.T) {
 		t.Fatalf("entry = %+v, want the immich endpoint saved", got)
 	}
 }
+
+// Protocol mail transports carry a username/password pair instead of HTTP
+// headers (issue #420). The same tokens-first write order holds, and the
+// plaintext must never reach service_connections.json.
+func TestSetServiceConnection_WritesCredentialSecret(t *testing.T) {
+	cfg, _ := hygieneConfig(t)
+	cfg.secrets = mustTokens(t)
+	cfg.svcConnPath = filepath.Join(t.TempDir(), "service_connections.json")
+	cfg.svcConnOverlay = map[string]serviceConnectionEntry{}
+
+	if err := cfg.SetServiceConnection("imap-mail", serviceConnectionEntry{
+		Endpoint:    "imaps://mail.example.com:993",
+		Credentials: map[string]string{"username": "alice", "password": "hunter2"},
+	}); err != nil {
+		t.Fatalf("SetServiceConnection: %v", err)
+	}
+
+	raw := cfg.secrets.GetSecret(tokens.ServiceCredentialsSecretKey("imap-mail"))
+	var stored map[string]string
+	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+		t.Fatalf("secret blob is not a credentials map: %v", err)
+	}
+	if stored["username"] != "alice" || stored["password"] != "hunter2" {
+		t.Fatalf("stored credentials = %v, want the username/password pair", stored)
+	}
+	fileRaw, err := os.ReadFile(cfg.svcConnPath)
+	if err != nil {
+		t.Fatalf("read service_connections.json: %v", err)
+	}
+	if strings.Contains(string(fileRaw), "hunter2") || strings.Contains(string(fileRaw), "alice") {
+		t.Fatal("plaintext credentials must not land in service_connections.json")
+	}
+
+	// The in-memory service row sees them; the overlay entry does not.
+	cfg.mu.RLock()
+	svc := cfg.GetService("imap-mail")
+	cfg.mu.RUnlock()
+	if svc == nil || svc.Credentials["password"] != "hunter2" {
+		t.Fatalf("service credentials = %+v, want the resolved pair", svc)
+	}
+	if svc.Endpoint != "imaps://mail.example.com:993" {
+		t.Fatalf("endpoint = %q", svc.Endpoint)
+	}
+}
+
+// The admin row reports static-credential presence with a label only
+// (issue #184: never the value). A protocol transport's login pair must
+// show up as one.
+func TestStaticCredentialLabel(t *testing.T) {
+	if got := staticCredentialLabel(Service{Credentials: map[string]string{
+		"username": "alice", "password": "hunter2",
+	}}); got != "Username / password" {
+		t.Fatalf("label = %q, want Username / password", got)
+	}
+	if got := staticCredentialLabel(Service{Headers: map[string]string{
+		"X-API-Key": "hunter2",
+	}}); got != "API key" {
+		t.Fatalf("label = %q, want API key", got)
+	}
+	if got := staticCredentialLabel(Service{}); got != "" {
+		t.Fatalf("label = %q, want empty for a credential-less service", got)
+	}
+}

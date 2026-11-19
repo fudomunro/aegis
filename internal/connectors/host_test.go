@@ -39,6 +39,14 @@ func (h *testHost) setService(id, endpoint string) {
 	h.endpoints[id] = endpoint
 }
 
+// setCredentials attaches static connection credentials to a configured
+// service (issue #420: protocol mail transports).
+func (h *testHost) setCredentials(id string, creds map[string]string) {
+	if svc := h.services[id]; svc != nil {
+		svc.Credentials = creds
+	}
+}
+
 func (h *testHost) setToken(id, token string) { h.tokens[id] = token }
 
 func (h *testHost) GetValidToken(serviceID string, logger *slog.Logger) string {

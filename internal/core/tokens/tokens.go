@@ -141,15 +141,23 @@ const (
 
 	// Static-credential secret keys (issue #184). Namespaced so they cannot
 	// collide with OAuth service connection IDs.
-	secretKeyServiceHeadersPrefix = "static:service:"
-	secretKeyServiceHeadersSuffix = ":headers"
-	secretKeyTailscaleAPIKey      = "static:tailscale:api_key"
+	secretKeyServiceHeadersPrefix     = "static:service:"
+	secretKeyServiceHeadersSuffix     = ":headers"
+	secretKeyServiceCredentialsSuffix = ":credentials"
+	secretKeyTailscaleAPIKey          = "static:tailscale:api_key"
 )
 
 // ServiceHeadersSecretKey is the TokenStore secret id for a service's static
 // HTTP headers (JSON object of header name → value).
 func ServiceHeadersSecretKey(serviceID string) string {
 	return secretKeyServiceHeadersPrefix + serviceID + secretKeyServiceHeadersSuffix
+}
+
+// ServiceCredentialsSecretKey is the TokenStore secret id for a service's
+// static connection credentials (JSON object of field name → value, e.g.
+// username/password for a protocol mail transport).
+func ServiceCredentialsSecretKey(serviceID string) string {
+	return secretKeyServiceHeadersPrefix + serviceID + secretKeyServiceCredentialsSuffix
 }
 
 // TailscaleAPIKeySecretKey is the TokenStore secret id for the Tailscale

@@ -29,6 +29,7 @@ func (s *Server) ServiceConfig(serviceID string) *connectors.ServiceInfo {
 		Action:       svc.Action,
 		Endpoint:     svc.Endpoint,
 		Headers:      svc.Headers,
+		Credentials:  svc.Credentials,
 		CacheTTL:     svc.CacheTTL.Duration,
 		CanonicalFor: append([]string(nil), svc.CanonicalFor...),
 	}

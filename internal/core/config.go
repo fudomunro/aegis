@@ -99,6 +99,11 @@ type Service struct {
 	Action      string            `json:"action"` // "inject" or "block"
 	Endpoint    string            `json:"endpoint,omitempty"`
 	Headers     map[string]string `json:"headers,omitempty"`
+	// Credentials carries static connection credentials for non-HTTP
+	// transports (issue #420) — field name → value, e.g. username/password
+	// for an IMAP or POP3 mail source. Values are secret: they live
+	// encrypted in the token store and are never echoed back.
+	Credentials map[string]string `json:"credentials,omitempty"`
 	CacheTTL    Duration          `json:"cache_ttl"`
 	Description string            `json:"description,omitempty"`
 	// CanonicalFor lists library kinds where this service is the authoritative

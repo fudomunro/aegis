@@ -20,7 +20,7 @@ Agent → Aegis (/v1/library, content transport) → provider APIs
 
 - **Go 1.27.1** (matches `go.mod`)
 - **Tailscale** with an [Aperture gateway](https://tailscale.com/docs/aperture/get-started)
-- **OAuth app credentials** for each service you want to connect (see [Connecting services](docs/connect/))
+- **OAuth app credentials** for each service you want to connect (see [Connecting services](docs/connect/)). Protocol mail sources ([IMAP](docs/connect/imap.md) / [POP3](docs/connect/pop3.md)) need only a username and password — no OAuth app.
 
 ## Quick start
 
@@ -87,7 +87,7 @@ Full steps and the known limits (library vs "loved" tracks) are in
 
 | Doc | What it covers |
 |-----|----------------|
-| [docs/connect/](docs/connect/) | Per-service OAuth and import guides |
+| [docs/connect/](docs/connect/) | Per-service connection guides: OAuth, protocol mail (IMAP/POP3), and import |
 | [docs/api.md](docs/api.md) | Agent-facing HTTP surface (library, hook, transport) |
 | [docs/configuration.md](docs/configuration.md) | Config schema, data grants, flags, token encryption |
 | [docs/data-ownership.md](docs/data-ownership.md) | Per-kind data-ownership completeness feedback |

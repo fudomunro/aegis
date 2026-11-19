@@ -490,6 +490,44 @@
         "read:user",
         "read:org"
       ]
+    },
+    {
+      "id": "imap-mail",
+      "name": "IMAP Mail",
+      "aliases": [
+        "imap",
+        "imap mail"
+      ],
+      "action": "inject",
+      "endpoint": "imaps://mail.example.com:993?folder=INBOX",
+      "credentials": {
+        "username": "alice@example.com",
+        "password": "$ENV:IMAP_PASSWORD"
+      },
+      "cache_ttl": "5m",
+      "description": "IMAP mail source (/v1/library/messages + the local mail archive) for any RFC 3501 server — Dovecot, Cyrus, iCloud, Fastmail, work mail. Endpoint is imaps://host:993 (TLS), imap://host:993 (STARTTLS), or ?tls=none; ?folder= selects the mailbox (default INBOX). Credentials are username + password, stored encrypted. Set canonical_for: [\"messages\"] when this mailbox is your mail home. Sync via POST /v1/admin/mail/sync {\"service\":\"imap-mail\"}.",
+      "canonical_for": [
+        "messages"
+      ]
+    },
+    {
+      "id": "pop3-mail",
+      "name": "POP3 Mail",
+      "aliases": [
+        "pop3",
+        "pop3 mail"
+      ],
+      "action": "inject",
+      "endpoint": "pop3s://pop.example.com:995",
+      "credentials": {
+        "username": "alice@example.com",
+        "password": "$ENV:POP3_PASSWORD"
+      },
+      "cache_ttl": "5m",
+      "description": "POP3 mail source (/v1/library/messages + the local mail archive) for any RFC 1939 server. Endpoint is pop3s://host:995 (TLS), pop3://host:995 (STLS), or ?tls=none. Credentials are username + password, stored encrypted. Read-only: messages are archived, never deleted from the server. Set canonical_for: [\"messages\"] when this mailbox is your mail home. Sync via POST /v1/admin/mail/sync {\"service\":\"pop3-mail\"}.",
+      "canonical_for": [
+        "messages"
+      ]
     }
   ]
 }

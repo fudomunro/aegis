@@ -24,8 +24,9 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](../aegis.example
 | `name` | Display name, also used for matching in user messages |
 | `aliases` | Additional names to match (case-insensitive substring). Photo services should include singular forms (`photo`, `picture`) as well as plurals so questions like “oldest photo in my collection” match. |
 | `action` | `inject` (redirect to proxy) or `block` (reject requests) |
-| `endpoint` | Upstream API base URL |
+| `endpoint` | Upstream API base URL. For a protocol mail transport, the dial target — `imaps://host:993?folder=INBOX` / `pop3s://host:995` (see [IMAP](connect/imap.md) / [POP3](connect/pop3.md)) |
 | `headers` | Static headers to add to upstream requests (optional) |
+| `credentials` | Static login fields for non-HTTP transports (optional) — e.g. `username` / `password` for an IMAP or POP3 mail source. Values are secret: they are stored encrypted in `tokens.json` and never written to `service_connections.json`; `$ENV:` indirection works as for other secrets |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
 | `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](configuration.md)) |
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |

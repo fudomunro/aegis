@@ -390,6 +390,7 @@ const (
 type ConnectionUpdate struct {
 	Endpoint          string
 	SecretHeaders     map[string]string // header name → secret value
+	SecretCredentials map[string]string // field name → secret value (issue #420)
 	CanonicalFor      []string
 	ClearCanonicalFor bool
 }

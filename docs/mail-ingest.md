@@ -11,7 +11,13 @@ in `internal/core` (`mail_takeout.go`, `mail_archive_sync.go`,
 A third implementation joined the same seam later: the Microsoft Graph mail
 walk (`microsoft-mail`, #399) — live paging with a durable continuation
 cursor and Graph throttle back-off, declared as its own canonical
-`MailSource` beside the Gmail one.
+`MailSource` beside the Gmail one. The service-neutral protocol transports
+(`imap-mail` / `pop3-mail`, #420) are the fourth and fifth: minimal RFC
+3501 / RFC 1939 clients that feed the same archive from any server, with a
+UIDVALIDITY-scoped UID cursor (IMAP) and a UIDL resume hint plus per-UIDL
+dedupe probe (POP3). After that, a new mail ingest source ships by
+implementing `MailIngest` + a `MailSource` declaration beside its
+connector — no core branches, no overview changes.
 
 Related issues: **#286** (this note), **#266** (local import stores; the
 carve-out this resolves), **#265** (onboarding seam pattern), **#264**

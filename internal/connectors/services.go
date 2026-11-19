@@ -37,6 +37,8 @@ var serviceNames = map[string]string{
 	MicrosoftCalendarServiceID: MicrosoftCalendarServiceName,
 	MicrosoftContactsServiceID: MicrosoftContactsServiceName,
 	MicrosoftMailServiceID:     MicrosoftMailServiceName,
+	ImapMailServiceID:          ImapMailServiceName,
+	Pop3MailServiceID:          Pop3MailServiceName,
 }
 
 // ServiceTitleAliases maps unambiguous title phrases onto canonical service
@@ -76,6 +78,10 @@ var serviceTitleAliases = map[string]string{
 	"microsoft mail":     MicrosoftMailServiceID,
 	"outlook mail":       MicrosoftMailServiceID,
 	"outlook email":      MicrosoftMailServiceID,
+	"imap":               ImapMailServiceID,
+	"imap mail":          ImapMailServiceID,
+	"pop3":               Pop3MailServiceID,
+	"pop3 mail":          Pop3MailServiceID,
 	"microsoft 365":      MicrosoftCalendarServiceID,
 	"microsoft graph":    MicrosoftCalendarServiceID,
 }

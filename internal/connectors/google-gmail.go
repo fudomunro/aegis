@@ -1149,32 +1149,7 @@ func GmailHeaderDateRFC3339(raw string) string {
 
 // MapGmailAddressHeader parses a single address or address list into Contacts.
 func MapGmailAddressHeader(raw string) []kinds.Contact {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	addrs, err := mail.ParseAddressList(raw)
-	if err != nil {
-		// Fail-open: keep a crude name/email split rather than dropping the party.
-		if strings.Contains(raw, "@") {
-			c := kinds.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", "", []string{raw}, nil)
-			return []kinds.Contact{c}
-		}
-		c := kinds.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", raw, nil, nil)
-		return []kinds.Contact{c}
-	}
-	out := make([]kinds.Contact, 0, len(addrs))
-	for _, a := range addrs {
-		if a == nil {
-			continue
-		}
-		var emails []string
-		if a.Address != "" {
-			emails = []string{a.Address}
-		}
-		out = append(out, kinds.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", a.Name, emails, nil))
-	}
-	return out
+	return mapAddressHeader(raw, GoogleGmailServiceID, GoogleGmailServiceName)
 }
 
 func GmailDirectionFromLabels(labels []string) string {
