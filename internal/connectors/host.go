@@ -19,7 +19,11 @@ type ServiceInfo struct {
 	Action   string
 	Endpoint string
 	Headers  map[string]string
-	CacheTTL time.Duration
+	// Credentials carries static connection credentials for non-HTTP
+	// transports (issue #420): field name → value, e.g. username/password
+	// for a protocol mail source. Values are secret — never log or echo them.
+	Credentials map[string]string
+	CacheTTL    time.Duration
 	// CanonicalFor names the library kinds this service is the home copy
 	// for. Aegis stores metadata only; canonical content stays on the
 	// source service.

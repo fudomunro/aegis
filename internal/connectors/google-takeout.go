@@ -10,14 +10,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime"
-	"mime/multipart"
 	"net/mail"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -570,120 +567,23 @@ func isMboxFromLine(line []byte) bool {
 
 // parseTakeoutMessage maps one RFC822 blob from a Takeout export into a
 // neutral Message. Missing fields stay empty rather than failing ingest.
+// Header/body mapping is the shared RFC822 path (issue #420); Takeout adds
+// its X-GM-LABELS semantics on top.
 func parseTakeoutMessage(raw []byte, source string) (kinds.Message, error) {
 	raw = bytes.TrimPrefix(raw, []byte("\n"))
 	msg, err := mail.ReadMessage(bytes.NewReader(raw))
 	if err != nil {
 		return kinds.Message{}, err
 	}
-	decode := func(v string) string {
-		if v == "" {
-			return ""
-		}
-		if out, err := new(mime.WordDecoder).DecodeHeader(v); err == nil {
-			return strings.TrimSpace(out)
-		}
-		return strings.TrimSpace(v)
-	}
-	subject := decode(msg.Header.Get("Subject"))
-	messageID := kinds.NormalizeMessageID(msg.Header.Get("Message-ID"))
-	sentAt := GmailHeaderDateRFC3339(msg.Header.Get("Date"))
-	if sentAt == "" {
-		sentAt = time.Now().UTC().Format(time.RFC3339)
-	}
-	fromList := MapGmailAddressHeader(decode(msg.Header.Get("From")))
-	toList := MapGmailAddressHeader(decode(msg.Header.Get("To")))
-	ccList := MapGmailAddressHeader(decode(msg.Header.Get("Cc")))
-	body := extractRFC822TextBody(msg)
-	snippet := body
-	if len(snippet) > 200 {
-		snippet = snippet[:200]
-	}
 	labels := TakeoutLabels(msg, source)
-
-	out := kinds.Message{
-		Channel:    kinds.MessageChannelEmail,
-		Subject:    subject,
-		Snippet:    snippet,
-		Body:       body,
-		To:         toList,
-		CC:         ccList,
-		SentAt:     sentAt,
-		ReceivedAt: sentAt,
-		Direction:  TakeoutDirection(labels),
-		Read:       TakeoutRead(labels),
-		EntityID:   messageID,
-		Labels:     labels,
-		Sources: []kinds.MessageSource{{
-			Service:     TakeoutServiceID,
-			ServiceName: TakeoutServiceName,
-			ID:          TakeoutMessageID(messageID, raw),
-			Mailbox:     TakeoutMailboxFromLabels(labels),
-		}},
-	}
-	if len(fromList) > 0 {
-		out.From = &fromList[0]
-	}
-	// Attachment metadata rides the source Extra in the same shape live
-	// Gmail carries (issue #215); the archive persists it for the
-	// documents surface.
-	if atts := RFC822Attachments(raw); len(atts) > 0 {
-		out.Sources[0].Extra = map[string]any{"attachments": atts}
-	}
-	return out, nil
-}
-
-// extractRFC822TextBody prefers text/plain, then text/*, from a parsed message.
-func extractRFC822TextBody(msg *mail.Message) string {
-	ct := msg.Header.Get("Content-Type")
-	if ct == "" {
-		ct = "text/plain"
-	}
-	mediaType, params, err := mime.ParseMediaType(ct)
-	if err != nil {
-		mediaType = "text/plain"
-	}
-	if strings.HasPrefix(strings.ToLower(mediaType), "multipart/") {
-		boundary := params["boundary"]
-		if boundary == "" {
-			return readMailAllText(msg.Body)
-		}
-		mr := multipart.NewReader(msg.Body, boundary)
-		var plain, anyText string
-		for {
-			part, err := mr.NextPart()
-			if err != nil {
-				break
-			}
-			pct := part.Header.Get("Content-Type")
-			if pct == "" {
-				pct = "text/plain"
-			}
-			pmt, _, _ := mime.ParseMediaType(pct)
-			body, err := io.ReadAll(part)
-			if err != nil {
-				continue
-			}
-			text := string(body)
-			if strings.HasPrefix(strings.ToLower(pmt), "text/plain") && plain == "" {
-				plain = text
-			}
-			if strings.HasPrefix(strings.ToLower(pmt), "text/") && anyText == "" {
-				anyText = text
-			}
-		}
-		if plain != "" {
-			return plain
-		}
-		return anyText
-	}
-	return readMailAllText(msg.Body)
-}
-
-func readMailAllText(r io.Reader) string {
-	data, err := io.ReadAll(r)
-	if err != nil {
-		return ""
-	}
-	return string(data)
+	messageID := kinds.NormalizeMessageID(msg.Header.Get("Message-ID"))
+	return mapRFC822Message(msg, raw, RFC822Identity{
+		Service:     TakeoutServiceID,
+		ServiceName: TakeoutServiceName,
+		ID:          TakeoutMessageID(messageID, raw),
+		Mailbox:     TakeoutMailboxFromLabels(labels),
+		Labels:      labels,
+		Direction:   TakeoutDirection(labels),
+		Read:        TakeoutRead(labels),
+	}), nil
 }

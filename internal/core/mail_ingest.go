@@ -10,8 +10,9 @@ import (
 
 // wireMailIngests registers the mail ingest sources beside the connector
 // map. The Gmail and Microsoft Mail entries are the connectors themselves
-// (they implement connectors.MailIngest); Takeout is ingest-only — a sync
-// location, not an agent-callable service.
+// (they implement connectors.MailIngest); Takeout and the protocol mail
+// transports (IMAP, POP3 — issue #420) are ingest-only — sync locations,
+// not agent-callable services.
 func (s *Server) wireMailIngests() {
 	s.mailIngests = make(map[string]connectors.MailIngest)
 	if c, ok := s.connectors[connectors.GoogleGmailServiceID]; ok {
@@ -25,6 +26,8 @@ func (s *Server) wireMailIngests() {
 		}
 	}
 	s.mailIngests[connectors.TakeoutServiceID] = connectors.NewTakeoutIngest()
+	s.mailIngests[connectors.ImapMailServiceID] = connectors.NewImapMailConnector(s)
+	s.mailIngests[connectors.Pop3MailServiceID] = connectors.NewPop3MailConnector(s)
 }
 
 // mailIngestFor returns the ingest registered for a service id, or nil.

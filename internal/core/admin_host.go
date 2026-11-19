@@ -111,8 +111,16 @@ func (s *Server) serviceFactsOf(svc Service) admin.ServiceFacts {
 }
 
 // staticCredentialLabel returns a short human label when the service holds a
-// static credential in its headers (values are never read aloud).
+// static credential (values are never read aloud). Protocol mail transports
+// carry a login pair under `credentials`; HTTP services carry a key/token
+// header.
 func staticCredentialLabel(svc Service) string {
+	if len(svc.Credentials) > 0 {
+		if strings.TrimSpace(svc.Credentials["password"]) != "" ||
+			strings.TrimSpace(svc.Credentials["username"]) != "" {
+			return "Username / password"
+		}
+	}
 	for k, v := range svc.Headers {
 		if strings.TrimSpace(v) == "" {
 			continue
@@ -227,6 +235,12 @@ func (s *Server) SetConnection(serviceID string, meta shared.ConnectionMetadata,
 	}
 	for k, v := range upd.SecretHeaders {
 		entry.Headers[k] = v
+	}
+	if len(upd.SecretCredentials) > 0 {
+		entry.Credentials = map[string]string{}
+		for k, v := range upd.SecretCredentials {
+			entry.Credentials[k] = v
+		}
 	}
 	if err := s.config.SetServiceConnection(serviceID, entry); err != nil {
 		return err

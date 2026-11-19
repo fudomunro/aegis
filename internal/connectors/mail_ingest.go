@@ -42,7 +42,13 @@ type MailSource struct {
 }
 
 // mailSources lists the declarations beside each ingest.
-var mailSources = []MailSource{GmailMailSource, TakeoutMailSource, MicrosoftMailSource}
+var mailSources = []MailSource{
+	GmailMailSource,
+	TakeoutMailSource,
+	MicrosoftMailSource,
+	ImapMailSource,
+	Pop3MailSource,
+}
 
 // MailSources returns every declared ingest source (issue #286).
 func MailSources() []MailSource {

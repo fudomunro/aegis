@@ -24,6 +24,10 @@ const serviceConnectionsFileVersion = 2
 type serviceConnectionEntry struct {
 	Endpoint     string            `json:"endpoint,omitempty"`
 	Headers      map[string]string `json:"headers,omitempty"`
+	// Credentials carries static connection credentials for non-HTTP
+	// transports (issue #420): field name → value (username, password).
+	// Secret — never written to the overlay file.
+	Credentials map[string]string `json:"credentials,omitempty"`
 	CanonicalFor []string          `json:"canonical_for,omitempty"`
 	// ClearCanonicalFor forces an empty claim list (override set).
 	ClearCanonicalFor bool     `json:"clear_canonical_for,omitempty"`
@@ -116,6 +120,7 @@ func stripServiceConnectionSecrets(ov *serviceConnectionsFile) *serviceConnectio
 	}
 	for id, entry := range ov.Services {
 		entry.Headers = nil
+		entry.Credentials = nil
 		out.Services[id] = entry
 	}
 	if ov.Tailscale != nil {
@@ -214,12 +219,17 @@ func (c *Config) hydrateServiceConnectionSecretsLocked(ov *serviceConnectionsFil
 		return
 	}
 	for id, entry := range ov.Services {
-		if len(entry.Headers) > 0 {
-			continue
+		if len(entry.Headers) == 0 {
+			if h := c.loadServiceHeadersLocked(id); len(h) > 0 {
+				entry.Headers = h
+				ov.Services[id] = entry
+			}
 		}
-		if h := c.loadServiceHeadersLocked(id); len(h) > 0 {
-			entry.Headers = h
-			ov.Services[id] = entry
+		if len(entry.Credentials) == 0 {
+			if cred := c.loadServiceCredentialsLocked(id); len(cred) > 0 {
+				entry.Credentials = cred
+				ov.Services[id] = entry
+			}
 		}
 	}
 	if ov.Tailscale != nil && ov.Tailscale.APIKey == "" {
@@ -266,6 +276,45 @@ func (c *Config) saveServiceHeadersLocked(id string, headers map[string]string) 
 	return c.secrets.SetSecret(key, string(raw))
 }
 
+// loadServiceCredentialsLocked reads a service's static connection
+// credentials from the encrypted token store. Caller must hold c.mu.
+func (c *Config) loadServiceCredentialsLocked(id string) map[string]string {
+	if c.secrets == nil {
+		return nil
+	}
+	raw := c.secrets.GetSecret(tokens.ServiceCredentialsSecretKey(id))
+	if raw == "" {
+		return nil
+	}
+	var creds map[string]string
+	if err := json.Unmarshal([]byte(raw), &creds); err != nil {
+		slog.Warn("failed to parse stored service credentials", "service", id, "error", err)
+		return nil
+	}
+	return creds
+}
+
+// saveServiceCredentialsLocked writes a service's static connection
+// credentials into the encrypted token store (never into
+// service_connections.json). Caller must hold c.mu.
+func (c *Config) saveServiceCredentialsLocked(id string, creds map[string]string) error {
+	key := tokens.ServiceCredentialsSecretKey(id)
+	if len(creds) == 0 {
+		if c.secrets == nil {
+			return nil
+		}
+		return c.secrets.DeleteSecret(key)
+	}
+	if c.secrets == nil {
+		return fmt.Errorf("encrypted token store is required to save static credentials")
+	}
+	raw, err := json.Marshal(creds)
+	if err != nil {
+		return err
+	}
+	return c.secrets.SetSecret(key, string(raw))
+}
+
 // migratePlaintextServiceSecretsLocked moves legacy plaintext credentials
 // from service_connections.json into the encrypted token store, then rewrites
 // the overlay without secrets. Logged once per migration.
@@ -280,18 +329,31 @@ func (c *Config) migratePlaintextServiceSecretsLocked() error {
 	}
 	migrated := 0
 	for id, entry := range ov.Services {
-		if len(entry.Headers) == 0 {
+		if len(entry.Headers) == 0 && len(entry.Credentials) == 0 {
 			continue
 		}
-		headers := cloneHeaderMap(entry.Headers)
-		for k, v := range headers {
-			headers[k] = resolveSecret("service_connections."+id+".headers."+k, v)
+		if len(entry.Headers) > 0 {
+			headers := cloneHeaderMap(entry.Headers)
+			for k, v := range headers {
+				headers[k] = resolveSecret("service_connections."+id+".headers."+k, v)
+			}
+			if err := c.saveServiceHeadersLocked(id, headers); err != nil {
+				return fmt.Errorf("migrating headers for %s: %w", id, err)
+			}
+			entry.Headers = nil
+			migrated++
 		}
-		if err := c.saveServiceHeadersLocked(id, headers); err != nil {
-			return fmt.Errorf("migrating headers for %s: %w", id, err)
+		if len(entry.Credentials) > 0 {
+			creds := cloneHeaderMap(entry.Credentials)
+			for k, v := range creds {
+				creds[k] = resolveSecret("service_connections."+id+".credentials."+k, v)
+			}
+			if err := c.saveServiceCredentialsLocked(id, creds); err != nil {
+				return fmt.Errorf("migrating credentials for %s: %w", id, err)
+			}
+			entry.Credentials = nil
+			migrated++
 		}
-		migrated++
-		entry.Headers = nil
 		ov.Services[id] = entry
 	}
 	if ov.Tailscale != nil && strings.TrimSpace(ov.Tailscale.APIKey) != "" {
@@ -352,6 +414,7 @@ func (c *Config) applyServiceConnectionEntryLocked(id string, entry serviceConne
 			svc.Aliases = append([]string(nil), entry.Aliases...)
 		}
 		svc.Headers = cloneHeaderMap(entry.Headers)
+		svc.Credentials = cloneHeaderMap(entry.Credentials)
 		svc.CanonicalFor = normalizeCanonicalFor(entry.CanonicalFor)
 		c.Services = append(c.Services, svc)
 		return
@@ -380,6 +443,9 @@ func (c *Config) applyServiceConnectionEntryLocked(id string, entry serviceConne
 	}
 	if entry.Headers != nil {
 		svc.Headers = cloneHeaderMap(entry.Headers)
+	}
+	if entry.Credentials != nil {
+		svc.Credentials = cloneHeaderMap(entry.Credentials)
 	}
 	if entry.ClearCanonicalFor {
 		svc.CanonicalFor = nil
@@ -452,6 +518,17 @@ func (c *Config) SetServiceConnection(id string, entry serviceConnectionEntry) e
 			merged.Headers[k] = v
 		}
 	}
+	if entry.Credentials != nil {
+		if c.secrets == nil {
+			return fmt.Errorf("encrypted token store is required to save static credentials")
+		}
+		if merged.Credentials == nil {
+			merged.Credentials = map[string]string{}
+		}
+		for k, v := range entry.Credentials {
+			merged.Credentials[k] = v
+		}
+	}
 	if entry.ClearCanonicalFor {
 		merged.ClearCanonicalFor = true
 		merged.CanonicalFor = nil
@@ -498,6 +575,9 @@ func (c *Config) SetServiceConnection(id string, entry serviceConnectionEntry) e
 	// never an entry pointing at a missing secret. Do not reorder without
 	// re-reading that failure mode.
 	if err := c.saveServiceHeadersLocked(id, merged.Headers); err != nil {
+		return err
+	}
+	if err := c.saveServiceCredentialsLocked(id, merged.Credentials); err != nil {
 		return err
 	}
 	if err := saveServiceConnections(c.svcConnPath, &serviceConnectionsFile{

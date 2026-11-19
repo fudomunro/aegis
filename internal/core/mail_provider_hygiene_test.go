@@ -35,6 +35,10 @@ var mailProviderLiterals = []string{
 	"microsoft-mail",
 	"Microsoft Mail",
 	"Outlook",
+	"imap-mail",
+	"IMAP Mail",
+	"pop3-mail",
+	"POP3 Mail",
 }
 
 var mailLiteralAllowances = []struct{ file, want, why string }{

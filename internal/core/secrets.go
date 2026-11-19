@@ -78,24 +78,25 @@ func resolveConfigSecrets(cfg *Config) {
 	}
 	for i := range cfg.Services {
 		svc := &cfg.Services[i]
-		if len(svc.Headers) == 0 {
-			continue
-		}
 		for k, v := range svc.Headers {
 			svc.Headers[k] = resolveSecret("services."+svc.ID+".headers."+k, v)
+		}
+		for k, v := range svc.Credentials {
+			svc.Credentials[k] = resolveSecret("services."+svc.ID+".credentials."+k, v)
 		}
 	}
 }
 
 // resolveServiceConnectionSecrets expands secret indirection on admin overlay
-// header values (service_connections.json may hand-edit $ENV: refs).
+// header and credential values (service_connections.json may hand-edit $ENV:
+// refs).
 func resolveServiceConnectionSecrets(services map[string]serviceConnectionEntry) {
 	for id, entry := range services {
-		if len(entry.Headers) == 0 {
-			continue
-		}
 		for k, v := range entry.Headers {
 			entry.Headers[k] = resolveSecret("service_connections."+id+".headers."+k, v)
+		}
+		for k, v := range entry.Credentials {
+			entry.Credentials[k] = resolveSecret("service_connections."+id+".credentials."+k, v)
 		}
 		services[id] = entry
 	}
