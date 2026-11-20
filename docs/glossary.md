@@ -103,6 +103,7 @@ axis it is keyed by.
 | **Grant map** | The kind → access-level rule map a recognized key carries at request time (materialized from its `DataGrants`) | `GrantMap` in code. Uniformly deny-by-default: explicit entry → `default` → `none` |
 | **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `freebusy:read` | Do not call the one-time `aeg_grant_…` code just “a grant” |
 | **Accessor** | Principal-level data grant per library kind (issue #160) | Distinct axis from data grant |
+| **Client** | A caller holding one issued data grant — the owner agent key, an **external principal**, or a **third-party app** | The overview map groups clients by data grant ("what could be accessed, what is being accessed, and by who"). **Accessor** stays the permissions-editor axis (it also lists sync pipelines and services) |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
 | **Admin principal** | Admin API key or allowed tailnet user login, on the **admin listener** | Who may change policy (data grants, apps, UDK file selection); agent credentials are never admin (issue #181) |
 | **External principal** | Caller holding an **invite token** (a data-scope key) | Deny-by-default grants; never admin; may be a person, backend, or another Aegis operator |

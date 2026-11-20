@@ -1096,13 +1096,15 @@
     if (e.style === "library" && e.kind && libraries[e.kind]) {
       return libraries[e.kind].hits || 0;
     }
-    // Per-agent access edges (issue #114) carry their own hit counts.
-    if (e.from && String(e.from).indexOf("agent:") === 0) {
-      const agentId = String(e.from).slice(6);
-      const detail = ((stats.agents && stats.agents.detail) || []).find((d) => d.id === agentId);
-      if (detail) {
-        const to = String(e.to || "");
-        if (to.indexOf("lib:") === 0) return (detail.libraries || {})[to.slice(4)] || 0;
+    // Per-grant access edges (issue #425) carry the kind's window usage.
+    if (e.from && String(e.from).indexOf("grant:") === 0) {
+      const grantId = String(e.from).slice(6);
+      const grant = (topo.grants || []).find((g) => g.id === grantId);
+      const to = String(e.to || "");
+      if (grant && to.indexOf("lib:") === 0) {
+        const key = to.slice(4);
+        const kind = (grant.data_types || []).find((k) => k.id === key);
+        if (kind) return kind.hits || 0;
       }
     }
     if (e.style === "access" || e.style === "data") {
@@ -1154,7 +1156,6 @@
     const dataTypes = topo.data_types || [];
     const services = nodes.filter((n) => n.kind === "service");
     const tokens = nodes.filter((n) => n.kind === "token" || (n.parent === "tokens" && n.id.indexOf("tok:") === 0));
-    const agentInstances = nodes.filter((n) => n.kind === "agent-instance" || (n.parent === "agents" && String(n.id).indexOf("agent:") === 0));
     const byId = {};
     nodes.forEach((n) => { byId[n.id] = n; });
 
@@ -1179,18 +1180,47 @@
     const apertureH = apertureTitleH + aegisH + aperturePad * 2;
     const apertureW = 420;
 
-    // Agent stack: one node per active agent, or a single empty placeholder.
-    const agentRowH = 30;
-    const agentGap = 6;
-    const agentW = 156;
-    const agentsHaveDetail = agentInstances.length > 0;
-    const agentCount = agentsHaveDetail ? agentInstances.length : 1;
-    const agentStackH = agentsHaveDetail
-      ? flowTitleH + agentCount * (agentRowH + agentGap) + pad
-      : 56;
+    // Data-grant stack (issue #425): one card per issued data grant, with
+    // granted-kind chips and the caller identities holding it.
+    const grants = topo.grants || [];
+    const grantW = 232;
+    const grantHeaderH = 26;
+    const chipSize = 20;
+    const chipGap = 4;
+    const chipRowH = 24;
+    const clientRowH = 19;
+    const chipCols = Math.max(1, Math.floor((grantW - pad * 2) / (chipSize + chipGap)));
+    let grantStackH = flowTitleH + pad;
+    const grantItems = grants.map((g) => {
+      const chips = g.data_types || [];
+      const chipRows = chips.length ? Math.ceil(chips.length / chipCols) : 1;
+      const clients = g.clients || [];
+      const chipBlockH = chips.length ? chipRows * chipRowH : 18;
+      const clientBlockH = clients.length ? clients.length * clientRowH + 4 : 0;
+      const h = grantHeaderH + chipBlockH + clientBlockH + 8;
+      grantStackH += h + 8;
+      return {
+        id: "grant:" + g.id,
+        grant: g,
+        chips: chips,
+        clients: clients,
+        chipCols: chipCols,
+        chipSize: chipSize,
+        chipGap: chipGap,
+        chipRowH: chipRowH,
+        clientRowH: clientRowH,
+        x: 20 + pad,
+        y: 0,
+        w: grantW - pad * 2,
+        h: h,
+      };
+    });
+    if (!grants.length) {
+      grantStackH += 44;
+    }
 
-    const agents = { x: 20, y: 0, w: agentW, h: agentStackH, id: "agents" };
-    const aperture = { x: 196, y: 20, w: apertureW, h: apertureH, id: "aperture" };
+    const agents = { x: 20, y: 0, w: grantW, h: grantStackH, id: "agents" };
+    const aperture = { x: 20 + grantW + 24, y: 20, w: apertureW, h: apertureH, id: "aperture" };
     const aegis = {
       x: aperture.x + aperturePad,
       y: aperture.y + apertureTitleH + aperturePad,
@@ -1202,9 +1232,9 @@
 
     const pos = {};
     pos.agents = Object.assign({
-      label: byId.agents ? byId.agents.label : "LLM Agents",
+      label: byId.agents ? byId.agents.label : "Data grants",
       kind: "agent",
-      container: agentsHaveDetail,
+      container: true,
     }, agents);
     pos.aperture = Object.assign({
       label: byId.aperture ? byId.aperture.label : "Aperture",
@@ -1218,19 +1248,12 @@
       parent: "aperture",
     }, aegis);
 
-    const agentItems = agentInstances.map((n, i) => ({
-      id: n.id,
-      x: agents.x + pad,
-      y: agents.y + flowTitleH + i * (agentRowH + agentGap),
-      w: agents.w - pad * 2,
-      h: agentRowH,
-      label: n.label || String(n.id).replace(/^agent:/, ""),
-      hits: n.hits || 0,
-      kind: "agent-instance",
-      parent: "agents",
-      detail: n.detail || "",
-    }));
-    agentItems.forEach((item) => { pos[item.id] = item; });
+    let grantY = agents.y + flowTitleH + 4;
+    grantItems.forEach((item) => {
+      item.y = grantY;
+      grantY += item.h + 8;
+      pos[item.id] = item;
+    });
 
     const innerX = aegis.x + pad;
     const innerW = aegis.w - pad * 2;
@@ -1312,9 +1335,10 @@
     const svcGap = 12;
     const svcTotal = services.length * (svcH + svcGap) - svcGap;
     const svcStartY = Math.max(20, Math.floor(aperture.y + aperture.h / 2 - svcTotal / 2));
+    const svcX = aperture.x + aperture.w + 20;
     services.forEach((n, i) => {
       pos[n.id] = {
-        x: 640,
+        x: svcX,
         y: svcStartY + i * (svcH + svcGap),
         w: svcW,
         h: svcH,
@@ -1339,9 +1363,8 @@
       typeItems: typeItems,
       dataTypes: dataTypes,
       tokenItems: tokenItems,
-      agentItems: agentItems,
-      agentsHaveDetail: agentsHaveDetail,
-      width: 870,
+      grantItems: grantItems,
+      width: svcX + svcW + 24,
       height: bottom,
     };
   }
@@ -1389,7 +1412,7 @@
   }
 
   function isAgentAccessEdge(e) {
-    return !!(e && e.from && String(e.from).indexOf("agent:") === 0);
+    return !!(e && e.from && String(e.from).indexOf("grant:") === 0);
   }
 
   function renderFlowMap(topo) {
@@ -1573,9 +1596,9 @@
       });
     });
 
-    // Agent → library data access arrows (issue #114). Drawn above container
-    // fills so each individual agent node connects to the kinds it used.
-    // Agent → service arrows are omitted so the map stays type-focused.
+    // Data-grant → library access arrows (issue #425). Drawn above container
+    // fills so each grant card connects to the kinds its clients used.
+    // Grant → service arrows are omitted so the map stays type-focused.
     (topo.edges || []).forEach((e) => {
       if (!isAgentAccessEdge(e)) return;
       const from = pos[e.from];
@@ -1590,8 +1613,8 @@
       const color = e.style === "data" ? FLOW_EDGE_COLORS.data : FLOW_EDGE_COLORS.access;
       const hits = edgeHitsFor(topo, e);
       const sw = Math.min(3.2, edgeStrokeWidth(hits) * 0.75);
-      const title = (e.label ? e.label + " · " : "") + (e.from.indexOf("agent:") === 0 ? e.from.slice(6) : e.from) +
-        " → " + (to.label || e.to);
+      const fromLabel = String(e.from).indexOf("grant:") === 0 ? String(e.from).slice(6) : e.from;
+      const title = (e.label ? e.label + " · " : "") + fromLabel + " → " + (to.label || e.to);
       parts.push(
         '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-opacity="0.55" stroke-width="' + sw + '"' +
         ' marker-end="url(#flow-arrow-' + (e.style === "data" ? "data" : "access") + ')"><title>' +
@@ -1599,39 +1622,77 @@
       );
     });
 
-    // Agents column: stacked individual agent nodes when the window has
-    // access data (issue #114); otherwise a single empty placeholder box.
-    const agentItems = layout.agentItems || [];
-    if (layout.agentsHaveDetail && pos.agents) {
+    // Data-grant column (issue #425): one card per issued data grant — the
+    // kinds it grants (level-colored chips, ringed when used in the window)
+    // and the caller identities holding it.
+    const grantItems = layout.grantItems || [];
+    if (pos.agents) {
       const ap = pos.agents;
-      const agentCount = agentItems.length;
       parts.push('<rect x="' + ap.x + '" y="' + ap.y + '" width="' + ap.w + '" height="' + ap.h + '" rx="10" fill="#12161c" stroke="#8b949e" stroke-width="1.3"/>');
-      parts.push(flowIconSVG("agent", ap.x + 16, ap.y + 12, 12, "#8b949e"));
-      parts.push('<text x="' + (ap.x + 28) + '" y="' + (ap.y + 12) + '" dominant-baseline="central" fill="#e6edf3" font-size="11" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(ap.label || "LLM Agents") + "</text>");
-      parts.push('<text x="' + (ap.x + ap.w - 10) + '" y="' + (ap.y + 12) + '" text-anchor="end" dominant-baseline="central" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + agentCount + (agentCount === 1 ? " agent" : " agents") + "</text>");
-      agentItems.forEach((item) => {
-        const title = item.label + (item.hits ? " · " + item.hits + " hits" : "") + (item.detail ? " · " + item.detail : "");
+      parts.push(flowIconSVG("tokens", ap.x + 16, ap.y + 12, 12, "#8b949e"));
+      parts.push('<text x="' + (ap.x + 28) + '" y="' + (ap.y + 12) + '" dominant-baseline="central" fill="#e6edf3" font-size="11" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(ap.label || "Data grants") + "</text>");
+      parts.push('<text x="' + (ap.x + ap.w - 10) + '" y="' + (ap.y + 12) + '" text-anchor="end" dominant-baseline="central" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + grantItems.length + (grantItems.length === 1 ? " grant" : " grants") + "</text>");
+      if (!grantItems.length) {
+        parts.push('<text x="' + (ap.x + ap.w / 2) + '" y="' + (ap.y + ap.h / 2) + '" text-anchor="middle" dominant-baseline="central" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">No data grants issued</text>');
+      }
+      const grantLevelFill = { read: "#58a6ff", write: "#d29922", "read-write": "#3fb950" };
+      grantItems.forEach((item) => {
+        const g = item.grant || {};
+        const iconId = g.kind === "app" ? "proxy" : g.kind === "invite" ? "tokens" : "agent";
+        const iconColor = g.disabled ? "#f85149" : "#58a6ff";
+        const stroke = g.disabled ? "#f85149" : "#30363d";
+        const title = (g.label || g.id) + (g.detail ? " · " + g.detail : "") +
+          (g.disabled ? " · disabled" : "") + (g.read_only ? " · read-only" : "") +
+          (g.hits ? " · " + formatHits(g.hits) + " hits" : "");
         parts.push('<g><title>' + escapeHtml(title) + "</title>");
-        parts.push('<rect x="' + item.x + '" y="' + item.y + '" width="' + item.w + '" height="' + item.h + '" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1.2"/>');
-        parts.push(flowIconSVG("agent", item.x + 14, item.y + item.h / 2, 12, "#58a6ff"));
-        parts.push('<text x="' + (item.x + 26) + '" y="' + (item.y + item.h / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="11" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(truncateMapLabel(item.label, 16)) + "</text>");
-        if (item.hits) {
-          parts.push(hitBadgeSVG(item.x + item.w - 36, item.y + (item.h - 16) / 2, item.hits, "#58a6ff"));
+        parts.push('<rect x="' + item.x + '" y="' + item.y + '" width="' + item.w + '" height="' + item.h + '" rx="6" fill="#161b22" stroke="' + stroke + '" stroke-width="1.2"/>');
+        parts.push(flowIconSVG(iconId, item.x + 14, item.y + 13, 12, iconColor));
+        parts.push('<text x="' + (item.x + 26) + '" y="' + (item.y + 13) + '" dominant-baseline="central" fill="#e6edf3" font-size="11" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(truncateMapLabel(g.label || g.id, 18)) + "</text>");
+        if (g.hits) {
+          parts.push(hitBadgeSVG(item.x + item.w - 38, item.y + 5, g.hits, "#58a6ff"));
         }
         parts.push("</g>");
+
+        // Granted-kind chips: one per kind the grant opens (level != none).
+        const chipTop = item.y + 26;
+        if (!item.chips.length) {
+          parts.push('<text x="' + (item.x + 4) + '" y="' + (chipTop + 9) + '" dominant-baseline="central" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">No access granted</text>');
+        } else {
+          item.chips.forEach((k, i) => {
+            const cx = item.x + (i % item.chipCols) * (item.chipSize + item.chipGap);
+            const cy = chipTop + Math.floor(i / item.chipCols) * item.chipRowH;
+            const level = normalizeAccess(k.level);
+            const fill = grantLevelFill[level] || "#8b949e";
+            const used = (k.hits || 0) > 0;
+            const kTitle = dataTypeLabel(k.id) + " · " + level +
+              (k.hits ? " · " + formatHits(k.hits) + (k.hits === 1 ? " hit used" : " hits used") : " · not used in window");
+            parts.push('<g><title>' + escapeHtml(kTitle) + "</title>");
+            parts.push('<rect x="' + cx + '" y="' + cy + '" width="' + item.chipSize + '" height="' + item.chipSize + '" rx="5" fill="' + fill + '" fill-opacity="' + (used ? "0.85" : "0.22") + '" stroke="' + fill + '" stroke-width="' + (used ? "1.6" : "0.8") + '"/>');
+            const iconD = FLOW_ICONS[k.id] || "";
+            if (iconD) {
+              parts.push('<path transform="translate(' + (cx + 2) + "," + (cy + 2) + ')" d="' + iconD + '" fill="none" stroke="' + (used ? "#0d1117" : fill) + '" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>');
+            } else {
+              parts.push('<text x="' + (cx + item.chipSize / 2) + '" y="' + (cy + item.chipSize / 2) + '" text-anchor="middle" dominant-baseline="central" fill="' + (used ? "#0d1117" : fill) + '" font-size="8" font-weight="700" font-family="system-ui,sans-serif">' + escapeHtml(String(k.id).replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase()) + "</text>");
+            }
+            parts.push("</g>");
+          });
+        }
+
+        // Client rows: who holds this grant, and how much they used.
+        const clientTop = chipTop + (item.chips.length ? Math.ceil(item.chips.length / item.chipCols) * item.chipRowH : 18) + 4;
+        item.clients.forEach((c, i) => {
+          const cy = clientTop + i * item.clientRowH;
+          const cTitle = c.id + (c.hits ? " · " + formatHits(c.hits) + (c.hits === 1 ? " hit" : " hits") : " · no access in window") +
+            (c.last_at ? " · last " + String(c.last_at).slice(0, 16).replace("T", " ") : "") +
+            (c.used && c.used.length ? " · used " + c.used.map(dataTypeLabel).join(", ") : "");
+          parts.push('<g><title>' + escapeHtml(cTitle) + "</title>");
+          parts.push('<text x="' + (item.x + 8) + '" y="' + (cy + item.clientRowH / 2) + '" dominant-baseline="central" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(truncateMapLabel(c.id, 24)) + "</text>");
+          if (c.hits) {
+            parts.push(hitBadgeSVG(item.x + item.w - 38, cy + (item.clientRowH - 16) / 2, c.hits, "#58a6ff"));
+          }
+          parts.push("</g>");
+        });
       });
-    } else if (pos.agents) {
-      const p = pos.agents;
-      const title = p.label + (p.agents ? " · " + p.agents + " agents" : "");
-      parts.push('<g><title>' + escapeHtml(title) + "</title>");
-      parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="#161b22" stroke="#8b949e" stroke-width="1.5"/>');
-      parts.push(flowIconSVG("agent", p.x + 20, p.y + p.h / 2 - (p.agents ? 6 : 0), 16, "#8b949e"));
-      parts.push('<text x="' + (p.x + 36) + '" y="' + (p.y + p.h / 2 - (p.agents ? 6 : 0)) + '" dominant-baseline="central" fill="#e6edf3" font-size="13" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
-      if (p.agents != null) {
-        const agentLabel = p.agents === 1 ? "1 agent" : p.agents + " agents";
-        parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h - 10) + '" text-anchor="middle" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(agentLabel) + (p.hits ? " · " + formatHits(p.hits) + " hits" : "") + "</text>");
-      }
-      parts.push("</g>");
     }
 
     // Service leaf boxes.

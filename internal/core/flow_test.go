@@ -5,15 +5,20 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/fudomunro/aegis/internal/admin"
+	"github.com/fudomunro/aegis/internal/admin/apps"
+	"github.com/fudomunro/aegis/internal/admin/scopes"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/metrics"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func flowTestServer() *Server {
@@ -400,44 +405,65 @@ func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 		t.Fatalf("agents node agents = %d, want 2", byID["agents"].Agents)
 	}
 
-	// Individual agent nodes + access edges (issue #114).
+	// Data grants on the map's left side (issue #425): the agent grant holds
+	// the caller identities and the kinds they could access and used.
 	if len(topo.Stats.Agents.Detail) != 2 {
 		t.Fatalf("agent detail = %d, want 2", len(topo.Stats.Agents.Detail))
 	}
-	byAgentID := map[string]admin.FlowNode{}
-	for _, n := range topo.Nodes {
-		if n.Kind == admin.FlowKindAgentInstance {
-			byAgentID[n.ID] = n
+	var agentGrant *admin.FlowDataGrant
+	for i := range topo.Grants {
+		if topo.Grants[i].ID == "agent" {
+			agentGrant = &topo.Grants[i]
 		}
 	}
-	for _, id := range []string{"agent:alice@example.com", "agent:bob@example.com"} {
-		n, ok := byAgentID[id]
-		if !ok {
-			t.Fatalf("missing agent node %q in %v", id, byAgentID)
-		}
-		if n.Parent != "agents" {
-			t.Fatalf("%s parent = %q, want agents", id, n.Parent)
+	if agentGrant == nil {
+		t.Fatalf("missing agent data grant in %v", topo.Grants)
+	}
+	if agentGrant.Kind != admin.FlowGrantAgent {
+		t.Fatalf("agent grant kind = %q, want %q", agentGrant.Kind, admin.FlowGrantAgent)
+	}
+	clientByID := map[string]admin.FlowGrantClient{}
+	for _, c := range agentGrant.Clients {
+		clientByID[c.ID] = c
+	}
+	for _, id := range []string{"alice@example.com", "bob@example.com", "api-key"} {
+		if _, ok := clientByID[id]; !ok {
+			t.Fatalf("missing grant client %q in %v", id, agentGrant.Clients)
 		}
 	}
-	if byAgentID["agent:alice@example.com"].Hits != 2 {
-		t.Fatalf("alice node hits = %d, want 2", byAgentID["agent:alice@example.com"].Hits)
+	if clientByID["alice@example.com"].Hits != 2 {
+		t.Fatalf("alice grant client hits = %d, want 2", clientByID["alice@example.com"].Hits)
+	}
+	kindByID := map[string]admin.FlowGrantKind{}
+	for _, k := range agentGrant.Kinds {
+		kindByID[k.ID] = k
+	}
+	if kindByID["tracks"].Hits != 1 {
+		t.Fatalf("tracks grant kind hits = %d, want 1", kindByID["tracks"].Hits)
+	}
+	// Alice's library fetch and Bob's proxy read both touched playlists.
+	if kindByID["playlists"].Hits != 2 {
+		t.Fatalf("playlists grant kind hits = %d, want 2", kindByID["playlists"].Hits)
+	}
+	if kindByID["tracks"].Level == shared.AccessNone || kindByID["tracks"].Level == "" {
+		t.Fatalf("tracks grant level = %q, want a real level", kindByID["tracks"].Level)
 	}
 
-	foundAgentServiceEdge := false
-	foundAgentLibraryEdge := false
+	foundGrantServiceEdge := false
+	foundGrantLibraryEdge := false
 	for _, e := range topo.Edges {
-		if e.From == "agent:alice@example.com" && e.To == "svc:spotify" {
-			foundAgentServiceEdge = true
+		if e.From == "grant:agent" && e.To == "svc:spotify" {
+			foundGrantServiceEdge = true
 		}
-		if e.From == "agent:alice@example.com" && e.To == "lib:playlists" && e.Style == admin.FlowEdgeData {
-			foundAgentLibraryEdge = true
+		if e.From == "grant:agent" && e.To == "lib:playlists" && e.Style == admin.FlowEdgeData {
+			foundGrantLibraryEdge = true
 		}
 	}
-	if foundAgentServiceEdge {
-		t.Fatal("did not expect agent → service edge; map should focus on kinds")
+	if foundGrantServiceEdge {
+		t.Fatal("did not expect grant → service edge; map should focus on kinds")
 	}
-	if !foundAgentLibraryEdge {
-		t.Fatal("expected agent → library data edge")
+	if !foundGrantLibraryEdge {
+		t.Fatal("expected grant → library data edge")
 	}
 }
 
@@ -457,14 +483,136 @@ func TestHandleAdminFlow_AgentDetailWithoutHits(t *testing.T) {
 	if len(topo.Stats.Agents.Detail) != 0 {
 		t.Fatalf("expected empty agent detail with no traffic, got %v", topo.Stats.Agents.Detail)
 	}
-	hasInstance := false
-	for _, n := range topo.Nodes {
-		if n.Kind == admin.FlowKindAgentInstance {
-			hasInstance = true
+	// The issued data grants still render (issue #425) — with no usage.
+	if len(topo.Grants) == 0 {
+		t.Fatal("expected the agent data grant even without traffic")
+	}
+	if topo.Grants[0].ID != "agent" || topo.Grants[0].Hits != 0 {
+		t.Fatalf("agent grant = %+v, want zero hits", topo.Grants[0])
+	}
+}
+
+func TestHandleAdminFlow_DataGrantsByClient(t *testing.T) {
+	srv := flowTestServer()
+
+	appStore, err := apps.NewStore(filepath.Join(t.TempDir(), "apps.json"))
+	if err != nil {
+		t.Fatalf("apps.NewStore: %v", err)
+	}
+	for _, app := range []apps.AppCreateRequest{
+		{ID: "demo", Name: "Demo app", Scopes: shared.GrantMap{"tracks": shared.AccessRead, "freebusy": shared.AccessRead}},
+		{ID: "revoked", Name: "Revoked app", Scopes: shared.GrantMap{"tracks": shared.AccessRead}},
+	} {
+		if _, _, err := appStore.Create(app); err != nil {
+			t.Fatalf("create app %s: %v", app.ID, err)
 		}
 	}
-	if hasInstance {
-		t.Fatal("expected no agent-instance nodes without access events")
+	disabled := true
+	if _, err := appStore.Update("revoked", apps.AppUpdateRequest{Disabled: &disabled}); err != nil {
+		t.Fatalf("disable app: %v", err)
+	}
+	scopeStore, err := scopes.NewStore(filepath.Join(t.TempDir(), "data_scopes.json"))
+	if err != nil {
+		t.Fatalf("scopes.NewStore: %v", err)
+	}
+	if _, _, err := scopeStore.Create(scopes.CreateRequest{
+		ID:       "family",
+		Name:     "Family",
+		ReadOnly: true,
+		Grants:   policy.DataGrants{"playlists": {Default: shared.AccessRead}},
+	}); err != nil {
+		t.Fatalf("create scope: %v", err)
+	}
+	srv.apps = appStore
+	srv.scopes = scopeStore
+
+	srv.recordAccess(metrics.AccessEvent{Agent: "app:demo", Surface: metrics.MetricSurfaceLibrary, Target: "tracks", Kind: "tracks"})
+	srv.recordAccess(metrics.AccessEvent{Agent: "app:demo", Surface: metrics.MetricSurfaceLibrary, Target: "tracks", Kind: "tracks"})
+	srv.recordAccess(metrics.AccessEvent{Agent: "scope:family", Surface: metrics.MetricSurfaceLibrary, Target: "playlists", Kind: "playlists"})
+	srv.recordAccess(metrics.AccessEvent{Agent: "app:gone", Surface: metrics.MetricSurfaceLibrary, Target: "tracks", Kind: "tracks"})
+
+	req := httptest.NewRequest("GET", "/v1/admin/flow?window=1h", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.admin().HandleAdminFlow)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var topo admin.FlowTopology
+	if err := json.Unmarshal(w.Body.Bytes(), &topo); err != nil {
+		t.Fatalf("parse flow: %v", err)
+	}
+
+	grantByID := map[string]admin.FlowDataGrant{}
+	var order []string
+	for _, g := range topo.Grants {
+		grantByID[g.ID] = g
+		order = append(order, g.ID)
+	}
+	if len(order) == 0 || order[0] != "agent" {
+		t.Fatalf("grant order = %v, want agent first", order)
+	}
+
+	demo := grantByID["app:demo"]
+	if demo.Kind != admin.FlowGrantApp || demo.Disabled {
+		t.Fatalf("demo grant = %+v", demo)
+	}
+	if demo.Hits != 2 {
+		t.Fatalf("demo hits = %d, want 2", demo.Hits)
+	}
+	demoKinds := map[string]admin.FlowGrantKind{}
+	for _, k := range demo.Kinds {
+		demoKinds[k.ID] = k
+	}
+	if k := demoKinds["tracks"]; k.Level != shared.AccessRead || k.Hits != 2 {
+		t.Fatalf("demo tracks = %+v, want read with 2 hits", k)
+	}
+	if k := demoKinds["freebusy"]; k.Level != shared.AccessRead || k.Hits != 0 {
+		t.Fatalf("demo freebusy = %+v, want read with no hits", k)
+	}
+
+	family := grantByID["scope:family"]
+	if family.Kind != admin.FlowGrantInvite || !family.ReadOnly {
+		t.Fatalf("family grant = %+v", family)
+	}
+	foundPlaylists := false
+	for _, k := range family.Kinds {
+		if k.ID == "playlists" {
+			foundPlaylists = true
+			if k.Level != shared.AccessRead || k.Hits != 1 {
+				t.Fatalf("family playlists = %+v, want read with 1 hit", k)
+			}
+		}
+	}
+	if !foundPlaylists {
+		t.Fatalf("family kinds = %+v, want playlists", family.Kinds)
+	}
+
+	if revoked := grantByID["app:revoked"]; !revoked.Disabled {
+		t.Fatalf("revoked grant = %+v, want disabled", revoked)
+	}
+
+	// Usage without an issued grant stays visible (revoked or removed
+	// credential) so "what is being accessed, and by who" loses no caller.
+	orphan := grantByID["app:gone"]
+	if !orphan.Disabled {
+		t.Fatalf("orphan grant = %+v, want disabled", orphan)
+	}
+	if len(orphan.Kinds) != 0 {
+		t.Fatalf("orphan kinds = %+v, want none granted", orphan.Kinds)
+	}
+	if orphan.Hits != 1 {
+		t.Fatalf("orphan hits = %d, want 1", orphan.Hits)
+	}
+
+	foundEdge := false
+	for _, e := range topo.Edges {
+		if e.From == "grant:app:demo" && e.To == "lib:tracks" && e.Style == admin.FlowEdgeData {
+			foundEdge = true
+		}
+	}
+	if !foundEdge {
+		t.Fatal("expected grant:app:demo → lib:tracks edge")
 	}
 }
 
@@ -551,17 +699,17 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 	if !strings.Contains(body, "connection_id") {
 		t.Fatal("expected service connection_id for token-origin auth arrows")
 	}
-	if !strings.Contains(body, "agent-instance") {
-		t.Fatal("expected individual agent node kind")
+	if !strings.Contains(body, "grantItems") {
+		t.Fatal("expected data grant card layout")
 	}
 	if !strings.Contains(body, "isAgentAccessEdge") {
-		t.Fatal("expected agent access arrow helper")
+		t.Fatal("expected grant access arrow helper")
 	}
-	if !strings.Contains(body, "agentItems") {
-		t.Fatal("expected stacked agent node layout")
+	if !strings.Contains(body, "grantLevelFill") {
+		t.Fatal("expected level-colored grant kind chips")
 	}
 	if !strings.Contains(body, "truncateMapLabel") {
-		t.Fatal("expected agent label truncation")
+		t.Fatal("expected label truncation")
 	}
 }
 
