@@ -792,7 +792,7 @@ under `/v1/auth/` remain public so browsers can finish the redirect.
 ```
 GET /v1/admin — HTML dashboard (shell only; no secrets; auth required)
 GET /v1/admin/summary — redacted services, token status, cache stats
-GET /v1/admin/flow — data-flow topology (nodes, edges, libraries) + per-agent access detail
+GET /v1/admin/flow — data-flow topology (nodes, edges, libraries) + issued data grants by client (granted kinds and window usage) + per-agent access detail
 GET /v1/admin/hook-health — Aperture hook health + expected config snippet
 POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSON
 GET /v1/admin/maintenance/signals — sync-maintenance signal bundle: build stamp, sync-queue rollups, recent failures (scrubbed), copy freshness

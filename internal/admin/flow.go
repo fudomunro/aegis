@@ -11,6 +11,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/metrics"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -25,9 +26,6 @@ const (
 	FlowKindService = "service"
 	// FlowKindToken is one OAuth connection held inside the token vault.
 	FlowKindToken = "token"
-	// FlowKindAgentInstance is one named agent (issue #114). The aggregate
-	// "agents" node remains FlowKindAgent for the gateway cluster.
-	FlowKindAgentInstance = "agent-instance"
 )
 
 // Flow topology node statuses for services.
@@ -120,6 +118,63 @@ type FlowRuntime struct {
 	BaseURL  string `json:"base_url"`
 }
 
+// Flow data-grant holder kinds (issue #425).
+const (
+	// FlowGrantAgent is the owner-tier agent data grants map.
+	FlowGrantAgent = "agent"
+	// FlowGrantApp is one third-party app's data grant (scopes).
+	FlowGrantApp = "app"
+	// FlowGrantInvite is one invite token's data grant (data-scope grants).
+	FlowGrantInvite = "invite"
+)
+
+// FlowGrantKind is one kind entry inside an issued data grant: the level
+// granted and how much of it the grant's clients used in the window.
+type FlowGrantKind struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	// Level is the granted access level (read, write, read-write).
+	Level string `json:"level"`
+	// Hits is the window usage of this kind by the grant's clients.
+	Hits int `json:"hits,omitempty"`
+}
+
+// FlowGrantClient is one caller identity that holds a data grant.
+type FlowGrantClient struct {
+	ID string `json:"id"`
+	// Hits is the client's access count in the stats window.
+	Hits int `json:"hits,omitempty"`
+	// LastAt is the client's most recent access in the window.
+	LastAt time.Time `json:"last_at,omitempty"`
+	// Used lists the kinds this client touched in the window.
+	Used []string `json:"used,omitempty"`
+}
+
+// FlowDataGrant is one issued data grant on the overview map (issue #425):
+// its holder ("by who"), the kinds it grants ("what could be accessed"), and
+// the window usage of those kinds ("what is being accessed"). The join is the
+// access-metrics agent identity: "app:<id>" / "scope:<id>" holders match app
+// and invite-token grants; other identities share the agent data grants map.
+type FlowDataGrant struct {
+	// ID is the grant holder id: "agent", "app:<id>", or "scope:<id>".
+	ID string `json:"id"`
+	// Kind is agent, app, or invite.
+	Kind   string `json:"kind"`
+	Label  string `json:"label"`
+	Detail string `json:"detail,omitempty"`
+	// Disabled marks a revoked/disabled app or invite token.
+	Disabled bool `json:"disabled,omitempty"`
+	// ReadOnly marks an invite token that may not write.
+	ReadOnly bool `json:"read_only,omitempty"`
+	// Clients are the caller identities holding this data grant.
+	Clients []FlowGrantClient `json:"clients,omitempty"`
+	// Kinds lists the granted kinds (levels other than none).
+	Kinds []FlowGrantKind `json:"data_types,omitempty"`
+	// Hits is the combined access count of the grant's clients.
+	Hits   int       `json:"hits,omitempty"`
+	LastAt time.Time `json:"last_at,omitempty"`
+}
+
 // FlowAgentDetail is one agent's access breakdown for map nodes/arrows
 // (issue #114).
 type FlowAgentDetail struct {
@@ -183,6 +238,9 @@ type FlowTopology struct {
 	Edges     []FlowEdge        `json:"edges"`
 	Libraries []FlowLibrary     `json:"libraries"`
 	Kinds     []FlowLibraryKind `json:"data_types"`
+	// Grants lists the issued data grants on the map's left side
+	// (issue #425): what each grants and what its clients used.
+	Grants []FlowDataGrant `json:"grants"`
 	// Stats is recent agent access for the requested window (issue #32).
 	Stats FlowStats `json:"stats"`
 }
@@ -221,8 +279,8 @@ func (h *Handlers) buildFlowTopology(window time.Duration, windowLabel string) F
 		{
 			ID:     "agents",
 			Kind:   FlowKindAgent,
-			Label:  "LLM Agents",
-			Detail: "Tailnet (or API-key) clients that talk to Aegis",
+			Label:  "Data grants",
+			Detail: "Issued data grants — what each client may access, and what it used",
 		},
 		{
 			ID:     "aperture",
@@ -468,24 +526,22 @@ func (h *Handlers) buildFlowTopology(window time.Duration, windowLabel string) F
 	}
 
 	stats := h.buildFlowStats(window, windowLabel)
-	// Individual agent nodes + access arrows to library kinds they used
-	// (issue #114). Agent → service arrows are omitted so the map keeps focus
-	// on kinds rather than backends.
-	for _, ad := range stats.Agents.Detail {
-		nodes = append(nodes, FlowNode{
-			ID:     "agent:" + ad.ID,
-			Kind:   FlowKindAgentInstance,
-			Label:  ad.ID,
-			Detail: "Active in the selected access window",
-			Parent: "agents",
-			Hits:   ad.Hits,
-			Agents: 1,
-		})
-		for libID, hits := range ad.Libraries {
+	grants := h.buildFlowGrants(stats)
+	// Access arrows from each data grant to the library kinds its clients
+	// used in the window (issue #425). Grant → service arrows are omitted so
+	// the map keeps focus on kinds rather than backends.
+	for _, g := range grants {
+		for _, k := range g.Kinds {
+			if k.Hits == 0 {
+				continue
+			}
+			if !h.libraryKindExists(k.ID) {
+				continue
+			}
 			edges = append(edges, FlowEdge{
-				From:  "agent:" + ad.ID,
-				To:    "lib:" + libID,
-				Label: accessEdgeLabel(hits),
+				From:  "grant:" + g.ID,
+				To:    "lib:" + k.ID,
+				Label: accessEdgeLabel(k.Hits),
 				Style: FlowEdgeData,
 			})
 		}
@@ -555,6 +611,7 @@ func (h *Handlers) buildFlowTopology(window time.Duration, windowLabel string) F
 		Edges:     edges,
 		Libraries: libraries,
 		Kinds:     mapKinds,
+		Grants:    grants,
 		Stats:     stats,
 	}
 }
@@ -623,18 +680,16 @@ func flowKindOrder(kind string) int {
 	switch kind {
 	case FlowKindAgent:
 		return 0
-	case FlowKindAgentInstance:
-		return 1
 	case FlowKindGateway:
-		return 2
+		return 1
 	case FlowKindAegis:
-		return 3
+		return 2
 	case FlowKindStore:
-		return 4
+		return 3
 	case FlowKindToken:
-		return 5
+		return 4
 	default:
-		return 6
+		return 5
 	}
 }
 
@@ -644,6 +699,270 @@ func accessEdgeLabel(hits int) string {
 		return "1 hit"
 	}
 	return strconv.Itoa(hits) + " hits"
+}
+
+// buildFlowGrants lists the issued data grants joined with window usage
+// (issue #425): what each holder grants ("what could be accessed"), which of
+// those kinds its clients used ("what is being accessed"), and the caller
+// identities behind them ("by who"). The join key is the access-metrics agent
+// identity — "app:<id>" and "scope:<id>" name their holders directly, and
+// every other identity (agent API key, tailnet logins) shares the agent data
+// grants map. Callers with usage but no issued grant surface as orphans.
+func (h *Handlers) buildFlowGrants(stats FlowStats) []FlowDataGrant {
+	used := make(map[string]FlowAgentDetail, len(stats.Agents.Detail))
+	for _, d := range stats.Agents.Detail {
+		used[d.ID] = d
+	}
+	kindList, labels := h.flowGrantKindKeys()
+
+	agent := FlowDataGrant{
+		ID:      "agent",
+		Kind:    FlowGrantAgent,
+		Label:   "LLM agents",
+		Detail:  "Owner-tier callers (agent API key and allowed tailnet logins) share one data grants map.",
+		Clients: flowAgentClients(h.Host.RuntimeFacts().AllowedLogins, used),
+	}
+	flowFillGrant(&agent, kindList, labels, policy.AgentOverviewLevels(h.Host.DataGrants(), kindList), used)
+	out := []FlowDataGrant{agent}
+
+	holders := map[string]bool{agent.ID: true}
+	if h.Apps != nil {
+		appRows := h.Apps.List()
+		sort.SliceStable(appRows, func(i, j int) bool {
+			if appRows[i].Name != appRows[j].Name {
+				return appRows[i].Name < appRows[j].Name
+			}
+			return appRows[i].ID < appRows[j].ID
+		})
+		for _, app := range appRows {
+			id := "app:" + app.ID
+			holders[id] = true
+			levels, _ := policy.AppOverviewLevels(app.Scopes, kindList)
+			g := FlowDataGrant{
+				ID:       id,
+				Kind:     FlowGrantApp,
+				Label:    app.Name,
+				Detail:   "Third-party application (" + app.ID + "). Scopes fail closed — unnamed types are off.",
+				Disabled: app.Disabled,
+				Clients:  []FlowGrantClient{{ID: id}},
+			}
+			flowFillGrant(&g, kindList, labels, levels, used)
+			out = append(out, g)
+		}
+	}
+	if h.Scopes != nil {
+		scopeRows := h.Scopes.List()
+		sort.SliceStable(scopeRows, func(i, j int) bool {
+			if scopeRows[i].Name != scopeRows[j].Name {
+				return scopeRows[i].Name < scopeRows[j].Name
+			}
+			return scopeRows[i].ID < scopeRows[j].ID
+		})
+		for _, sc := range scopeRows {
+			id := "scope:" + sc.ID
+			holders[id] = true
+			rules := sc.Grants.Levels()
+			levels := make(map[string]string, len(kindList))
+			for _, key := range kindList {
+				levels[key] = rules.Level(key)
+			}
+			label := sc.Name
+			if label == "" {
+				label = sc.ID
+			}
+			g := FlowDataGrant{
+				ID:       id,
+				Kind:     FlowGrantInvite,
+				Label:    label,
+				Detail:   "Invite token (external principal). Grants are the complete allow list — unnamed types are off.",
+				Disabled: sc.Disabled,
+				ReadOnly: sc.ReadOnly,
+				Clients:  []FlowGrantClient{{ID: id}},
+			}
+			flowFillGrant(&g, kindList, labels, levels, used)
+			out = append(out, g)
+		}
+	}
+
+	// Usage without an issued grant (revoked or removed credential) stays
+	// visible so "what is being accessed, and by who" cannot lose a caller.
+	var orphans []FlowDataGrant
+	for _, d := range stats.Agents.Detail {
+		if holders[d.ID] || (!strings.HasPrefix(d.ID, "app:") && !strings.HasPrefix(d.ID, "scope:")) {
+			continue
+		}
+		kind := FlowGrantApp
+		detail := "Access recorded with no issued data grant (revoked or removed app)."
+		if strings.HasPrefix(d.ID, "scope:") {
+			kind = FlowGrantInvite
+			detail = "Access recorded with no issued data grant (revoked or removed invite token)."
+		}
+		g := FlowDataGrant{
+			ID:       d.ID,
+			Kind:     kind,
+			Label:    strings.TrimPrefix(strings.TrimPrefix(d.ID, "app:"), "scope:"),
+			Detail:   detail,
+			Disabled: true,
+			Clients:  []FlowGrantClient{{ID: d.ID}},
+		}
+		flowFillGrant(&g, kindList, labels, nil, used)
+		orphans = append(orphans, g)
+	}
+	sort.SliceStable(orphans, func(i, j int) bool {
+		return orphans[i].ID < orphans[j].ID
+	})
+	out = append(out, orphans...)
+	return out
+}
+
+// flowGrantKindKeys returns the kind keys every grant map resolves against
+// (library perm types plus any extra keys on stored grants) and a display
+// label per key.
+func (h *Handlers) flowGrantKindKeys() ([]string, map[string]string) {
+	preferred := make([]string, 0, 16)
+	labels := make(map[string]string, 16)
+	for _, kind := range h.KindCatalog.AllLibraryKinds() {
+		key := kind.PermType
+		if key == "" {
+			key = kind.ID
+		}
+		preferred = append(preferred, key)
+		labels[kind.ID] = kind.Label
+		labels[key] = kind.Label
+	}
+	var extra []string
+	extra = append(extra, policy.ExtraPolicyKeys(h.Host.DataGrants())...)
+	if h.Apps != nil {
+		for _, app := range h.Apps.List() {
+			extra = append(extra, policy.ExtraPermissionKeys(app.Scopes)...)
+		}
+	}
+	if h.Scopes != nil {
+		for _, sc := range h.Scopes.All() {
+			extra = append(extra, policy.ExtraPolicyKeys(sc.Grants)...)
+		}
+	}
+	kindList := policy.OverviewKinds(preferred, extra)
+	for _, key := range kindList {
+		if _, ok := labels[key]; !ok {
+			labels[key] = key
+		}
+	}
+	return kindList, labels
+}
+
+// flowAgentClients lists the caller identities sharing the agent data grants
+// map: the agent API key, the allowed tailnet logins, and any other non-app /
+// non-scope identity seen in the window.
+func flowAgentClients(allowedLogins []string, used map[string]FlowAgentDetail) []FlowGrantClient {
+	seen := map[string]bool{}
+	var ids []string
+	add := func(id string) {
+		if id == "" || seen[id] {
+			return
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	add("api-key")
+	for _, login := range allowedLogins {
+		add(login)
+	}
+	var extras []string
+	for id := range used {
+		if strings.HasPrefix(id, "app:") || strings.HasPrefix(id, "scope:") {
+			continue
+		}
+		extras = append(extras, id)
+	}
+	sort.Strings(extras)
+	for _, id := range extras {
+		add(id)
+	}
+	clients := make([]FlowGrantClient, 0, len(ids))
+	for _, id := range ids {
+		clients = append(clients, FlowGrantClient{ID: id})
+	}
+	return clients
+}
+
+// flowFillGrant attaches window usage to a grant's clients and expands the
+// granted kinds (level other than none) with per-kind usage.
+func flowFillGrant(g *FlowDataGrant, kindList []string, labels map[string]string, levels map[string]string, used map[string]FlowAgentDetail) {
+	for i := range g.Clients {
+		d, ok := used[g.Clients[i].ID]
+		if !ok {
+			continue
+		}
+		g.Clients[i].Hits = d.Hits
+		g.Clients[i].LastAt = d.LastAt
+		g.Clients[i].Used = flowUsedKinds(d)
+		g.Hits += d.Hits
+		if d.LastAt.After(g.LastAt) {
+			g.LastAt = d.LastAt
+		}
+	}
+	for _, key := range kindList {
+		level := shared.NormalizeAccess(levels[key])
+		if level == "" || level == shared.AccessNone {
+			continue
+		}
+		g.Kinds = append(g.Kinds, FlowGrantKind{
+			ID:    key,
+			Label: labels[key],
+			Level: level,
+			Hits:  flowGrantKindHits(g.Clients, used, key),
+		})
+	}
+}
+
+// flowGrantKindHits sums one kind's usage across the grant's clients. The
+// per-kind counter covers both surfaces; the library counter fills in events
+// recorded without a kind label.
+func flowGrantKindHits(clients []FlowGrantClient, used map[string]FlowAgentDetail, key string) int {
+	total := 0
+	for _, c := range clients {
+		d, ok := used[c.ID]
+		if !ok {
+			continue
+		}
+		if n := d.Kinds[key]; n > 0 {
+			total += n
+		} else {
+			total += d.Libraries[key]
+		}
+	}
+	return total
+}
+
+// flowUsedKinds lists the kinds a caller touched in the window.
+func flowUsedKinds(d FlowAgentDetail) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(id string) {
+		if id == "" || seen[id] {
+			return
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	for id := range d.Kinds {
+		add(id)
+	}
+	for id := range d.Libraries {
+		add(id)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (h *Handlers) libraryKindExists(id string) bool {
+	for _, k := range h.KindCatalog.AllLibraryKinds() {
+		if k.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // tokenDisplayName returns a human label for a vault connection id.
