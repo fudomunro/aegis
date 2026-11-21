@@ -113,8 +113,7 @@ func (h *Handlers) udkOverlay() (*udk.UserKindsOverlay, error) {
 }
 
 func (h *Handlers) writeUDKStatus(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(h.udkStatus())
+	shared.WriteJSON(w, h.udkStatus())
 }
 
 func (h *Handlers) udkStatus() UDKAdminStatus {
@@ -245,8 +244,7 @@ func (h *Handlers) handleUDKBrowse(w http.ResponseWriter, r *http.Request) {
 	if len(res.Entries) == 0 {
 		res.Hints = append(res.Hints, "No folders or .json files here. Navigate up or choose another directory.")
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(res)
+	shared.WriteJSON(w, res)
 }
 
 // handleUDKKindRoutes dispatches:

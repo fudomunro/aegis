@@ -40,8 +40,7 @@ func (h *Handlers) HandleAdminImportStore(w http.ResponseWriter, r *http.Request
 			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(spec.Status(h.BaseURL))
+		shared.WriteJSON(w, spec.Status(h.BaseURL))
 	case path == "import":
 		if r.Method != http.MethodPost {
 			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -70,10 +69,10 @@ func (h *Handlers) ImportStoreHandler(spec connectors.LocalImportStoreSpec) http
 // panel from declarations instead of restating them (issue #265 pattern,
 // issue #393).
 type ImportStoreView struct {
-	Stem      string                   `json:"stem"`
-	ServiceID string                   `json:"service_id"`
-	Panel     connectors.ImportPanel   `json:"panel"`
-	FlagName  string                   `json:"flag_name"`
+	Stem      string                       `json:"stem"`
+	ServiceID string                       `json:"service_id"`
+	Panel     connectors.ImportPanel       `json:"panel"`
+	FlagName  string                       `json:"flag_name"`
 	Status    connectors.ImportStoreStatus `json:"status"`
 }
 
@@ -96,8 +95,7 @@ func (h *Handlers) HandleAdminImportStores(w http.ResponseWriter, r *http.Reques
 			Status:    admin.Status(h.BaseURL),
 		})
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"stores": views})
+	shared.WriteJSON(w, map[string]any{"stores": views})
 }
 
 // Status builds the admin status DTO from the store's declared copy and
@@ -165,9 +163,8 @@ func (h *Handlers) runAdminImportStore(w http.ResponseWriter, r *http.Request, s
 		attrs = append(attrs, res.LogAttrs()...)
 	}
 	slog.Info(spec.Spec.Stem+" import from admin UI", attrs...)
-	w.Header().Set("Content-Type", "application/json")
 	if admin.BareResult {
-		json.NewEncoder(w).Encode(res)
+		shared.WriteJSON(w, res)
 		return
 	}
 	out := map[string]any{
@@ -177,5 +174,5 @@ func (h *Handlers) runAdminImportStore(w http.ResponseWriter, r *http.Request, s
 	if res != nil {
 		out["summary"] = res.Summary()
 	}
-	json.NewEncoder(w).Encode(out)
+	shared.WriteJSON(w, out)
 }

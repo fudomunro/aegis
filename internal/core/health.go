@@ -16,9 +16,9 @@ func (s *Server) HandleHealthz(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	shared.WriteJSON(w, map[string]string{"status": "ok"})
@@ -39,10 +39,10 @@ func (s *Server) HandleReadyz(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusServiceUnavailable
 		body = map[string]string{"status": "not_ready"}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
 	if r.Method == http.MethodHead {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
 		return
 	}
-	shared.WriteJSON(w, body)
+	shared.WriteJSONStatus(w, status, body)
 }
