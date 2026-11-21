@@ -173,6 +173,18 @@ issue numbers; this file is where that context lives.
 
 ### Removed
 
+- **Legacy token file formats.** `tokens.json` is version 3 only: a version 1
+  or 2 file, or one missing its `key_check`, is refused at startup with
+  `unsupported token file version: N` rather than migrated. The readers that
+  made migration possible are gone — the bare-string (v1) entry parser, the
+  master-key (saltless) decrypt path, the implicit 100k PBKDF2 cost, and the
+  "every entry failed to decrypt" heuristic that stood in for a key check on
+  files that predate one. The key check is now required, so a wrong
+  passphrase is always detected. **Upgrade path:** boot the previous release
+  once — it rekeys a legacy file to the current format at load under the same
+  passphrase — then deploy this one. `-token-new-pass` is unchanged for
+  rotating the passphrase.
+
 - **One-shot mirror API (`POST /v1/library/mirror`, issue #389).** The
   request-driven copy surface is gone in a clean cut: the queued `mirror` /
   `repair` jobs already carry deliberate-copy work (chained steps, one

@@ -59,16 +59,14 @@ type OAuthToken struct {
 	Scopes       []string  `json:"scopes"`
 }
 
-// tokenCiphertext is one encrypted token entry.
-// A non-empty Salt means the ciphertext was sealed under an HKDF-derived
-// entry key (format v2). Empty Salt means the store master key (format v1).
+// tokenCiphertext is one encrypted token entry, sealed under an HKDF-derived
+// entry key. Salt is required.
 type tokenCiphertext struct {
 	Salt string `json:"salt,omitempty"`
 	Data string `json:"data"`
 }
 
-// tokensByService accepts both legacy string ciphertexts (v1) and structured
-// entries (v2). Marshal always writes the v2 object form.
+// tokensByService maps id → encrypted entry.
 type tokensByService map[string]tokenCiphertext
 
 func (t *tokensByService) UnmarshalJSON(data []byte) error {
@@ -76,21 +74,12 @@ func (t *tokensByService) UnmarshalJSON(data []byte) error {
 		*t = tokensByService{}
 		return nil
 	}
-	var v2 map[string]tokenCiphertext
-	if err := json.Unmarshal(data, &v2); err == nil {
-		*t = v2
-		return nil
+	var m map[string]tokenCiphertext
+	if err := json.Unmarshal(data, &m); err != nil {
+		return fmt.Errorf("tokens: expected a map of ciphertext objects: %w", err)
 	}
-	var v1 map[string]string
-	if err := json.Unmarshal(data, &v1); err == nil {
-		m := make(tokensByService, len(v1))
-		for id, enc := range v1 {
-			m[id] = tokenCiphertext{Data: enc}
-		}
-		*t = m
-		return nil
-	}
-	return fmt.Errorf("tokens: expected map of ciphertext strings (v1) or objects (v2)")
+	*t = m
+	return nil
 }
 
 func (t tokensByService) MarshalJSON() ([]byte, error) {
@@ -100,17 +89,11 @@ func (t tokensByService) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]tokenCiphertext(t))
 }
 
-// tokenFile is the on-disk format.
-//
-//	version 1 (legacy): file-level salt, implicit PBKDF2 iterations (100k),
-//	                    tokens are map[string]string sealed under the master key.
-//	version 2: explicit kdf + iterations, file-level salt, per-entry
-//	           salts with HKDF-derived entry keys.
-//	version 3 (current): same as v2 plus a secrets map for static credentials
-//	                     from service_connections (issue #184).
-//
-// All load; every write is version 3 (issue #101 / #184). A file carrying any
-// older shape is rekeyed to version 3 at load (see needsRekey).
+// tokenFile is the on-disk format (version 3): explicit kdf + iterations,
+// a file-level master salt, a key check, per-entry salts with HKDF-derived
+// entry keys, and a secrets map for static credentials from
+// service_connections (issue #184). Version 3 is the only format this build
+// reads or writes (issue #101 / #184).
 type tokenFile struct {
 	Version    int    `json:"version"`
 	KDF        string `json:"kdf,omitempty"`
@@ -118,39 +101,13 @@ type tokenFile struct {
 	Salt       string `json:"salt"`
 	// KeyCheck seals a known plaintext with the store master key so a wrong
 	// passphrase is distinguishable from an empty store (issue #100).
-	// Empty on legacy files written before this field existed.
 	KeyCheck string          `json:"key_check,omitempty"`
 	Tokens   tokensByService `json:"tokens"`
 	Secrets  tokensByService `json:"secrets,omitempty"`
 }
 
-// needsRekey reports whether the on-disk file carries any shape the current
-// writer no longer produces: a pre-v3 version, a missing key check, or
-// master-key (saltless) ciphertexts. Load forces a rekey for those, which is
-// what lets the legacy readers go once every deployment has booted here.
-func (tf tokenFile) needsRekey() bool {
-	if tf.Version < tokenVersion || tf.KeyCheck == "" {
-		return true
-	}
-	for _, entry := range tf.Tokens {
-		if entry.Salt == "" {
-			return true
-		}
-	}
-	for _, entry := range tf.Secrets {
-		if entry.Salt == "" {
-			return true
-		}
-	}
-	return false
-}
-
 const (
-	tokenVersionV1 = 1
-	tokenVersionV2 = 2
-	tokenVersion   = 3
-	// pbkdf2IterLegacy is the implicit cost of version 1 files.
-	pbkdf2IterLegacy = 100_000
+	tokenVersion = 3
 	// pbkdf2IterDefault is current OWASP guidance for PBKDF2-HMAC-SHA256.
 	pbkdf2IterDefault = 600_000
 	pbkdf2KeyLen      = 32 // AES-256
@@ -193,10 +150,10 @@ func TailscaleAPIKeySecretKey() string {
 var errPassphrase = errors.New("token passphrase incorrect (or token file corrupt); refusing to load token store")
 
 // NewTokenStore loads or creates a token store encrypted with the given passphrase.
-// New files use the current default PBKDF2 cost; a current-format file keeps
-// the KDF parameters recorded on disk until rekeyed. A legacy-format file is
-// rekeyed to the current format at load (same passphrase, fresh salt, preferred
-// cost never below the one in use).
+// New files use the current default PBKDF2 cost; an existing file keeps the
+// KDF parameters recorded on disk until rekeyed. Only the current file format
+// is accepted — an older tokens.json is reported as unsupported (deploy the
+// release that rekeys at load first to migrate it).
 // If a token file exists but the passphrase cannot unlock it, returns an error
 // and never hands back a store that would overwrite the file on the next Save.
 func NewTokenStore(path, passphrase string) (*TokenStore, error) {
@@ -236,6 +193,18 @@ func NewStoreWithIterations(path, passphrase string, preferredIterations int) (*
 		return nil, fmt.Errorf("reading token file: %w", err)
 	}
 
+	// Version first: an older file must report as unsupported, not as a parse
+	// error from its entry shape.
+	var head struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(data, &head); err != nil {
+		return nil, fmt.Errorf("parsing token file: %w", err)
+	}
+	if head.Version != tokenVersion {
+		return nil, fmt.Errorf("unsupported token file version: %d (current %d)", head.Version, tokenVersion)
+	}
+
 	var tf tokenFile
 	if err := json.Unmarshal(data, &tf); err != nil {
 		return nil, fmt.Errorf("parsing token file: %w", err)
@@ -252,14 +221,15 @@ func NewStoreWithIterations(path, passphrase string, preferredIterations int) (*
 	ts.kdfIterations = iterations
 	ts.key = deriveKey(passphrase, ts.salt, ts.kdfIterations)
 
-	// Prefer the sealed key check when present: it detects a wrong passphrase
-	// even for an empty store. Legacy files fall through to the all-fail rule.
-	if tf.KeyCheck != "" {
-		plain, err := ts.decrypt(tf.KeyCheck)
-		if err != nil || string(plain) != keyCheckPlaintext {
-			slog.Error("token key check failed", "path", path, "error", err)
-			return nil, errPassphrase
-		}
+	// The sealed key check is required: it is what tells a wrong passphrase
+	// apart from an empty store (issue #100).
+	if tf.KeyCheck == "" {
+		return nil, fmt.Errorf("token file is missing its key check")
+	}
+	plain, err := ts.decrypt(tf.KeyCheck)
+	if err != nil || string(plain) != keyCheckPlaintext {
+		slog.Error("token key check failed", "path", path, "error", err)
+		return nil, errPassphrase
 	}
 
 	decryptFailures := 0
@@ -291,16 +261,9 @@ func NewStoreWithIterations(path, passphrase string, preferredIterations int) (*
 		ts.Secrets[key] = string(decrypted)
 	}
 
-	// Legacy file, no key check, and every entry failed to decrypt:
-	// almost certainly the wrong passphrase. Refuse rather than look empty.
-	totalOnDisk := len(tf.Tokens) + len(tf.Secrets)
-	if tf.KeyCheck == "" && totalOnDisk > 0 && decryptFailures == totalOnDisk {
-		slog.Error("all token-store entries failed to decrypt", "path", path, "entries", totalOnDisk)
-		return nil, errPassphrase
-	}
-
 	// Some entries were unreadable. Keep what we can load in memory, but never
 	// persist — a rewrite would drop the undecrypted ciphertext on disk.
+	totalOnDisk := len(tf.Tokens) + len(tf.Secrets)
 	if decryptFailures > 0 || parseFailures > 0 {
 		ts.loadUnsafe = true
 		slog.Error("token store loaded incompletely; persist is disabled",
@@ -316,54 +279,24 @@ func NewStoreWithIterations(path, passphrase string, preferredIterations int) (*
 		"path", path,
 		"services", len(ts.Tokens),
 		"secrets", len(ts.Secrets),
-		"version", tf.Version,
 		"kdf", kdfPBKDF2SHA256,
 		"iterations", ts.kdfIterations,
 	)
-
-	// A file carrying a shape the current writer no longer produces (v1/v2
-	// entries, a missing key check, master-key ciphertexts) is rekeyed at
-	// load, same passphrase. That rewrite is what retires the legacy readers
-	// — once every deployment has booted here, a later release can drop them.
-	// A partial load is never rewritten (that would drop unreadable entries),
-	// and a failed rewrite leaves the legacy file for the next start.
-	if tf.needsRekey() && !ts.loadUnsafe {
-		if err := ts.rekey(passphrase); err != nil {
-			slog.Error("rekey of legacy token file failed; leaving it as-is",
-				"path", path, "from_version", tf.Version, "error", err)
-		} else {
-			slog.Info("rekeyed legacy token file",
-				"path", path, "from_version", tf.Version,
-				"iterations", ts.KDFIterations())
-		}
-	}
 	return ts, nil
 }
 
-// fileKDFIterations returns the PBKDF2 cost recorded in the file, or the
-// legacy v1 default. Rejects unknown KDF names so a future algorithm cannot
-// be silently treated as PBKDF2.
+// fileKDFIterations returns the PBKDF2 cost recorded in the file. Rejects
+// unknown KDF names so a future algorithm cannot be silently treated as
+// PBKDF2. The version gate in the loader has already accepted only the
+// current format.
 func fileKDFIterations(tf tokenFile) (int, error) {
-	switch tf.Version {
-	case tokenVersionV1:
-		if tf.Iterations != 0 && tf.Iterations != pbkdf2IterLegacy {
-			return 0, fmt.Errorf("legacy token file with unexpected iterations: %d", tf.Iterations)
-		}
-		if tf.KDF != "" && tf.KDF != kdfPBKDF2SHA256 {
-			return 0, fmt.Errorf("unsupported token kdf %q", tf.KDF)
-		}
-		return pbkdf2IterLegacy, nil
-	case tokenVersionV2, tokenVersion:
-		if tf.KDF != "" && tf.KDF != kdfPBKDF2SHA256 {
-			return 0, fmt.Errorf("unsupported token kdf %q", tf.KDF)
-		}
-		if tf.Iterations < 1 {
-			return 0, fmt.Errorf("token file missing kdf iterations")
-		}
-		return tf.Iterations, nil
-	default:
-		return 0, fmt.Errorf("unsupported token file version: %d", tf.Version)
+	if tf.KDF != "" && tf.KDF != kdfPBKDF2SHA256 {
+		return 0, fmt.Errorf("unsupported token kdf %q", tf.KDF)
 	}
+	if tf.Iterations < 1 {
+		return 0, fmt.Errorf("token file missing kdf iterations")
+	}
+	return tf.Iterations, nil
 }
 
 // Get returns a copy of the token for a service, or nil if not stored.
@@ -512,7 +445,7 @@ func (ts *TokenStore) rekey(next string) error {
 // ChangePassphrase re-encrypts every token under next with a fresh master salt
 // and the store's preferred PBKDF2 cost (never lower than the cost already in
 // use). Passing the current passphrase is allowed: it still rotates the salt
-// and raises KDF parameters on legacy files.
+// and raises the cost when the file is below the preferred one.
 func (ts *TokenStore) ChangePassphrase(next string) error {
 	if next == "" {
 		return fmt.Errorf("new token passphrase must not be empty")
@@ -678,22 +611,20 @@ func encryptEntry(masterKey, plaintext []byte) (tokenCiphertext, error) {
 	}, nil
 }
 
-// decryptEntry opens a token ciphertext. Entries with a salt use an
-// HKDF-derived entry key (v2); saltless entries use the master key (v1).
+// decryptEntry opens a token ciphertext under its HKDF-derived entry key.
 func (ts *TokenStore) decryptEntry(entry tokenCiphertext) ([]byte, error) {
-	key := ts.key
-	if entry.Salt != "" {
-		salt, err := base64.StdEncoding.DecodeString(entry.Salt)
-		if err != nil {
-			return nil, fmt.Errorf("decoding entry salt: %w", err)
-		}
-		entryKey, err := deriveEntryKey(ts.key, salt)
-		if err != nil {
-			return nil, err
-		}
-		key = entryKey
+	if entry.Salt == "" {
+		return nil, fmt.Errorf("entry is missing its salt")
 	}
-	return decryptWith(key, entry.Data)
+	salt, err := base64.StdEncoding.DecodeString(entry.Salt)
+	if err != nil {
+		return nil, fmt.Errorf("decoding entry salt: %w", err)
+	}
+	entryKey, err := deriveEntryKey(ts.key, salt)
+	if err != nil {
+		return nil, err
+	}
+	return decryptWith(entryKey, entry.Data)
 }
 
 func encryptWith(key, plaintext []byte) (string, error) {

@@ -1,10 +1,8 @@
 package tokens
 
 import (
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,11 +125,13 @@ func TestTokenStore_WrongPassphraseEmptyStore(t *testing.T) {
 	}
 }
 
-func TestTokenStore_LegacyFileAllDecryptFail(t *testing.T) {
+func TestTokenStore_MissingKeyCheckRejected(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tokens.json")
 
-	// Build a store, then strip key_check to simulate a pre-issue-100 file.
+	// Build a store, then strip key_check to simulate a foreign/hand-edited
+	// file. Without the check a wrong passphrase is indistinguishable from an
+	// empty store, so the file must be refused outright rather than loaded.
 	ts1, _ := newTestTokenStore(path, "correct")
 	ts1.Save("spotify", &OAuthToken{AccessToken: "secret", Expiry: time.Now().Add(time.Hour)})
 
@@ -144,23 +144,16 @@ func TestTokenStore_LegacyFileAllDecryptFail(t *testing.T) {
 		t.Fatal(err)
 	}
 	delete(raw, "key_check")
-	legacy, err := json.Marshal(raw)
+	stripped, err := json.Marshal(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+	if err := os.WriteFile(path, stripped, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := newTestTokenStore(path, "wrong"); err == nil {
-		t.Fatal("expected error for wrong passphrase on legacy file")
-	}
-	ts3, err := newTestTokenStore(path, "correct")
-	if err != nil {
-		t.Fatalf("correct passphrase should load legacy file: %v", err)
-	}
-	if got := ts3.Get("spotify"); got == nil || got.AccessToken != "secret" {
-		t.Fatal("legacy token not loaded")
+	if _, err := newTestTokenStore(path, "correct"); err == nil {
+		t.Fatal("a file without a key check must be rejected")
 	}
 }
 
@@ -555,95 +548,39 @@ func TestTokenStore_PerEntrySaltsAreUnique(t *testing.T) {
 	}
 }
 
-func TestTokenStore_LegacyV1FileRekeysAtLoad(t *testing.T) {
+func TestTokenStore_LegacyTokenFileRejected(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tokens.json")
-	writeLegacyV1TokenFile(t, path, "correct", map[string]string{
-		"spotify": `{"access_token":"legacy-secret","refresh_token":"","token_type":"Bearer","expiry":"2030-01-01T00:00:00Z","scopes":null}`,
+
+	// Version 1: string ciphertexts under the master key, implicit PBKDF2 cost.
+	writeJSONFile(t, path, map[string]any{
+		"version": 1,
+		"salt":    base64.StdEncoding.EncodeToString(make([]byte, 16)),
+		"tokens":  map[string]string{"spotify": "AAAA"},
 	})
-
-	loaded, err := NewStoreWithIterations(path, "correct", 1_000)
-	if err != nil {
-		t.Fatalf("v1 file must load: %v", err)
-	}
-	got := loaded.Get("spotify")
-	if got == nil || got.AccessToken != "legacy-secret" {
-		t.Fatalf("v1 token = %+v", got)
+	_, err := NewStoreWithIterations(path, "correct", 1_000)
+	if err == nil || !strings.Contains(err.Error(), "unsupported token file version: 1") {
+		t.Fatalf("v1 file must be rejected as unsupported, got %v", err)
 	}
 
-	// Load itself rekeys: the file is already current-format, no Save needed.
-	tf := readTokenFile(t, path)
-	if tf.Version != tokenVersion {
-		t.Fatalf("rekeyed version = %d, want %d", tf.Version, tokenVersion)
-	}
-	if tf.KeyCheck == "" {
-		t.Fatal("rekeyed file must carry a key check")
-	}
-	if tf.Iterations != pbkdf2IterLegacy {
-		t.Fatalf("rekeyed iterations = %d, want %d (never below the cost in use)", tf.Iterations, pbkdf2IterLegacy)
-	}
-	if tf.Tokens["spotify"].Salt == "" {
-		t.Fatal("rekeyed entry must carry a per-entry salt")
-	}
-	if _, err := base64.StdEncoding.DecodeString(tf.Salt); err != nil {
-		t.Fatalf("rekeyed master salt: %v", err)
-	}
-
-	// A second load is a no-op rekey-wise: the file is already current.
-	saltBefore := tf.Salt
-	if _, err := NewStoreWithIterations(path, "correct", 1_000); err != nil {
-		t.Fatal(err)
-	}
-	if again := readTokenFile(t, path); again.Salt != saltBefore {
-		t.Fatal("a current-format file must not be rekeyed again at load")
-	}
-}
-
-func TestTokenStore_TokenFileNeedsRekey(t *testing.T) {
-	salted := tokenCiphertext{Salt: "c2FsdA==", Data: "AAAA"}
-	legacy := tokenCiphertext{Data: "AAAA"}
-	current := tokenFile{
-		Version:  tokenVersion,
-		KeyCheck: "check",
-		Tokens:   tokensByService{"a": salted},
-		Secrets:  tokensByService{"b": salted},
-	}
-	if current.needsRekey() {
-		t.Fatal("a current-format file must not need a rekey")
-	}
-
-	cases := []struct {
-		name string
-		mut  func(*tokenFile)
-	}{
-		{"v1", func(tf *tokenFile) { tf.Version = tokenVersionV1 }},
-		{"v2", func(tf *tokenFile) { tf.Version = tokenVersionV2 }},
-		{"missing key check", func(tf *tokenFile) { tf.KeyCheck = "" }},
-		{"saltless token entry", func(tf *tokenFile) { tf.Tokens["a"] = legacy }},
-		{"saltless secret entry", func(tf *tokenFile) { tf.Secrets["b"] = legacy }},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			tf := current
-			tf.Tokens = tokensByService{"a": salted}
-			tf.Secrets = tokensByService{"b": salted}
-			tc.mut(&tf)
-			if !tf.needsRekey() {
-				t.Fatalf("%s must need a rekey", tc.name)
-			}
-		})
-	}
-}
-
-func TestTokenStore_LegacyV1WrongPassphraseStillRefused(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "tokens.json")
-	writeLegacyV1TokenFile(t, path, "correct", map[string]string{
-		"spotify": `{"access_token":"secret"}`,
+	// Version 2: object ciphertexts with entry salts, but no secrets map.
+	writeJSONFile(t, path, map[string]any{
+		"version":    2,
+		"kdf":        kdfPBKDF2SHA256,
+		"iterations": 1_000,
+		"salt":       base64.StdEncoding.EncodeToString(make([]byte, 16)),
+		"key_check":  "AAAA",
+		"tokens":     map[string]map[string]string{"spotify": {"salt": "c2FsdA==", "data": "AAAA"}},
 	})
+	_, err = NewStoreWithIterations(path, "correct", 1_000)
+	if err == nil || !strings.Contains(err.Error(), "unsupported token file version: 2") {
+		t.Fatalf("v2 file must be rejected as unsupported, got %v", err)
+	}
 
+	// A version 1 file is refused on its version, not on the passphrase:
+	// the same answer either way, and nothing is rewritten.
 	if _, err := NewStoreWithIterations(path, "wrong", 1_000); err == nil {
-		t.Fatal("expected error for wrong passphrase on v1 file")
+		t.Fatal("expected error for a legacy file with a wrong passphrase")
 	}
 }
 
@@ -752,7 +689,8 @@ func TestTokenStore_UnsupportedVersionAndKDF(t *testing.T) {
 		"kdf":        kdfPBKDF2SHA256,
 		"iterations": 1_000,
 		"salt":       base64.StdEncoding.EncodeToString(make([]byte, 16)),
-		"tokens":     map[string]string{},
+		"tokens":     map[string]any{},
+		"key_check":  "AAAA",
 	})
 	if _, err := NewStoreWithIterations(path, "pass", 1_000); err == nil {
 		t.Fatal("unsupported version must fail")
@@ -763,20 +701,22 @@ func TestTokenStore_UnsupportedVersionAndKDF(t *testing.T) {
 		"kdf":        "scrypt",
 		"iterations": 1_000,
 		"salt":       base64.StdEncoding.EncodeToString(make([]byte, 16)),
-		"tokens":     map[string]string{},
+		"tokens":     map[string]any{},
+		"key_check":  "AAAA",
 	})
 	if _, err := NewStoreWithIterations(path, "pass", 1_000); err == nil {
 		t.Fatal("unsupported kdf must fail")
 	}
 
 	writeJSONFile(t, path, map[string]any{
-		"version": tokenVersion,
-		"kdf":     kdfPBKDF2SHA256,
-		"salt":    base64.StdEncoding.EncodeToString(make([]byte, 16)),
-		"tokens":  map[string]string{},
+		"version":   tokenVersion,
+		"kdf":       kdfPBKDF2SHA256,
+		"salt":      base64.StdEncoding.EncodeToString(make([]byte, 16)),
+		"tokens":    map[string]any{},
+		"key_check": "AAAA",
 	})
 	if _, err := NewStoreWithIterations(path, "pass", 1_000); err == nil {
-		t.Fatal("missing iterations must fail on v2")
+		t.Fatal("missing iterations must fail")
 	}
 }
 
@@ -826,35 +766,6 @@ func writeJSONFile(t *testing.T, path string, v any) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// writeLegacyV1TokenFile builds a pre-issue-101 tokens.json: version 1, bare
-// string ciphertexts, implicit 100k PBKDF2, no kdf fields.
-func writeLegacyV1TokenFile(t *testing.T, path, passphrase string, tokens map[string]string) {
-	t.Helper()
-	salt := make([]byte, 16)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-		t.Fatal(err)
-	}
-	key := deriveKey(passphrase, salt, pbkdf2IterLegacy)
-	keyCheck, err := encryptWith(key, []byte(keyCheckPlaintext))
-	if err != nil {
-		t.Fatal(err)
-	}
-	encTokens := make(map[string]string, len(tokens))
-	for id, plain := range tokens {
-		enc, err := encryptWith(key, []byte(plain))
-		if err != nil {
-			t.Fatal(err)
-		}
-		encTokens[id] = enc
-	}
-	writeJSONFile(t, path, map[string]any{
-		"version":   tokenVersionV1,
-		"salt":      base64.StdEncoding.EncodeToString(salt),
-		"key_check": keyCheck,
-		"tokens":    encTokens,
-	})
 }
 
 func TestTokenStoreEncryptDecryptRoundtrip(t *testing.T) {

@@ -212,7 +212,8 @@ func ImportLocalStore(spec connectors.LocalImportStoreSpec, storePath, importPat
 
 // runTokenRekeyCLI re-encrypts the token store under a new passphrase with
 // current KDF parameters, then exits (issue #101). Passing the same passphrase
-// still rotates the master salt and raises PBKDF2 cost on legacy files.
+// still rotates the master salt and raises PBKDF2 cost when the file is below
+// the preferred one.
 func TokenRekey(path, currentPass, newPass string) int {
 	path = strings.TrimSpace(path)
 	if path == "" {
