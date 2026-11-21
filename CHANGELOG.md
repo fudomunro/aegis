@@ -131,6 +131,18 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Legacy token files rekey at load.** A `tokens.json` carrying any shape
+  the current writer no longer produces — version 1 or 2, a missing
+  `key_check`, or master-key (saltless) ciphertexts — is re-sealed in the
+  current format on startup: same passphrase, fresh master salt, PBKDF2
+  cost at the default (never below the cost already in use). Previously
+  the file only upgraded when a token happened to be written, so a
+  read-only install kept its v1 layout forever and the legacy readers
+  could never be retired. A file whose entries fail to decrypt is never
+  rewritten, so unreadable ciphertext is never dropped; a failed rewrite
+  leaves the file in place and is retried on the next start.
+  `-token-new-pass` is unchanged for rotating the passphrase itself.
+
 - **Library API base path is `/me` (issue #421).** The kind-centric surface
   moves from `/v1/library/{kind}` to `/me/{kind}` — it is the user's own
   data, so it now reads as such (`/me/tracks`, `/me/messages`,
