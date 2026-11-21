@@ -82,10 +82,7 @@
   },
   "data_grants": {
     "tracks": {
-      "default": "read",
-      "providers": {
-        "spotify": "read"
-      }
+      "default": "read"
     },
     "playlists": {
       "default": "read"
@@ -97,10 +94,7 @@
       "default": "none"
     },
     "places": {
-      "default": "none",
-      "providers": {
-        "google-timeline": "city"
-      }
+      "default": "none"
     },
     "events": {
       "default": "read"

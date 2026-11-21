@@ -215,8 +215,6 @@ level on the full route:
  opt-in kinds (below), which never open through `default`.
 3. Otherwise **`none`**. Malformed level tokens deny.
 
-`providers` keys inside a `DataGrant` are removed and ignored on load
-(they were per-connector tighten-only overrides in the two-policy era).
 - **The full routes serve their richest shape** (`events`, `transactions`,
  `documents`, `places` with coordinates). Grant a narrowed route instead of
  the full one when a caller needs less — a `freebusy`-only key is denied
@@ -240,9 +238,8 @@ level on the full route:
  Admin UI saves write a separate `data_grants.json` overlay (flag
  `-data-grants-file`) schema **version 3**: a `data_grants` map. A present
  map (including empty) replaces the bootstrap map; a missing map leaves it
- in place. Legacy `service_limits` keys in old files are ignored. The
- overlay holds no secrets — admin grant edits never rewrite OAuth client
- credentials.
+ in place. The overlay holds no secrets — admin grant edits never rewrite
+ OAuth client credentials.
 - Grants **further constrain** the connector; they never add capabilities.
  A write level never unlocks mutating calls the connector does not
  implement (picker/session POSTs are not agent data writes).
@@ -907,9 +904,8 @@ multi-user isolation seam — see [`docs/data-scopes.md`](data-scopes.md).
 - `grants` is the **complete allow list** for that principal —
   **deny-by-default**: an unlisted kind resolves to `none`. A reserved
   `default` entry sets the level for unlisted kinds. Ambiguity is fail-closed:
-  a listed kind with an empty entry, or with only `providers` overrides,
-  resolves to `none` (provider entries tighten, they never open a closed
-  type — set the kind's `default` field to grant access). (Owner-tier
+  a listed kind with an empty entry resolves to `none` (set the kind's
+  `default` field to grant access). (Owner-tier
   credentials — the shared agent key and tailnet logins — keep the usual
   agent data grant semantics, where omit means unrestricted.) Scope grants
   also never exceed agent data grants.
