@@ -269,8 +269,8 @@ After the overlap call-outs above, the stable concepts.
 | **CalDAV / CardDAV** | Named-service adapters for calendars/contacts (Nextcloud, iCloud app-specific passwords). Mirrored events feed freebusy. | `internal/connectors/{caldav,carddav,dav,ical,vcard}.go`, `docs/caldav-carddav.md` |
 | **SystemInstructions** | English block injected into the LLM request telling the agent how to use Aegis. | each connector `SystemInstructions`, `internal/connectors` |
 | **Capabilities / Operation** | Structured metadata of what a connector can do (admin/connector, not agent discovery). | `internal/shared/capabilities.go` |
-| **IsAgentContentPath** | Gate on agent-facing `/v1/services` paths (content/ingest only). | `internal/core/agentpaths.go:13` |
-| **Path classification** | Ordered table mapping proxy paths → library kinds for permission checks. | `internal/core/pathclass.go` |
+| **IsAgentContentPath** | Gate on agent-facing `/v1/services` paths (content/ingest only). | `internal/library/agentpaths.go:13` |
+| **Path classification** | Ordered table mapping proxy paths → library kinds for permission checks. | `internal/library/pathclass.go` |
 | **LibraryKind registry** | The list of built-in kinds + UDK-published kinds. | `internal/kinds/librarykinds.go` |
 
 ### Hook and ops

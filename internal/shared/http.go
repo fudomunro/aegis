@@ -1,5 +1,5 @@
 // Package shared is stdlib-only transport/JSON/math plumbing shared by
-// internal/core and internal/connectors (and importable by internal/types).
+// the internal packages above it.
 //
 // Charter: no domain models, no Host, no service IDs, no provider knowledge,
 // no policy. It imports none of the Aegis packages — stdlib only.
@@ -23,14 +23,6 @@ const LibraryPageCap = 200
 // HTTPClient bounds upstream calls so a hung service cannot stall a
 // library aggregate for the full request-context lifetime.
 var HTTPClient = &http.Client{Timeout: 30 * time.Second}
-
-// TrimRightSlash trims trailing slashes from a URL prefix.
-func TrimRightSlash(s string) string {
-	for len(s) > 0 && s[len(s)-1] == '/' {
-		s = s[:len(s)-1]
-	}
-	return s
-}
 
 // ReadBodyLimited reads an inbound request body up to max bytes. Overflow is
 // reported to the caller as a 413; other read failures as a 400. ok is false
