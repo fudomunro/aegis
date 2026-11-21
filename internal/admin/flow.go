@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -255,8 +254,7 @@ func (h *Handlers) HandleAdminFlow(w http.ResponseWriter, r *http.Request) {
 	}
 	window, windowLabel := parseFlowWindow(r.URL.Query().Get("window"))
 	topo := h.buildFlowTopology(window, windowLabel)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(topo)
+	shared.WriteJSON(w, topo)
 }
 
 // parseFlowWindow maps the window query value to a duration and stable label.

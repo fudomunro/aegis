@@ -70,9 +70,7 @@ func (h *Handlers) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(link)
+		shared.WriteJSONStatus(w, http.StatusCreated, link)
 	case path != "" && r.Method == http.MethodDelete:
 		var linkKind string
 		for _, link := range h.Links.List() {

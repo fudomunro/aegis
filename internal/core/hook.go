@@ -276,9 +276,9 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeGuardrailResponse(w http.ResponseWriter, resp GuardrailResponse) {
-	w.Header().Set("Content-Type", "application/json")
 	if resp.Action == ActionBlock {
-		w.WriteHeader(http.StatusForbidden)
+		shared.WriteJSONStatus(w, http.StatusForbidden, resp)
+		return
 	}
-	json.NewEncoder(w).Encode(resp)
+	shared.WriteJSON(w, resp)
 }

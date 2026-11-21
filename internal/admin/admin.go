@@ -56,9 +56,9 @@ type AdminService struct {
 	CanonicalFor []string `json:"canonical_for,omitempty"`
 	// Sync lists this source's sync relationships (issue #365): one row per
 	// participating kind it provides.
-	Sync []shared.SyncRelationship `json:"sync,omitempty"`
-	ProxyPath    string   `json:"proxy_path"`
-	LoginPath    string   `json:"login_path,omitempty"`
+	Sync      []shared.SyncRelationship `json:"sync,omitempty"`
+	ProxyPath string                    `json:"proxy_path"`
+	LoginPath string                    `json:"login_path,omitempty"`
 }
 
 // AdminRuntime describes non-secret server identity and auth posture.
@@ -265,8 +265,7 @@ func (h *Handlers) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	shared.WriteJSON(w, resp)
 }
 
 // HandleAdminCache lists in-memory cache entries.
@@ -283,8 +282,7 @@ func (h *Handlers) HandleAdminCache(w http.ResponseWriter, r *http.Request) {
 	}
 	live, total, bytes := h.cacheStats()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	shared.WriteJSON(w, map[string]any{
 		"entries": items,
 		"live":    live,
 		"total":   total,
@@ -302,8 +300,7 @@ func (h *Handlers) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request)
 	h.Host.InvalidateAllCaches()
 	h.Host.Logger(r, "admin_cache_clear").Info("admin cache cleared")
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "cleared"})
+	shared.WriteJSON(w, map[string]string{"status": "cleared"})
 }
 
 // adminDataGrantsRequest is the body for PUT data grants.
@@ -323,8 +320,7 @@ func (h *Handlers) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request)
 		if policies == nil {
 			policies = policy.DataGrants{}
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		shared.WriteJSON(w, map[string]any{
 			"version":     h.Host.DataGrantsFormatVersion(),
 			"data_grants": policies,
 		})
@@ -357,8 +353,7 @@ func (h *Handlers) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request)
 		if saved == nil {
 			saved = policy.DataGrants{}
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		shared.WriteJSON(w, map[string]any{
 			"version":     h.Host.DataGrantsFormatVersion(),
 			"data_grants": saved,
 			"status":      "saved",
