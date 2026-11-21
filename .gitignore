@@ -15,12 +15,13 @@ aegis
 aegis.json
 tokens.json
 entity_links.json
+ownership.json
 data_grants.json
 apps.json
 data_scopes.json
 service_connections.json
-user_types.json
-user-types/
+user_kinds.json
+user-kinds/
 copy_ledger.db
 sync_jobs.db
 mail-archive.db
