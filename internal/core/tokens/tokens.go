@@ -109,7 +109,8 @@ func (t tokensByService) MarshalJSON() ([]byte, error) {
 //	version 3 (current): same as v2 plus a secrets map for static credentials
 //	                     from service_connections (issue #184).
 //
-// All load; every write is version 3 (issue #101 / #184).
+// All load; every write is version 3 (issue #101 / #184). A file carrying any
+// older shape is rekeyed to version 3 at load (see needsRekey).
 type tokenFile struct {
 	Version    int    `json:"version"`
 	KDF        string `json:"kdf,omitempty"`
@@ -121,6 +122,27 @@ type tokenFile struct {
 	KeyCheck string          `json:"key_check,omitempty"`
 	Tokens   tokensByService `json:"tokens"`
 	Secrets  tokensByService `json:"secrets,omitempty"`
+}
+
+// needsRekey reports whether the on-disk file carries any shape the current
+// writer no longer produces: a pre-v3 version, a missing key check, or
+// master-key (saltless) ciphertexts. Load forces a rekey for those, which is
+// what lets the legacy readers go once every deployment has booted here.
+func (tf tokenFile) needsRekey() bool {
+	if tf.Version < tokenVersion || tf.KeyCheck == "" {
+		return true
+	}
+	for _, entry := range tf.Tokens {
+		if entry.Salt == "" {
+			return true
+		}
+	}
+	for _, entry := range tf.Secrets {
+		if entry.Salt == "" {
+			return true
+		}
+	}
+	return false
 }
 
 const (
@@ -171,8 +193,10 @@ func TailscaleAPIKeySecretKey() string {
 var errPassphrase = errors.New("token passphrase incorrect (or token file corrupt); refusing to load token store")
 
 // NewTokenStore loads or creates a token store encrypted with the given passphrase.
-// New files use the current default PBKDF2 cost; existing files keep the KDF
-// parameters recorded on disk (or the legacy v1 cost) until rekeyed.
+// New files use the current default PBKDF2 cost; a current-format file keeps
+// the KDF parameters recorded on disk until rekeyed. A legacy-format file is
+// rekeyed to the current format at load (same passphrase, fresh salt, preferred
+// cost never below the one in use).
 // If a token file exists but the passphrase cannot unlock it, returns an error
 // and never hands back a store that would overwrite the file on the next Save.
 func NewTokenStore(path, passphrase string) (*TokenStore, error) {
@@ -296,6 +320,23 @@ func NewStoreWithIterations(path, passphrase string, preferredIterations int) (*
 		"kdf", kdfPBKDF2SHA256,
 		"iterations", ts.kdfIterations,
 	)
+
+	// A file carrying a shape the current writer no longer produces (v1/v2
+	// entries, a missing key check, master-key ciphertexts) is rekeyed at
+	// load, same passphrase. That rewrite is what retires the legacy readers
+	// — once every deployment has booted here, a later release can drop them.
+	// A partial load is never rewritten (that would drop unreadable entries),
+	// and a failed rewrite leaves the legacy file for the next start.
+	if tf.needsRekey() && !ts.loadUnsafe {
+		if err := ts.rekey(passphrase); err != nil {
+			slog.Error("rekey of legacy token file failed; leaving it as-is",
+				"path", path, "from_version", tf.Version, "error", err)
+		} else {
+			slog.Info("rekeyed legacy token file",
+				"path", path, "from_version", tf.Version,
+				"iterations", ts.KDFIterations())
+		}
+	}
 	return ts, nil
 }
 
@@ -436,14 +477,10 @@ func (ts *TokenStore) SecretKeys() []string {
 	return out
 }
 
-// ChangePassphrase re-encrypts every token under next with a fresh master salt
-// and the store's preferred PBKDF2 cost (never lower than the cost already in
-// use). Passing the current passphrase is allowed: it still rotates the salt
-// and raises KDF parameters on legacy files.
-func (ts *TokenStore) ChangePassphrase(next string) error {
-	if next == "" {
-		return fmt.Errorf("new token passphrase must not be empty")
-	}
+// rekey re-encrypts every token and secret under next with a fresh master
+// salt and the store's preferred PBKDF2 cost (never lower than the cost
+// already in use).
+func (ts *TokenStore) rekey(next string) error {
 	if err := ts.ensurePersistable(); err != nil {
 		return err
 	}
@@ -469,10 +506,24 @@ func (ts *TokenStore) ChangePassphrase(next string) error {
 	if err := ts.persist(); err != nil {
 		return fmt.Errorf("persisting rekeyed token store: %w", err)
 	}
+	return nil
+}
+
+// ChangePassphrase re-encrypts every token under next with a fresh master salt
+// and the store's preferred PBKDF2 cost (never lower than the cost already in
+// use). Passing the current passphrase is allowed: it still rotates the salt
+// and raises KDF parameters on legacy files.
+func (ts *TokenStore) ChangePassphrase(next string) error {
+	if next == "" {
+		return fmt.Errorf("new token passphrase must not be empty")
+	}
+	if err := ts.rekey(next); err != nil {
+		return err
+	}
 	slog.Info("token store passphrase changed",
 		"path", ts.path,
 		"services", len(ts.Tokens),
-		"iterations", newIter,
+		"iterations", ts.KDFIterations(),
 	)
 	return nil
 }

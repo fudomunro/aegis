@@ -555,7 +555,7 @@ func TestTokenStore_PerEntrySaltsAreUnique(t *testing.T) {
 	}
 }
 
-func TestTokenStore_LegacyV1FileLoadsAndMigratesOnWrite(t *testing.T) {
+func TestTokenStore_LegacyV1FileRekeysAtLoad(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tokens.json")
 	writeLegacyV1TokenFile(t, path, "correct", map[string]string{
@@ -570,37 +570,68 @@ func TestTokenStore_LegacyV1FileLoadsAndMigratesOnWrite(t *testing.T) {
 	if got == nil || got.AccessToken != "legacy-secret" {
 		t.Fatalf("v1 token = %+v", got)
 	}
-	if loaded.kdfIterations != pbkdf2IterLegacy {
-		t.Fatalf("legacy iterations = %d, want %d", loaded.kdfIterations, pbkdf2IterLegacy)
-	}
 
-	// Next persist migrates the file to v2 with explicit KDF params.
-	if err := loaded.Save("spotify", &OAuthToken{
-		AccessToken: "migrated",
-		Expiry:      time.Now().Add(time.Hour),
-	}); err != nil {
-		t.Fatal(err)
-	}
+	// Load itself rekeys: the file is already current-format, no Save needed.
 	tf := readTokenFile(t, path)
 	if tf.Version != tokenVersion {
-		t.Fatalf("migrated version = %d, want %d", tf.Version, tokenVersion)
+		t.Fatalf("rekeyed version = %d, want %d", tf.Version, tokenVersion)
 	}
-	if tf.KDF != kdfPBKDF2SHA256 {
-		t.Fatalf("migrated kdf = %q", tf.KDF)
+	if tf.KeyCheck == "" {
+		t.Fatal("rekeyed file must carry a key check")
 	}
 	if tf.Iterations != pbkdf2IterLegacy {
-		t.Fatalf("migrated iterations = %d, want %d (same cost until rekey)", tf.Iterations, pbkdf2IterLegacy)
+		t.Fatalf("rekeyed iterations = %d, want %d (never below the cost in use)", tf.Iterations, pbkdf2IterLegacy)
 	}
 	if tf.Tokens["spotify"].Salt == "" {
-		t.Fatal("migrated entry must gain a per-entry salt")
+		t.Fatal("rekeyed entry must carry a per-entry salt")
+	}
+	if _, err := base64.StdEncoding.DecodeString(tf.Salt); err != nil {
+		t.Fatalf("rekeyed master salt: %v", err)
 	}
 
-	reloaded, err := NewStoreWithIterations(path, "correct", 1_000)
-	if err != nil {
+	// A second load is a no-op rekey-wise: the file is already current.
+	saltBefore := tf.Salt
+	if _, err := NewStoreWithIterations(path, "correct", 1_000); err != nil {
 		t.Fatal(err)
 	}
-	if got := reloaded.Get("spotify"); got == nil || got.AccessToken != "migrated" {
-		t.Fatalf("migrated token = %+v", got)
+	if again := readTokenFile(t, path); again.Salt != saltBefore {
+		t.Fatal("a current-format file must not be rekeyed again at load")
+	}
+}
+
+func TestTokenStore_TokenFileNeedsRekey(t *testing.T) {
+	salted := tokenCiphertext{Salt: "c2FsdA==", Data: "AAAA"}
+	legacy := tokenCiphertext{Data: "AAAA"}
+	current := tokenFile{
+		Version:  tokenVersion,
+		KeyCheck: "check",
+		Tokens:   tokensByService{"a": salted},
+		Secrets:  tokensByService{"b": salted},
+	}
+	if current.needsRekey() {
+		t.Fatal("a current-format file must not need a rekey")
+	}
+
+	cases := []struct {
+		name string
+		mut  func(*tokenFile)
+	}{
+		{"v1", func(tf *tokenFile) { tf.Version = tokenVersionV1 }},
+		{"v2", func(tf *tokenFile) { tf.Version = tokenVersionV2 }},
+		{"missing key check", func(tf *tokenFile) { tf.KeyCheck = "" }},
+		{"saltless token entry", func(tf *tokenFile) { tf.Tokens["a"] = legacy }},
+		{"saltless secret entry", func(tf *tokenFile) { tf.Secrets["b"] = legacy }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tf := current
+			tf.Tokens = tokensByService{"a": salted}
+			tf.Secrets = tokensByService{"b": salted}
+			tc.mut(&tf)
+			if !tf.needsRekey() {
+				t.Fatalf("%s must need a rekey", tc.name)
+			}
+		})
 	}
 }
 

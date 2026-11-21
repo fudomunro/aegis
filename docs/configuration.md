@@ -722,7 +722,7 @@ without breaking existing stores.
 
 | Field | Meaning |
 |-------|---------|
-| `version` | `3` is current; `2` and `1` (legacy) still load |
+| `version` | `3` is current; `2` and `1` (legacy) load and are rekeyed to `3` at startup |
 | `kdf` | `pbkdf2-sha256` |
 | `iterations` | PBKDF2 cost for the master key (new files: 600 000, OWASP guidance) |
 | `salt` | Master salt (base64) |
@@ -736,9 +736,14 @@ credentials found in `service_connections.json` are moved into `tokens.json`,
 the overlay is rewritten without secrets, and Aegis logs one
 `migrated plaintext service-connection credentials` line.
 
-**Legacy files (version 1)** — string ciphertexts, implicit 100 000 iterations,
-no per-entry salts — still load. The next write migrates them to the current
-layout (same master cost until you rekey).
+**Legacy files** — version 1 (string ciphertexts, implicit 100 000
+iterations, no per-entry salts), version 2, and any file missing its
+`key_check` — still load. Loading one **forces a rekey**: the same
+passphrase re-seals every token and secret under a fresh master salt in the
+current format, at the default cost (never below the cost already in use).
+Aegis logs one `rekeyed legacy token file` line. A file with entries it
+cannot decrypt is never rewritten, so unreadable ciphertext is never
+dropped.
 
 **Rotating the passphrase / raising KDF cost:**
 
