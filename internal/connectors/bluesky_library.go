@@ -542,7 +542,7 @@ func (c *BlueskyConnector) neutralContact(f blueskyProfile) kinds.Contact {
 
 // authedGet calls a PDS xrpc endpoint with the session JWT.
 func (c *BlueskyConnector) authedGet(ctx context.Context, accessJWT, path string, query url.Values) ([]byte, error) {
-	u := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + path
+	u := strings.TrimRight(c.BlueskyUpstreamBase(), "/") + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}

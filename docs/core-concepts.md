@@ -245,7 +245,7 @@ After the overlap call-outs above, the stable concepts.
 | Concept | Definition | Key files |
 |---------|------------|-----------|
 | **Data grant** | What the user does to allow an LLM agent or app to use a library kind at an access level. Hero product term. | `docs/glossary.md`, `docs/configuration.md` “Data grants”, `SECURITY.md` |
-| **DataGrant** | Stored agent data grant per route key: `Default` level. `providers`/`service_limits` keys in old files are ignored on load. | `internal/core/policy/policy.go` |
+| **DataGrant** | Stored agent data grant per route key: `Default` level. | `internal/core/policy/policy.go` |
 | **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Resolution is deny-by-default (explicit → `default` → `none`). | `internal/core/policy/grants.go` |
 | **Accessor** | Principal-level allowed access per library kind (issue #160) — distinct from data grant. | `internal/core/policy/accessors.go` |
 | **PeerIdentity** | Resolved caller identity (tailnet peer / Aperture login / API key). | `identity.go:17`, `SECURITY.md` |
@@ -269,8 +269,8 @@ After the overlap call-outs above, the stable concepts.
 | **CalDAV / CardDAV** | Named-service adapters for calendars/contacts (Nextcloud, iCloud app-specific passwords). Mirrored events feed freebusy. | `internal/connectors/{caldav,carddav,dav,ical,vcard}.go`, `docs/caldav-carddav.md` |
 | **SystemInstructions** | English block injected into the LLM request telling the agent how to use Aegis. | each connector `SystemInstructions`, `internal/connectors` |
 | **Capabilities / Operation** | Structured metadata of what a connector can do (admin/connector, not agent discovery). | `internal/shared/capabilities.go` |
-| **IsAgentContentPath** | Gate on agent-facing `/v1/services` paths (content/ingest only). | `internal/core/agentpaths.go:13` |
-| **Path classification** | Ordered table mapping proxy paths → library kinds for permission checks. | `internal/core/pathclass.go` |
+| **IsAgentContentPath** | Gate on agent-facing `/v1/services` paths (content/ingest only). | `internal/library/agentpaths.go:13` |
+| **Path classification** | Ordered table mapping proxy paths → library kinds for permission checks. | `internal/library/pathclass.go` |
 | **LibraryKind registry** | The list of built-in kinds + UDK-published kinds. | `internal/kinds/librarykinds.go` |
 
 ### Hook and ops

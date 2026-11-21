@@ -181,7 +181,7 @@ func (c *BlueskyConnector) handleGetBlob(w http.ResponseWriter, r *http.Request,
 		shared.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	u := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.sync.getBlob?did=" +
+	u := strings.TrimRight(c.BlueskyUpstreamBase(), "/") + "/xrpc/com.atproto.sync.getBlob?did=" +
 		url.QueryEscape(did) + "&cid=" + url.QueryEscape(cid)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
 	if err != nil {
@@ -229,7 +229,7 @@ func (c *BlueskyConnector) handleXRPCGet(w http.ResponseWriter, r *http.Request,
 		shared.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	u := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + path
+	u := strings.TrimRight(c.BlueskyUpstreamBase(), "/") + path
 	if r.URL.RawQuery != "" {
 		u += "?" + r.URL.RawQuery
 	}
@@ -331,7 +331,7 @@ func (c *BlueskyConnector) createSession(ctx context.Context) (blueskySession, e
 	if err != nil {
 		return blueskySession{}, err
 	}
-	endpoint := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.server.createSession"
+	endpoint := strings.TrimRight(c.BlueskyUpstreamBase(), "/") + "/xrpc/com.atproto.server.createSession"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return blueskySession{}, err
@@ -429,7 +429,7 @@ func (c *BlueskyConnector) SharePhoto(ctx context.Context, req kinds.PhotoShareR
 		return kinds.PhotoShareResult{}, err
 	}
 
-	endpoint := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.repo.createRecord"
+	endpoint := strings.TrimRight(c.BlueskyUpstreamBase(), "/") + "/xrpc/com.atproto.repo.createRecord"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(createBody))
 	if err != nil {
 		return kinds.PhotoShareResult{}, err
@@ -475,7 +475,7 @@ func (c *BlueskyConnector) SharePhoto(ctx context.Context, req kinds.PhotoShareR
 }
 
 func (c *BlueskyConnector) uploadBlob(ctx context.Context, accessJWT string, data []byte, mime string) (blueskyBlob, error) {
-	endpoint := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.repo.uploadBlob"
+	endpoint := strings.TrimRight(c.BlueskyUpstreamBase(), "/") + "/xrpc/com.atproto.repo.uploadBlob"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
 	if err != nil {
 		return blueskyBlob{}, err

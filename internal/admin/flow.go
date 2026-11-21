@@ -103,7 +103,8 @@ type FlowLibraryKind struct {
 	Label string `json:"label"`
 	// Path is the library endpoint.
 	Path string `json:"path,omitempty"`
-	// Kind is "library" (unified endpoint). Kept for API stability.
+	// Kind is "library" (unified endpoint), fixed as part of the
+	// /v1/admin/flow read model's wire shape.
 	Kind string `json:"kind"`
 	// Readable is true when at least one non-blocked service allows reads.
 	Readable bool `json:"readable"`

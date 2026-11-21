@@ -2,9 +2,8 @@ package connectors
 
 import (
 	"log/slog"
+	"strings"
 	"time"
-
-	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // testHost is a Host fake for connector unit tests.
@@ -58,7 +57,7 @@ func (h *testHost) GetValidToken(serviceID string, logger *slog.Logger) string {
 
 func (h *testHost) UpstreamBaseFor(serviceID, fallback string) string {
 	if e := h.endpoints[serviceID]; e != "" {
-		return shared.TrimRightSlash(e)
+		return strings.TrimRight(e, "/")
 	}
 	return fallback
 }

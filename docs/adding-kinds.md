@@ -87,7 +87,7 @@ internal/kinds/models.go        Neutral item + *Source + *List
 internal/kinds/merge_<kind>.go  Per-kind identity keys + Merge* (one file per kind)
 internal/kinds/providers.go     Provider interface (WidgetProvider) + ErrUnauthorized
 internal/kinds/librarykinds.go  BuiltinLibraryKinds registry (policy flags live here)
-internal/core/pathclass.go      kindPathRules for the provider's proxy paths
+internal/library/pathclass.go   kindPathRules for the provider's proxy paths
 internal/kinds/<kind>.go        Kind implementation: routes, predicates, Spec
 internal/kinds/stamps.go        Generic stamping over your source projection
 <provider>.go (connectors)      Capabilities + ListUser… + optional proxy
@@ -202,7 +202,7 @@ row's hub designation follows `canonical_for`.
 ### 8. Permissions and connector capabilities
 
 The kind key must be known to the permission map, the path classifier
-(`internal/core/pathclass.go`), and any access-level vocabulary in
+(`internal/library/pathclass.go`), and any access-level vocabulary in
 `internal/core/policy` (like `PlacesLevelForResponse`). Default access for
 new kinds should start strict (`none` where the domain is sensitive).
 

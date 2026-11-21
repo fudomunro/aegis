@@ -398,15 +398,6 @@ func (m *AlbumMatcher) Has(a Album) bool {
 	return false
 }
 
-// ArtistMatchKey reports the strongest identity key an artist carries and
-// which match method it came from (ArtistMatchMBID or TrackMatchName).
-func ArtistMatchKey(a Artist) (key, how string) {
-	if id := ArtistEntityID(a); id != "" {
-		return "id:" + id, ArtistMatchMBID
-	}
-	return "name:" + NormalizeIdentityKey(a.Name), TrackMatchName
-}
-
 // ArtistsMatch reports whether two artists are the same act (issue #375):
 // shared MBID first, else normalized name. Mirrors MergeArtistLibrary —
 // nameless artists with no source never match.

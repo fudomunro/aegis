@@ -78,7 +78,7 @@ func decodeGraphDelta[T any](data []byte) (records []T, nextLink, deltaLink stri
 
 // microsoftGraphURL joins the configured Graph base with a path/query.
 func microsoftGraphURL(base, path string) string {
-	return shared.TrimRightSlash(base) + path
+	return strings.TrimRight(base, "/") + path
 }
 
 // graphPage fetches and decodes one Graph list page.

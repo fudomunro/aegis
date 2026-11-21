@@ -165,9 +165,9 @@ drift and are not kept here).
   cross-connector runtime needs; provider-specific stores are constructor
   args (see `NewQuickenConnector`).
 - Proxy path → kind classification is the ordered table in
-  `internal/core/pathclass.go`. Do not reintroduce a `switch` or a second
+  `internal/library/pathclass.go`. Do not reintroduce a `switch` or a second
   classifier. Agent-facing `/v1/services` paths must pass
-  `types.IsAgentContentPath` (issue #119).
+  `library.IsAgentContentPath` (issue #119).
 
 **Local import stores** (file-based export sources — Signal, Quicken,
 Timeline, LinkedIn) register through the connectors spec list
@@ -187,7 +187,7 @@ store. `TestLocalImportStoreSpecs` pins the declaration contract.
   Every provider-visible string lives there or in the status the connector
   computes.
 - **A connector never ships HTML or JS** and never writes Aegis tokens or
-  config — save/apply verbs return `types.StateUpdate` values core alone
+  config — save/apply verbs return `shared.StateUpdate` values core alone
   persists (`SetServiceConnection`, `SetTailscaleAdmin`).
 - Core hosts the flow generically (`internal/core/onboarding.go`,
   `/v1/admin/setup/{id}`): admin routes and rendering, secret writes, the
@@ -212,9 +212,9 @@ Takeout export walk are the worked examples.
 - Source grouping and canonical-ness are **declared, never branched on**:
   `MailSource{ServiceID, Parent, Canonical}` beside the ingest, display
   names in the `serviceNames` registry, freshness through
-  `types.SnapshotProber`. Core renders and registers generically
+  `kinds.SnapshotProber`. Core renders and registers generically
   (`mail_provider_hygiene_test.go` rejects provider literals in core).
-- Provider quota/pacing surfaces only as `types.MailIngestResult.RetryAfter`;
+- Provider quota/pacing surfaces only as `shared.MailIngestResult.RetryAfter`;
   core never classifies provider errors.
 
 ### Local state layout (issue #74)
@@ -522,7 +522,7 @@ scope runs everything.
 | Auth model / ACLs | `SECURITY.md`, `internal/core` hub (identity) |
 | Product/API docs | `README.md` (entry), `docs/api.md`, `docs/configuration.md`, `docs/connect/` |
 | Sync maintenance / self-repair loop | `docs/sync-maintenance.md` (#86); capture surface in `docs/observability.md`, scanner and ticket surface in `cmd/aegis-dashboard` |
-| Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go`); design under issue #227 |
+| Sync job queue / worker / schedules | `internal/syncjobs/` (engine + `syncrunner_*.go` runners), `internal/admin` (`syncjobs_admin.go` read model); design under issue #227 |
 | Access stats / Prometheus export | `internal/core/metrics/` (engines), `internal/core` hub (`metrics.go` handlers); `docs/observability.md` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
 | Concept vocabulary / overlapping names | `docs/glossary.md` (issue #174); inventory in `docs/core-concepts.md` |

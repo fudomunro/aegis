@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Placement helpers shared by the write-side provider operations
@@ -67,7 +66,7 @@ func apiJSONAuth(ctx context.Context, host Host, serviceID, method, path string,
 		return nil, 0, kinds.ErrUnauthorized
 	}
 
-	u := shared.TrimRightSlash(svc.Endpoint) + path
+	u := strings.TrimRight(svc.Endpoint, "/") + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}
