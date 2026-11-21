@@ -178,17 +178,6 @@ func RedactCalendarEventFreeBusy(e CalendarEvent) CalendarEvent {
 	}
 }
 
-func RedactCalendarEventsFreeBusy(events []CalendarEvent) []CalendarEvent {
-	if len(events) == 0 {
-		return events
-	}
-	out := make([]CalendarEvent, len(events))
-	for i, e := range events {
-		out[i] = RedactCalendarEventFreeBusy(e)
-	}
-	return out
-}
-
 // ProjectCalendarEventFreeBusy is the events copy projection (issue #145):
 // a copy placed on a freebusy-projected member carries only busy time —
 // no title, description, attendees, organizer, or location. Cross-service

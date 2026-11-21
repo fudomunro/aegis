@@ -365,7 +365,7 @@ func (c *GitHubConnector) fetchUser(ctx context.Context, token, login string) (g
 // getJSON GETs a GitHub API path and decodes the JSON body into out. It
 // returns hasMore=true when a Link header advertises a next page.
 func (c *GitHubConnector) getJSON(ctx context.Context, token, path string, out any) (hasMore bool, err error) {
-	u := shared.TrimRightSlash(c.GitHubUpstreamBase()) + path
+	u := strings.TrimRight(c.GitHubUpstreamBase(), "/") + path
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return false, err

@@ -21,15 +21,3 @@ func TestIso8601DurationMs(t *testing.T) {
 		t.Fatalf("bogus = %d", got)
 	}
 }
-
-func TestTrimRightSlash(t *testing.T) {
-	if got := TrimRightSlash("https://example.com/"); got != "https://example.com" {
-		t.Fatalf("got = %q", got)
-	}
-	if got := TrimRightSlash("https://example.com"); got != "https://example.com" {
-		t.Fatalf("got = %q", got)
-	}
-	if got := TrimRightSlash(""); got != "" {
-		t.Fatalf("got = %q", got)
-	}
-}

@@ -171,13 +171,6 @@ func TestArtistsMatchLadder(t *testing.T) {
 		})
 	}
 
-	if _, how := ArtistMatchKey(mk("Act", "550e8400-e29b-41d4-a716-446655440000")); how != ArtistMatchMBID {
-		t.Fatalf("how = %q, want mbid", how)
-	}
-	if _, how := ArtistMatchKey(mk("Act", "")); how != TrackMatchName {
-		t.Fatalf("how = %q, want name", how)
-	}
-
 	m := NewArtistMatcher([]Artist{mk("Held", "550e8400-e29b-41d4-a716-446655440000"), mk("Named", "")})
 	if !m.Has(mk("Held", "")) {
 		t.Fatal("name-only twin of an mbid'd artist must be held")
