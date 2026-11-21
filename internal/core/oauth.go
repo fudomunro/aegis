@@ -196,8 +196,7 @@ h1{color:#3fb950}p{color:#8b949e}</style></head>
 // GET /v1/auth/status
 func (s *Server) HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	status := s.tokens.Status()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	shared.WriteJSON(w, status)
 }
 
 // HandleAuthRevoke removes stored tokens for a service's provider connection.
@@ -214,8 +213,7 @@ func (s *Server) HandleAuthRevoke(w http.ResponseWriter, r *http.Request) {
 	s.invalidateService(serviceID)
 
 	slog.Info("token revoked", "service", serviceID, "connection", connectionID)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "revoked", "service": serviceID, "connection": connectionID})
+	shared.WriteJSON(w, map[string]string{"status": "revoked", "service": serviceID, "connection": connectionID})
 }
 
 // exchangeCode exchanges an authorization code for tokens. codeVerifier is

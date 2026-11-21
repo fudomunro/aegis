@@ -285,8 +285,7 @@ func (c *GooglePhotosConnector) HandleDeleteSession(w http.ResponseWriter, r *ht
 		WriteGooglePhotosUpstreamError(w, data, resp.StatusCode)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "session_id": id})
+	shared.WriteJSON(w, map[string]string{"status": "deleted", "session_id": id})
 }
 
 func (c *GooglePhotosConnector) HandleListPickedMediaItems(w http.ResponseWriter, r *http.Request, token string) {

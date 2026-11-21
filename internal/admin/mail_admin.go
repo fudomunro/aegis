@@ -52,7 +52,7 @@ func (h *Handlers) HandleAdminMailStatus(w http.ResponseWriter, r *http.Request)
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to read mail archive status")
 		return
 	}
-	writeMailJSON(w, st)
+	shared.WriteJSONNoEscape(w, st)
 }
 
 // HandleAdminMailSync is the admin UI ingest control: POST /v1/admin/mail/sync
@@ -133,7 +133,7 @@ func (h *Handlers) handleMailSyncPayload(w http.ResponseWriter, r *http.Request,
 	}
 	// Fail-open: report what was stored even when the upstream call failed
 	// mid-run. doMailIngest has already filled result.Error from the error.
-	writeMailJSON(w, result)
+	shared.WriteJSONNoEscape(w, result)
 }
 
 // HandleAdminMailImport syncs the read-only Takeout export:
@@ -160,11 +160,4 @@ func (h *Handlers) HandleAdminMailImport(w http.ResponseWriter, r *http.Request)
 	}
 	req.Service = connectors.TakeoutServiceID
 	h.handleMailSyncPayload(w, r, req)
-}
-
-func writeMailJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	enc.Encode(v)
 }
